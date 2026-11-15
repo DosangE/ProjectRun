@@ -2,7 +2,7 @@
 
 > **다음 세션이 이어받을 일만 적는다.** 규칙은 `CLAUDE.md` 와 `docs/RULES/` 가 원본이고 여기서는 § 번호로만 가리킨다. 결정 이력은 `docs/DECISIONS.md`(이번 달)와 `docs/archive/DECISIONS-<YYYY-MM>.md`(지난 달), 설계는 `docs/DESIGN.md`, 구조는 `docs/ARCHITECTURE.md` 가 원본이다.
 > 이 문서는 구현 승인이 아니다. 다음 작업도 §3-2 합의 요청서부터 시작한다.
-> 작업을 넘길 때마다 고친다. **끝난 항목은 지운다** — 그 결정은 DECISIONS 에 있어야 하고, 없으면 지우기 전에 옮긴다. 날짜별 기록을 쌓지 않는다.
+> 작업을 넘길 때마다 고친다. 고칠 때 볼 것(끝난 항목 지우기 등 ⓐ~ⓓ)과 병합 메시지의 `HANDOFF:` 줄은 `CLAUDE.md` §9-2 가 원본이다. 날짜별 기록을 쌓지 않는다.
 > 2026-11-12 문서 다이어트로 다시 썼다. 그 전 판(2026-10-05 ~ 2026-11-12, 283줄)은 `docs/archive/HANDOFF-2026-11-12.md` 에 그대로 있다.
 
 ## 1. 지금 상태 (2026-11-15)
@@ -13,7 +13,7 @@
 - **건물·벽 부품 원본** (`dev` `1541a24`, 2026-11-14 병합): 같은 작업 트리의 아트 세션이 만든 `art-src/BuildingKit/`(건물 5종, 작은 집~시계탑)·`art-src/FacadeKit/`(창·문·차양·덧문, `docs/ART_REQUEST_PROPS.md` K5 의 부품)을 사용자 지시("아트 리소스 작업한것도 브랜치 파서 푸쉬 병합해줘")로 병합했다. **요청서·DECISIONS 기록이 없고 Unity 반영도 안 했다** — 아트 세션 몫으로 남았다. BuildingKit 은 요청서의 킷 7종(K1~K7)에 없는 킷이다.
 - **v1.0 = PC 싱글 + 봇전(M5 까지), 하네스 실험이 공동 주목적** (DECISIONS 2026-11-12 "방향 재설정"). 멀티(M7)·모바일·아이템전은 v1.0 밖. UI 는 IMGUI 유지, `Runtime/Net/` 은 동결(컴파일만 유지).
 - **MP1 끝** (DECISIONS 2026-11-12 "MP1 구조", "MP1"): 상대마다 서킷 씬 복사본을 격리 로드하고 `Race/RaceField` 가 같은 틱으로 돌린다. 상대 3명을 같이 돌린 플레이어 런이 혼자 런과 비트 일치(서킷 지문 `0xEF92FB76BFD1D767`). `dev` `8ffe3c6` 에 병합(기능 브랜치 `feature/mp1-race-field` `68ded91`), 병합 전 리뷰 지적 중 MP2 로 넘긴 것은 DECISIONS "MP1" 의 "병합 전 리뷰" 줄. 로비는 아직 상대를 주지 않는다 — 플레이로 확인할 것은 MP2 부터.
-- **브랜치**: `dev` 는 origin 에 푸시돼 있다(`1541a24` 까지, 2026-11-15 `git ls-remote` 로 확인). 러너 아트(`art-src/RunnerKit/`, `art-src/Runner/` 5종·①② 두 판·헬멧·OMEGA 빨강 바이저, 요청서 `docs/ART_REQUEST_RUNNER.md`)도 `dev` 에 있다. origin 에 남은 기능 브랜치 가운데 `feature/art-building-facade-kits`·`feature/art-runner-blockout`·`feature/mp2-bot-race`·`feature/mp2-contact`·`fix/codex-sandbox-contract`·`fix/codex-wait-heartbeat` 는 모두 `dev` 에 병합됐다(`git branch -r --merged origin/dev`). 병합 안 된 것은 `docs/mp2-contact-brief`(`fb160c9`, MP2 단계 B Codex 지시서 `docs/CODEX_MP2_CONTACT.md` 의 실행 전 사본 하나)뿐이다. 스파이크 `spike/mp1-isolated-worlds` (`57c54f4`, 복사본 1·4·8개 비용 측정 `ChainRushWorldCostTests`)는 C:/Users/User/Desktop/PCUBE PC 의 로컬에만 있고 `dev` 에 병합하지 않는다 — 프레임을 다시 잴 때·8인으로 늘릴 때 쓴다.
+- **브랜치**: origin 의 브랜치 현황은 여기 적지 않고 git 으로 구한다(`CLAUDE.md` §9-2 ⓓ) — `git fetch --prune` 뒤 `git branch -r --merged origin/dev`(병합됨)·`git branch -r --no-merged origin/dev`(안 됨). 러너 아트(`art-src/RunnerKit/`, `art-src/Runner/` 5종·①② 두 판·헬멧·OMEGA 빨강 바이저, 요청서 `docs/ART_REQUEST_RUNNER.md`)는 `dev` 에 있다. 병합하지 않고 남겨 둔 origin 브랜치 `docs/mp2-contact-brief` 는 MP2 단계 B Codex 지시서 `docs/CODEX_MP2_CONTACT.md` 의 실행 전 사본 하나다. 스파이크 `spike/mp1-isolated-worlds` (`57c54f4`, 복사본 1·4·8개 비용 측정 `ChainRushWorldCostTests`)는 C:/Users/User/Desktop/PCUBE PC 의 로컬에만 있고 `dev` 에 병합하지 않는다 — 프레임을 다시 잴 때·8인으로 늘릴 때 쓴다.
 - **두 환경이 같은 작업을 한 일 (2026-11-14)**: D:/PCUBE 세션이 HANDOFF 2절 1번(MP2)을 처음부터 다시 구현했다 — 다른 환경의 단계 A 가 아직 푸시되지 않았었다. 그 작업은 `git stash` 로 D:/PCUBE 에 보관했다(`stash@{0}` "MP2a 중복 구현", 쓸 일이 없으면 지운다). 남길 값은 아래 2절 1번의 지름길 봇 랩타임뿐이다. 큰 구현을 시작하기 전에 다른 환경에 푸시하지 않은 같은 작업이 있는지 사용자에게 묻는다.
 - **대기 중인 플레이 확인**: K3 킷 잎이 멀리서 성기게 보이는지(문제면 `blender-artist` 에 넓고 가벼운 잎), SUMMIT DROP 지름길 표지판 화살표가 실제로 어느 쪽이었는지, 튜토리얼 그림(2번 회전 그림의 호가 러너에서 시작하지 않음, 이동 스테이지에도 봉 표시가 떠 있음).
 - **2026-10 에 답을 받지 못한 플레이 확인** (그 뒤 조작이 여러 번 바뀌어 다시 물을지는 사용자 몫): SKYWAY 2랩·고가 직선 슬라럼(봉 간격 40 m·걸리는 거리 16 m·한 번에 ⅓칸), 코너 중간 Shift·후진 중 봉 걸림, ↓ 후진 6 m/s·스윙 중 ↑, 그래플 거는 구간(좁으면 `GrappleController.minHangHeight` 1.05 를 낮춘다), 다른 러너로 매우빠름·STADIUM 에서 고스트가 보이는지.
@@ -36,6 +36,7 @@
    - FBX 복사 → 임포트 → 확인 → 렌더 도구, 지름길 표지판(`ShortcutSign.fbx`) 트랙 배치.
 7. **하네스·규칙 후보 (`.claude/`·`tools/` 변경, 따로 합의)**:
    - Codex 샌드박스 계약에서 확인 못 한 것(DECISIONS 2026-11-14): 10 뒤의 `-ResumeLast` 이어 가기, 실제 사용량 소진 때의 출력. 다음 Codex 쓰기 작업에서 처음 겪을 때 결과를 그 항목에 덧붙인다. 12 뒤 이어 가기는 `docs/codex-blender` 때 확인해 덧붙였다. **11 뒤 이어 가기와 `-Unity` 실제 실행**은 MP2 단계 B 가 겪었지만(DECISIONS "MP2 단계 B" 의 "진행": `mp2b-1` `-Write -Unity` 코드 11 → `mp2b-2` `-ResumeLast` 코드 0) 계약 항목에는 아직 덧붙이지 않았다.
+   - HANDOFF 갱신 알림에서 확인 못 한 것(DECISIONS 2026-11-15 "HANDOFF 갱신 줄과 세션 시작 알림"): 실제 Claude Code 세션 시작 때 알림이 컨텍스트에 들어오는지(스크립트 단독 실행만 했다). 다음 세션 첫 화면에서 본다 — 그 세션이 `dev` 에 있으면 브랜치 알림과 함께, 알릴 병합이 없으면 HANDOFF 알림은 나오지 않는 것이 맞다.
    - 무활동 알림에서 확인 못 한 것(DECISIONS 2026-11-14 "Codex 무활동 알림"): 실제 Codex 실행이 10분 넘게 조용했을 때의 3, 자정을 넘는 실행.
    - Codex 직접 사용 때 `codex -c mcp_servers.blender.enabled=true`(§7-5, DECISIONS 2026-11-14 "Codex 직접 사용 때 Blender MCP"): 대화형 세션에서 Blender 도구가 실제로 불리는지 미확인. 사용자가 처음 써 본 결과를 그 항목에 적는다.
    - D:/PCUBE PC 의 Codex 설정에 Unity relay 서버가 둘이라 `-Unity` 가 실패하던 일(DECISIONS 2026-11-14 "Codex 의 Blender MCP" 발견): 그 뒤 MP2 단계 B 가 그 PC 에서 `-Write -Unity` 로 돌았다(DECISIONS "MP2 단계 B" 의 "진행"). 설정을 어떻게 고쳤는지는 기록이 없다 — 다시 "found 2" 가 나오면 사용자에게 묻는다.
@@ -54,7 +55,7 @@
 - **씬 값 저장 (사용자 몫, 에디터에서)**: `ChainRushCircuit`·`ChainRushTestBench` 의 `turnSpeedLoss` 를 0.1 로 저장하면 `RunnerMotor.turnSpeedLossScale` 을 지울 수 있다(지금 인스펙터 0.2 × 배율 0.5). 두 씬의 `slingTurnRate: 90` 줄은 다음 저장 때 사라진다.
 - **보류된 설계 결정**: 헤딩 범위 제한(계속 꺾으면 뒤로도 돈다 — 막을지 미정, DECISIONS T2a).
 - **한 번 본 에러 (원인 미확인)**: `TrackDefinition: pole 0: the offset -20 must be within the road (6.0 m there).` (2026-11-04 14:18:29, Codex 수정 직후 1건, 재컴파일에서 다시 안 나옴). 다시 나오면 본다.
-- **지울 브랜치** (사용자 2026-11-14 "안쓰는 브랜치 삭제"): C:/Users/User/Desktop/PCUBE PC 의 `docs/v1-direction`·`feature/mp1-race-field` 는 이미 없다(2026-11-15 `git branch` 로 확인). 그 PC 에 `dev` 에 병합된 로컬 브랜치 `feature/art-runner-blockout`·`feature/mp2-bot-race` 가 새로 남았고, origin 에도 병합된 기능 브랜치 6개가 있다(1절 "브랜치"). 지울지는 사용자가 정한다. `spike/mp1-isolated-worlds` 는 남긴다(1절).
+- **지울 브랜치** (사용자 2026-11-14 "안쓰는 브랜치 삭제"): C:/Users/User/Desktop/PCUBE PC 의 `docs/v1-direction`·`feature/mp1-race-field` 는 이미 없다(2026-11-15 `git branch` 로 확인). 그 PC 에 `dev` 에 병합된 로컬 브랜치 `feature/art-runner-blockout`·`feature/mp2-bot-race` 가 새로 남았고, origin 에도 병합된 기능 브랜치가 있다(1절 "브랜치" 의 명령으로 구한다). 지울지는 사용자가 정한다. `spike/mp1-isolated-worlds` 는 남긴다(1절).
 
 ## 4. 작업 흐름 메모 (지켜 온 방식)
 
@@ -78,7 +79,7 @@
 - **플레이어 빌드는 Unity 가 `ProjectSettings` 를 자동으로 바꾼다**(`ProjectSettings.asset`·`UnityConnectSettings.asset`·`Assets/Settings/*.asset`). 커밋하지 않고 파일을 지정해 되돌린다. 빌드 중 임시 `Assets/Resources/` 가 생겼다 사라진다.
 - `Assets/DefaultNetworkPrefabs.asset`(NGO 가 만든 빈 목록)은 커밋돼 있다. `.codex/agents/` 가 수정으로 보이면 `autocrlf` 표시다(내용은 HEAD 와 같음).
 - **세션 기록 보존**: Claude Code 는 세션 기록(`~/.claude/projects/<리포 경로>/*.jsonl`)을 기본 30일 뒤 지운다(`cleanupPeriodDays`). `tools/harness-cost.py` 의 재측정에 기록이 필요해 사용자 설정 `~/.claude/settings.json` 에 `"cleanupPeriodDays": 365` 를 넣는다 — `C:/Users/User/Desktop/PCUBE` PC 는 2026-11-13, `D:/PCUBE` PC 는 2026-11-14 에 넣었다(사용자 설정이라 리포에 없다).
-- `index/symbols.tsv` 는 2026-11-13 부터 선택 도구다(B모드는 코드 `Grep`). SessionStart 훅은 더 이상 인덱스가 낡았다고 알리지 않는다. 쓴다면 먼저 재생성한다(§6-2).
+- `index/symbols.tsv` 는 2026-11-13 부터 선택 도구다(B모드는 코드 `Grep`). SessionStart 훅은 더 이상 인덱스가 낡았다고 알리지 않는다. 대신 2026-11-15 부터 HANDOFF 를 고치지 않은 `dev` 병합을 알린다(`CLAUDE.md` §9-2, 로컬 `dev` 기준이라 `git fetch` 와 `dev` 갱신 뒤에 맞다). 쓴다면 먼저 재생성한다(§6-2).
 - 훅 3개(`.claude/settings.json`, DECISIONS 2026-10-10 "하네스 자동화"): 되돌릴 수 없는 git 명령·`main`/`dev` 커밋은 deny, 보호 파일 Edit/Write 는 ask, 에이전트 정의를 고치면 `.codex` 어긋남 알림. 훅이 막으면 우회하지 말고 사유를 보고한다.
 - GitHub Desktop 이 켜져 있으면 `.git/index.lock` 이 남을 수 있다. 실행 중인 `git.exe` 가 없을 때만 지운다.
 - 서브에이전트는 `.claude/agents/*.md` frontmatter 의 `model`·`effort` 가 원본이다(DECISIONS 2026-10-10 "서브에이전트 모델·노력 고정").
