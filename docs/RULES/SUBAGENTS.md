@@ -21,6 +21,10 @@
 
 - `gameplay-designer` 를 쓰는 때: 플레이 피드백이 들어왔거나 구현 전에 선택지가 갈릴 때. 파견 여부는 §7-3(사용자가 지시할 때)을 따른다. 파견문에는 `git rev-parse HEAD` 값을 적는다 — 이 에이전트는 Bash 가 없어 인덱스 신선도를 스스로 확인하지 못한다. 역할 경계와 응답 형식은 정의(`.claude/agents/gameplay-designer.md`)가 원본이다 (`docs/DECISIONS.md` 2026-11-09 "기획 에이전트").
 
+- 읽기 전용 에이전트(`unity-explorer`·`unity-reviewer`·`gameplay-designer`)는 Bash 가 없다. git 값은 메인이 파견문에 넣는다 (`docs/DECISIONS.md` 2026-11-15 "읽기 전용 에이전트의 Bash").
+  - `unity-reviewer`: 메인이 `git diff <base>...HEAD` 를 scratchpad 파일로 저장하고, 파견문에 그 **파일 경로와 base·HEAD 해시**, 작업 트리가 HEAD 와 같은지를 적는다. 없으면 리뷰어는 리뷰하지 않고 되묻는다.
+  - `unity-explorer`: 인덱스(`index/symbols.tsv`)를 쓰게 할 때만 `git rev-parse HEAD` 값을 적는다. 없으면 코드 `Grep` 으로 찾는다.
+
 - 모델·노력은 `.claude/agents/<이름>.md` frontmatter 의 `model`·`effort` 가 원본이고 이 표는 그 요약이다. 별칭(`opus`) 대신 전체 ID 로 고정해 별칭이 가리키는 모델이 바뀌어도 따라가지 않는다 (`docs/DECISIONS.md` 2026-10-10 "서브에이전트 모델·노력 고정").
 
 ### 7-2. 병렬 / 직렬
