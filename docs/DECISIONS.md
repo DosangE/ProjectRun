@@ -20,6 +20,7 @@
   - Codex 계획 반박은 생략(사용자 "3 진행" — 정의 두 줄과 문서 수준이라 반박받을 설계가 작다).
 - **검증**:
   - 시험 파견 1회(사용자 "1 진행"): 과거 커밋 `b2389f4`(MP2 단계 A Codex 리뷰 수정, `.cs` 2파일 43줄)의 diff 를 scratchpad 파일로 두고 Bash 없는 `unity-reviewer` 를 파견했다. 응답 끝 줄 "diff 파일 읽기: 성공". 치명·중대·보통 0, 제안 1(동률 순위 경로를 덮는 테스트 없음). 작업 트리가 HEAD 와 다르다고 알리자 맥락 확인이 작업 트리 기준임을 "확인 못 한 범위" 에 스스로 적었다. 비용 `subagent_tokens` 49,016, 도구 9회, 47 s.
+  - 병합 전 Codex 설계 리뷰(`adversarial-review --base dev`, 커밋 `3c295c2` 대상): needs-attention, medium 2 → 둘 다 고쳤다. ① 리뷰어 정의의 필수 입력에 "작업 트리가 HEAD 와 같은지" 가 빠져 SUBAGENTS §7-1 과 어긋났고, 다를 때 작업 트리를 맥락으로 써도 되는지가 열려 있었다 → 셋 다 필수, 다르면 `리뷰 미완료: 작업 트리 ≠ HEAD` 로 답하고 병합 리뷰로 세지 않는다(위 시험 파견은 지금 규칙이면 미완료다 — 읽기 시험이 목적이라 그대로 둔다). ② README 의 "읽기 전용은 도구로 강제" 가 Codex 에도 해당하는 것처럼 읽혔다(`AGENTS.md:43` — Codex TOML 의 `tools` 는 주석) → Claude Code 로 한정하고 Codex 는 `read-only` sandbox 로 보장한다고 적었다.
   - `tools/sync-agents.ps1` 재생성 뒤 `-Check` 종료 코드 0. 문서 검증 값은 병합 보고에 적는다.
 - **확인 못 한 것**: 작업 트리 = HEAD 인 실제 "그 밖" 병합 리뷰에서의 동작(다음 `Assets/` 병합에서 처음 겪는다). `.codex/agents/*.toml` 의 `tools` 는 주석일 뿐이라 Codex 쪽 권한에는 영향이 없다(`sync-agents.ps1` 머리말의 "한계" — Codex 리뷰는 원래 `read-only` sandbox 로 돈다, §7-5).
 - **버린 대안**: Bash 를 남기고 훅으로 `git diff`·`git log` 만 허용(서브에이전트 안의 훅은 Bash deny 만 확인됐고 훅이 어느 에이전트의 호출인지 가리는지 확인 못 함 — HANDOFF 2절 7번), 변경 파일 목록만 넘기고 작업 트리를 읽게 하기(지운 줄을 볼 수 없다), 시험 없이 다음 실제 리뷰에서 처음 확인(실패하면 그 병합이 막힌다).
