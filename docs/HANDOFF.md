@@ -5,26 +5,28 @@
 > 작업을 넘길 때마다 고친다. **끝난 항목은 지운다** — 그 결정은 DECISIONS 에 있어야 하고, 없으면 지우기 전에 옮긴다. 날짜별 기록을 쌓지 않는다.
 > 2026-11-12 문서 다이어트로 다시 썼다. 그 전 판(2026-10-05 ~ 2026-11-12, 283줄)은 `docs/archive/HANDOFF-2026-11-12.md` 에 그대로 있다.
 
-## 1. 지금 상태 (2026-11-14)
+## 1. 지금 상태 (2026-11-15)
 
-- **마일스톤**: M5 (v0.7) "같이 달리는 맛" — MP1 끝, MP2 단계 A(봇전 판)·단계 B(몸싸움·출발 격자, DECISIONS 2026-11-14 "MP2 단계 B", 사용자 "접촉 충돌 잘 되었어") `dev` 병합 끝. `main` 은 v0.6 (M6, 2026-11-09). 순서·완료 조건은 `docs/DESIGN.md` §5-1.
-- **MP2 단계 A** (DECISIONS 2026-11-13 "MP2 단계 A", 요청서 `docs/PROPOSAL_MP2_BOT_RACE.md`): `dev` `9a43927` 에 병합하고 2026-11-14 origin 에 푸시했다(기능 브랜치 `feature/mp2-bot-race` `b2389f4`). 사용자 플레이 확인 "다 잘 나왔다", `unity-reviewer` 반영, Codex 설계 리뷰 수정 뒤 봇전·필드 테스트 29/29 통과.
-- **Codex 샌드박스 계약** (DECISIONS 2026-11-14 "Codex 샌드박스 계약"): `fix/codex-sandbox-contract` 를 `dev` 에 병합했다(2026-11-14, Codex 병합 전 리뷰 4건 반영). 이제 Codex `-Write` 는 `tools/codex-unity.ps1` 로만 부르고, Unity MCP 승인은 `-Unity` 를 줄 때만 열린다(§7-5).
+- **마일스톤**: M5 (v0.7) "같이 달리는 맛" — MP1 끝, MP2 단계 A(봇전 판)·단계 B(몸싸움·출발 격자, DECISIONS 2026-11-14 "MP2 단계 B", 사용자 "접촉 충돌 잘 되었어") `dev` 병합 끝. `main` 은 v0.6 (M6, 2026-11-09). 순서·완료 조건은 `docs/DESIGN.md` §5-1. v0.7 까지 표에 남은 것: MP2 의 봇 난이도·상대 달리기 모션(2절 1·2번), **MP3 여러 레이서의 결정성**(리플레이·롤백 비트 일치 — 요청서·DECISIONS 항목이 아직 없다. MP1 은 상대 3명과 달린 플레이어 런 = 혼자 런, MP2 B 는 봇전 4명 × 300틱 두 번 위치 해시 일치까지 확인했다).
+- **MP2 단계 A·B** (DECISIONS 2026-11-13 "MP2 단계 A", 2026-11-14 "MP2 단계 B", 요청서 `docs/PROPOSAL_MP2_BOT_RACE.md`): 둘 다 `dev` 에 병합하고 origin 에 푸시했다(A `9a43927`, B `325b5c9`). A 사용자 플레이 확인 "다 잘 나왔다", B "플레이 확인했다. 접촉 충돌 잘 되었어."
+- **Codex 샌드박스 계약·무활동 알림** (DECISIONS 2026-11-14 "Codex 샌드박스 계약", "Codex 무활동 알림"): 둘 다 `dev` 에 있다. Codex `-Write` 는 `tools/codex-unity.ps1` 로만 부르고, Unity MCP 승인은 `-Unity` 를 줄 때만 열린다. 기다릴 때는 `tools/codex-wait.ps1` 을 함께 띄운다(§7-5, 4절 "Codex").
+- **건물·벽 부품 원본** (`dev` `1541a24`, 2026-11-14 병합): 같은 작업 트리의 아트 세션이 만든 `art-src/BuildingKit/`(건물 5종, 작은 집~시계탑)·`art-src/FacadeKit/`(창·문·차양·덧문, `docs/ART_REQUEST_PROPS.md` K5 의 부품)을 사용자 지시("아트 리소스 작업한것도 브랜치 파서 푸쉬 병합해줘")로 병합했다. **요청서·DECISIONS 기록이 없고 Unity 반영도 안 했다** — 아트 세션 몫으로 남았다. BuildingKit 은 요청서의 킷 7종(K1~K7)에 없는 킷이다.
 - **v1.0 = PC 싱글 + 봇전(M5 까지), 하네스 실험이 공동 주목적** (DECISIONS 2026-11-12 "방향 재설정"). 멀티(M7)·모바일·아이템전은 v1.0 밖. UI 는 IMGUI 유지, `Runtime/Net/` 은 동결(컴파일만 유지).
 - **MP1 끝** (DECISIONS 2026-11-12 "MP1 구조", "MP1"): 상대마다 서킷 씬 복사본을 격리 로드하고 `Race/RaceField` 가 같은 틱으로 돌린다. 상대 3명을 같이 돌린 플레이어 런이 혼자 런과 비트 일치(서킷 지문 `0xEF92FB76BFD1D767`). `dev` `8ffe3c6` 에 병합(기능 브랜치 `feature/mp1-race-field` `68ded91`), 병합 전 리뷰 지적 중 MP2 로 넘긴 것은 DECISIONS "MP1" 의 "병합 전 리뷰" 줄. 로비는 아직 상대를 주지 않는다 — 플레이로 확인할 것은 MP2 부터.
-- **브랜치**: `dev` 는 origin 에 푸시돼 있다(2026-11-14, `feature/art-runner-blockout` 병합 `e60ea0e` 까지). 러너 아트(`art-src/RunnerKit/`, `art-src/Runner/` 5종·①② 두 판·헬멧·OMEGA 빨강 바이저, 요청서 `docs/ART_REQUEST_RUNNER.md`)는 이제 `dev` 에 있다 — 기능 브랜치 `feature/art-runner-blockout` `ee89f8f` 는 끝났다. origin 의 다른 기능 브랜치: `feature/mp2-bot-race`(위). 스파이크 `spike/mp1-isolated-worlds` (`57c54f4`, 복사본 1·4·8개 비용 측정 `ChainRushWorldCostTests`)는 C:/Users/User/Desktop/PCUBE PC 의 로컬에만 있고 `dev` 에 병합하지 않는다 — 프레임을 다시 잴 때·8인으로 늘릴 때 쓴다.
+- **브랜치**: `dev` 는 origin 에 푸시돼 있다(`1541a24` 까지, 2026-11-15 `git ls-remote` 로 확인). 러너 아트(`art-src/RunnerKit/`, `art-src/Runner/` 5종·①② 두 판·헬멧·OMEGA 빨강 바이저, 요청서 `docs/ART_REQUEST_RUNNER.md`)도 `dev` 에 있다. origin 에 남은 기능 브랜치 가운데 `feature/art-building-facade-kits`·`feature/art-runner-blockout`·`feature/mp2-bot-race`·`feature/mp2-contact`·`fix/codex-sandbox-contract`·`fix/codex-wait-heartbeat` 는 모두 `dev` 에 병합됐다(`git branch -r --merged origin/dev`). 병합 안 된 것은 `docs/mp2-contact-brief`(`fb160c9`, MP2 단계 B Codex 지시서 `docs/CODEX_MP2_CONTACT.md` 의 실행 전 사본 하나)뿐이다. 스파이크 `spike/mp1-isolated-worlds` (`57c54f4`, 복사본 1·4·8개 비용 측정 `ChainRushWorldCostTests`)는 C:/Users/User/Desktop/PCUBE PC 의 로컬에만 있고 `dev` 에 병합하지 않는다 — 프레임을 다시 잴 때·8인으로 늘릴 때 쓴다.
 - **두 환경이 같은 작업을 한 일 (2026-11-14)**: D:/PCUBE 세션이 HANDOFF 2절 1번(MP2)을 처음부터 다시 구현했다 — 다른 환경의 단계 A 가 아직 푸시되지 않았었다. 그 작업은 `git stash` 로 D:/PCUBE 에 보관했다(`stash@{0}` "MP2a 중복 구현", 쓸 일이 없으면 지운다). 남길 값은 아래 2절 1번의 지름길 봇 랩타임뿐이다. 큰 구현을 시작하기 전에 다른 환경에 푸시하지 않은 같은 작업이 있는지 사용자에게 묻는다.
 - **대기 중인 플레이 확인**: K3 킷 잎이 멀리서 성기게 보이는지(문제면 `blender-artist` 에 넓고 가벼운 잎), SUMMIT DROP 지름길 표지판 화살표가 실제로 어느 쪽이었는지, 튜토리얼 그림(2번 회전 그림의 호가 러너에서 시작하지 않음, 이동 스테이지에도 봉 표시가 떠 있음).
 - **2026-10 에 답을 받지 못한 플레이 확인** (그 뒤 조작이 여러 번 바뀌어 다시 물을지는 사용자 몫): SKYWAY 2랩·고가 직선 슬라럼(봉 간격 40 m·걸리는 거리 16 m·한 번에 ⅓칸), 코너 중간 Shift·후진 중 봉 걸림, ↓ 후진 6 m/s·스윙 중 ↑, 그래플 거는 구간(좁으면 `GrappleController.minHangHeight` 1.05 를 낮춘다), 다른 러너로 매우빠름·STADIUM 에서 고스트가 보이는지.
 
 ## 2. 다음 작업 (각각 §3-2 요청서부터, 사용자가 고른다)
 
-1. **MP2 봇전** — 요청서 `docs/PROPOSAL_MP2_BOT_RACE.md`. 단계 A·B 와 Codex 샌드박스 계약은 끝났다(1절). 남은 순서:
+1. **MP2 봇전** — 요청서 `docs/PROPOSAL_MP2_BOT_RACE.md`. 단계 A·B 와 Codex 샌드박스 계약은 끝났다(1절). 남은 것(DECISIONS 2026-11-14 "MP2 단계 B" 의 "남은 것"): 봇 난이도와 자동 개선 루프(아래), D8 복귀 겹침, 8인 격자 검증. B 리뷰에서 두고 온 제안은 같은 항목의 "두는 것" 줄.
    - ④ 봇 난이도 3단계(사용자 "추후에 쉬움 포함 난이도 3개 정도", 지금 `CircuitBot` = 쉬움) — 아래 자동 개선 루프를 붙인다. 지문용 봇을 먼저 따로 고정한다(요청서 5절 끝 줄).
    - 참고 값 (2026-11-14, D:/PCUBE 에디터 6000.3.25f1, 보관한 중복 구현의 `RaceBotTests` — `CircuitBot` 에 `ShortcutBot` 의 지름길 스윙을 더한 봇, 빠름·ALPHA 혼자): STADIUM 86.70 s, SKYWAY 170.80 s, FINGER LANES 142.26 s(지름길 4회), PALM COAST 186.34 s, SUMMIT DROP 90.00 s(지름길 1회). 실행 기록 `20261114T055057Z-PlayMode-f6be824.xml`(67/67 통과).
    - **하네스 실험을 붙인다 — 봇 실력 자동 개선 루프** (사용자 2026-11-13 "6번은 붙이는거 핸드오프에 넣어줘"): D3b 를 사람이 값을 고르는 대신, 사람은 **목표(랩타임 목표값)와 금지선**(결정성 유지 — 서킷 지문, 봇이 플레이어가 못 하는 입력·정보를 쓰지 않기)만 정하고, 에이전트가 봇 값·전략 변경 → 배치 실행 → 랩타임 기록 → 채택/폐기를 반복한다. 요청서에서 정할 것: 목표값(사용자 67.16 s 기준 몇 %), 반복 상한(횟수·시간), 한 번에 바꾸는 값의 범위, 반복마다 남길 기록(바꾼 값·랩타임·지문)과 위치. 결과는 DECISIONS 에 반복 횟수·처음/마지막 랩타임·폐기 수로 남긴다(2026-11-13 "하네스 비용 기준선" 과 같은 방식).
 2. **러너 캐릭터 Unity 반영** (DECISIONS 2026-11-14 "러너 캐릭터 아트"): 5종 FBX 후보가 `dev` 의 `art-src/Runner/` 에 있다(① `Runner.fbx` 발목 고정 / ② `RunnerFlatFoot.fbx` 발바닥 수평). 요청서 `docs/ART_REQUEST_RUNNER.md` 7절이 바꿀 코드 목록이다. 2026-11-14 헬멧 수정으로 닫힌 얼굴은 머티리얼 슬롯 3개(바이저 `M_RunnerVisor`, OMEGA 만 `M_RunnerVisor_Omega`)·열린 얼굴 2개다 — 기록은 같은 요청서 8절 끝. URP 에서의 바이저 광택은 미검증. §3-2 요청서에서 정할 것: ①② 중 어느 판, 뼈를 코드로(b) 또는 Animator(c, 첫 사례), `RunnerLook` 새 계약(공개 API), Unity 루트 회전 처리(`bake_space_transform=False`), 지금 모형 에셋 20개 삭제 여부. 반영 뒤 드로 배치를 다시 잰다.
-3. **K1 RoadsideKit 남은 트랙**: PALM(판 0.947배, 화살표 3개, 판 어둡고 화살표 노랑) → SUMMIT(1.053배, 병합 트랙). 방법은 `docs/ART_REQUEST_PROPS.md` K1. K5·K2·K7·K6 은 보류.
+3. **K1 RoadsideKit 남은 트랙**: PALM(판 0.947배, 화살표 3개, 판 어둡고 화살표 노랑) → SUMMIT(1.053배, 병합 트랙). 방법은 `docs/ART_REQUEST_PROPS.md` K1. K2·K7·K6 은 보류.
+   - **K5 FacadeKit·BuildingKit**: 보류였는데 원본이 먼저 생겼다(1절). 쓰려면 먼저 사용자가 정한다 — 어느 트랙의 어떤 건물을 바꿀지, BuildingKit 을 요청서에 킷으로 넣을지. 그 뒤 요청서·DECISIONS 기록 → 4절 "장식 킷" 흐름.
 4. **측정**: 트랙별 프레임·드로콜(PALM 렌더러 5,361, STADIUM 정점 약 98만, 재지 않음), MP1 복사본 프레임(에디터가 포커스 밖이라 판정 못 함 — Unity 창을 앞에 두고), 플레이어 빌드.
 5. **서킷에서 쓰지 않는 코드 정리**: 공격 입력·체력·`CourseTarget`·`RunRules` 의 공격 값·`Enemy` 테스트 — 아이템전이 v1.0 밖이라 쓸 곳이 없다(삭제는 합의 대상).
 6. **작은 후속 (`fix/` 로 묶는다, 테스트 필요)**
@@ -33,9 +35,10 @@
    - `TestCallbacks` 가 실행마다 다른 XML 경로에 쓰기(지금은 한 파일을 덮어쓴다, `ChainRushSceneBuilder.cs` 의 `TestCallbacks`).
    - FBX 복사 → 임포트 → 확인 → 렌더 도구, 지름길 표지판(`ShortcutSign.fbx`) 트랙 배치.
 7. **하네스·규칙 후보 (`.claude/`·`tools/` 변경, 따로 합의)**:
-   - Codex 샌드박스 계약에서 확인 못 한 것(DECISIONS 2026-11-14): 10·11 뒤의 `-ResumeLast` 이어 가기(12 뒤 이어 가기는 2026-11-14 확인), 실제 사용량 소진 때의 출력, `-Unity` 를 준 실제 실행. 다음 Codex 쓰기 작업에서 처음 겪을 때 결과를 그 항목에 덧붙인다.
+   - Codex 샌드박스 계약에서 확인 못 한 것(DECISIONS 2026-11-14): 10 뒤의 `-ResumeLast` 이어 가기, 실제 사용량 소진 때의 출력. 다음 Codex 쓰기 작업에서 처음 겪을 때 결과를 그 항목에 덧붙인다. 12 뒤 이어 가기는 `docs/codex-blender` 때 확인해 덧붙였다. **11 뒤 이어 가기와 `-Unity` 실제 실행**은 MP2 단계 B 가 겪었지만(DECISIONS "MP2 단계 B" 의 "진행": `mp2b-1` `-Write -Unity` 코드 11 → `mp2b-2` `-ResumeLast` 코드 0) 계약 항목에는 아직 덧붙이지 않았다.
+   - 무활동 알림에서 확인 못 한 것(DECISIONS 2026-11-14 "Codex 무활동 알림"): 실제 Codex 실행이 10분 넘게 조용했을 때의 3, 자정을 넘는 실행.
    - Codex 직접 사용 때 `codex -c mcp_servers.blender.enabled=true`(§7-5, DECISIONS 2026-11-14 "Codex 직접 사용 때 Blender MCP"): 대화형 세션에서 Blender 도구가 실제로 불리는지 미확인. 사용자가 처음 써 본 결과를 그 항목에 적는다.
-   - **D:/PCUBE PC 의 Codex 설정에 Unity relay 서버가 둘**(`unity_mcp`·`unity-mcp`)이라 `-Unity` 가 실패한다(DECISIONS 2026-11-14 "Codex 의 Blender MCP" 발견). MP2 단계 B 를 이 PC 에서 Codex + Unity MCP 로 돌리기 전에 하나를 지운다(사용자 설정).
+   - D:/PCUBE PC 의 Codex 설정에 Unity relay 서버가 둘이라 `-Unity` 가 실패하던 일(DECISIONS 2026-11-14 "Codex 의 Blender MCP" 발견): 그 뒤 MP2 단계 B 가 그 PC 에서 `-Write -Unity` 로 돌았다(DECISIONS "MP2 단계 B" 의 "진행"). 설정을 어떻게 고쳤는지는 기록이 없다 — 다시 "found 2" 가 나오면 사용자에게 묻는다.
    - 그 밖의 후보: `unity-explorer`·`unity-reviewer` 의 Bash, `select-tests` 하한 규칙과 실제 실행 범위, SessionStart `resume` 트리거 미확인, 서브에이전트 안의 훅은 Bash deny 만 확인됨, 파견 0~1건인 에이전트 3종(`unity-explorer`·`unity-architect`·`unity-verifier`, DECISIONS 2026-11-13 "하네스 비용 기준선").
    - **재측정** (사용자 2026-11-13 "다 네 추천대로 ㄱㄱ"): **2026-11-27 이후, 그리고 2026-11-13 이후 시작한 세션이 10개 이상일 때** `python -I tools/harness-cost.py --since 2026-11-13` 으로 돌려 DECISIONS "하네스 비용 기준선" 의 표와 비교하고, 결과를 같은 항목에 덧붙인다.
      - 비교할 것: 요청당 컨텍스트 중앙값, 20만 넘는 요청의 입력 몫, 조회 분류. 세션마다 작업 종류(코드·아트·문서)를 붙여 같은 종류끼리 본다.
@@ -51,7 +54,7 @@
 - **씬 값 저장 (사용자 몫, 에디터에서)**: `ChainRushCircuit`·`ChainRushTestBench` 의 `turnSpeedLoss` 를 0.1 로 저장하면 `RunnerMotor.turnSpeedLossScale` 을 지울 수 있다(지금 인스펙터 0.2 × 배율 0.5). 두 씬의 `slingTurnRate: 90` 줄은 다음 저장 때 사라진다.
 - **보류된 설계 결정**: 헤딩 범위 제한(계속 꺾으면 뒤로도 돈다 — 막을지 미정, DECISIONS T2a).
 - **한 번 본 에러 (원인 미확인)**: `TrackDefinition: pole 0: the offset -20 must be within the road (6.0 m there).` (2026-11-04 14:18:29, Codex 수정 직후 1건, 재컴파일에서 다시 안 나옴). 다시 나오면 본다.
-- **지울 로컬 브랜치** (사용자 2026-11-14 "안쓰는 브랜치 삭제" — D:/PCUBE 는 끝냈다, `feature/mp2a-bot-race` 를 지웠다): C:/Users/User/Desktop/PCUBE PC 에 남은 `docs/v1-direction`·`feature/mp1-race-field`(둘 다 `dev` 에 병합됨)는 그 PC 에서 지운다. `spike/mp1-isolated-worlds` 는 남긴다(1절).
+- **지울 브랜치** (사용자 2026-11-14 "안쓰는 브랜치 삭제"): C:/Users/User/Desktop/PCUBE PC 의 `docs/v1-direction`·`feature/mp1-race-field` 는 이미 없다(2026-11-15 `git branch` 로 확인). 그 PC 에 `dev` 에 병합된 로컬 브랜치 `feature/art-runner-blockout`·`feature/mp2-bot-race` 가 새로 남았고, origin 에도 병합된 기능 브랜치 6개가 있다(1절 "브랜치"). 지울지는 사용자가 정한다. `spike/mp1-isolated-worlds` 는 남긴다(1절).
 
 ## 4. 작업 흐름 메모 (지켜 온 방식)
 
