@@ -39,7 +39,8 @@
 - **검증** (Windows PowerShell 5.1, C:/Users/User/Desktop/PCUBE PC; 스크립트는 UTF-8 BOM 유지 `239,187,191`)
   - 실제 리포: `-Ref 1541a24` → 1건(`1541a24 (11-14) Merge feature/art-building-facade-kits …`), `-Ref 18dea35`·`-Ref 325b5c9`(브랜치 안에서 HANDOFF 를 고친 병합)·`-Ref dev` → 출력 없음. 모두 exit 0, 1.2~1.7 s(훅 timeout 15 s).
   - 임시 저장소 7건(scratchpad `hooktest/run-tests.ps1`): `안 고침` 면제 → 없음 / 메시지엔 "2절 고침" 인데 파일 그대로 → 1건 / 면제 병합 아래의 미갱신 병합 → 1건 / 병합 0개 → 없음 / 없는 ref → 없음 / 미갱신 7건 → 5줄 + "… 외 2건" / `안 고침` 이 행 머리가 아님 → 1건. 7/7 예상대로.
-- **확인 못 한 것**: 실제 Claude Code 세션 시작 때 알림이 컨텍스트에 들어오는지(스크립트 단독 실행만), Codex 쪽(`.codex/hooks.json` 에 SessionStart 없음 — Codex 는 병합하지 않는다).
+- **확인 못 한 것**: Codex 쪽(`.codex/hooks.json` 에 SessionStart 없음 — Codex 는 병합하지 않는다).
+- **실제 세션에서 확인** (2026-11-15, C:/Users/User/Desktop/PCUBE PC, Claude Code 새로 켬 — 훅 출력 머리 `SessionStart:startup hook success`): 컨텍스트에 `[하네스] 현재 브랜치: dev (보호 브랜치). …` 가 들어왔고 HANDOFF 알림은 없었다. 로컬 `dev` = `origin/dev` = `f0e1c83` 이 `docs/HANDOFF.md` 를 바꾼 병합이라 첫 병합에서 멈춘 것이 맞다. HANDOFF 알림 줄(`session-start.ps1:70-73`)과 브랜치 알림 줄(`:36`)은 같은 `$lines` 에 쌓여 `:77-78` 에서 한 번에 stdout 으로 나간다 — 통로는 이 세션에서, 줄 생성은 위 검증에서 확인했다. 실제 세션에서 HANDOFF 알림 줄 자체가 뜬 것은 보지 않았다(같은 코드 경로라 따로 기다리지 않는다). `.claude/settings.json` 의 SessionStart 에는 `matcher` 가 없어 `startup`·`clear`·`resume` 모두 같은 스크립트가 돈다(`resume`·`clear` 실제 실행은 미확인).
 - **버린 대안**: 문서 검증 체크리스트(§9-2 ①②③)에만 ④ 로 넣기(Unity 검증 병합에서는 빠진다 — 원인 ① ② 는 그쪽에서 났다), 훅이 `origin/dev` 와 비교(세션 시작마다 네트워크), 병합을 막는 PreToolUse 훅(HANDOFF 를 고칠 필요가 없는 병합이 있고, 판단은 `안 고침` 줄의 이유로 남긴다).
 
 ## 2026-11-14 · Codex 무활동 알림: `tools/codex-wait.ps1` — 결과 0 / 10분 동안 아무것도 안 움직이면 3 / 상한 4, 알리기만 한다 (`fix/codex-wait-heartbeat`)
