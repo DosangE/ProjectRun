@@ -33,9 +33,9 @@
    - 튜토리얼 리뷰 후속 ①~⑦ (2026-11-06 `unity-reviewer`): ① 6번 스테이지에서 첫 목표 동안 스윙으로 게이지를 채우고 놓으면 Release 목표에 끝낼 스윙이 없다(다시 걸었다 놓으면 풀린다, `TutorialCourse.cs:177-179`) ② 줄 5 m 감기는 봉 8 m 안에서 건 줄로는 안 된다(`:161`) ③ `TryDress` 실패 때 고리가 해제되지 않는다(`RaceAssembler` 의 `TryDress` 호출, `setup.Mode` 로 판단) ④ 주석이 코드와 다르다(`TutorialDirector.cs:8-9`, `ChainRushHud.cs:147`) ⑤ `ChainRushHud.cs:595` 숫자가 상수를 베꼈다 ⑥ `GoalColor`·`BeaconColor` 중복, `Part`·`VisualPart` 중복 ⑦ 튜토리얼 테스트 이름이 2단(§1-3). 줄 번호는 2026-11-06 기준.
    - 녹음 리뷰 제안 4건 (DECISIONS 2026-11-09 "녹음을 못 쓰면"): `loadType` 메시지 중복, `Update` 의 `initialized` 가드, `UnloadAudioData`(스윙 원본 약 5 MB), WebGL 의 `GetData`(미확인).
    - `TestCallbacks` 가 실행마다 다른 XML 경로에 쓰기(지금은 한 파일을 덮어쓴다, `ChainRushSceneBuilder.cs` 의 `TestCallbacks`).
-   - FBX 복사 → 임포트 → 확인 → 렌더 도구, 지름길 표지판(`ShortcutSign.fbx`) 트랙 배치.7. **하네스·규칙 후보 (`.claude/`·`tools/` 변경, 따로 합의)**:
+   - FBX 복사 → 임포트 → 확인 → 렌더 도구, 지름길 표지판(`ShortcutSign.fbx`) 트랙 배치.
+7. **하네스·규칙 후보 (`.claude/`·`tools/` 변경, 따로 합의)**:
    - Codex 샌드박스 계약에서 확인 못 한 것(DECISIONS 2026-11-14): 10 뒤의 `-ResumeLast` 이어 가기, 실제 사용량 소진 때의 출력. 다음 Codex 쓰기 작업에서 처음 겪을 때 결과를 그 항목에 덧붙인다. 12 뒤(`docs/codex-blender`)와 11 뒤 이어 가기·`-Unity` 실제 실행(MP2 단계 B, `docs/readonly-agents` 가 덧붙임)은 확인해 그 항목에 덧붙였다.
-   - HANDOFF 갱신 알림에서 확인 못 한 것(DECISIONS 2026-11-15 "HANDOFF 갱신 줄과 세션 시작 알림"): 실제 Claude Code 세션 시작 때 알림이 컨텍스트에 들어오는지(스크립트 단독 실행만 했다). 다음 세션 첫 화면에서 본다 — 그 세션이 `dev` 에 있으면 브랜치 알림과 함께, 알릴 병합이 없으면 HANDOFF 알림은 나오지 않는 것이 맞다.
    - 무활동 알림에서 확인 못 한 것(DECISIONS 2026-11-14 "Codex 무활동 알림"): 실제 Codex 실행이 10분 넘게 조용했을 때의 3, 자정을 넘는 실행.
    - Codex 직접 사용 때 `codex -c mcp_servers.blender.enabled=true`(§7-5, DECISIONS 2026-11-14 "Codex 직접 사용 때 Blender MCP"): 대화형 세션에서 Blender 도구가 실제로 불리는지 미확인. 사용자가 처음 써 본 결과를 그 항목에 적는다.
    - D:/PCUBE PC 의 Codex 설정에 Unity relay 서버가 둘이라 `-Unity` 가 실패하던 일(DECISIONS 2026-11-14 "Codex 의 Blender MCP" 발견): 그 뒤 MP2 단계 B 가 그 PC 에서 `-Write -Unity` 로 돌았다(DECISIONS "MP2 단계 B" 의 "진행"). 설정을 어떻게 고쳤는지는 기록이 없다 — 다시 "found 2" 가 나오면 사용자에게 묻는다.
