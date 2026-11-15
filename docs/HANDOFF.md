@@ -55,7 +55,7 @@
 - **씬 값 저장 (사용자 몫, 에디터에서)**: `ChainRushCircuit`·`ChainRushTestBench` 의 `turnSpeedLoss` 를 0.1 로 저장하면 `RunnerMotor.turnSpeedLossScale` 을 지울 수 있다(지금 인스펙터 0.2 × 배율 0.5). 두 씬의 `slingTurnRate: 90` 줄은 다음 저장 때 사라진다.
 - **보류된 설계 결정**: 헤딩 범위 제한(계속 꺾으면 뒤로도 돈다 — 막을지 미정, DECISIONS T2a).
 - **한 번 본 에러 (원인 미확인)**: `TrackDefinition: pole 0: the offset -20 must be within the road (6.0 m there).` (2026-11-04 14:18:29, Codex 수정 직후 1건, 재컴파일에서 다시 안 나옴). 다시 나오면 본다.
-- **지울 브랜치** (사용자 2026-11-14 "안쓰는 브랜치 삭제"): C:/Users/User/Desktop/PCUBE PC 의 `docs/v1-direction`·`feature/mp1-race-field` 는 이미 없다(2026-11-15 `git branch` 로 확인). 그 PC 에 `dev` 에 병합된 로컬 브랜치 `feature/art-runner-blockout`·`feature/mp2-bot-race` 가 새로 남았고, origin 에도 병합된 기능 브랜치가 있다(1절 "브랜치" 의 명령으로 구한다). 지울지는 사용자가 정한다. `spike/mp1-isolated-worlds` 는 남긴다(1절).
+- **지울 브랜치**: 2026-11-15 사용자 "작업 끝난 브랜치 삭제" 로 C:/Users/User/Desktop/PCUBE PC 의 로컬과 origin 에서 `dev` 에 병합된 브랜치를 지웠다. D:/PCUBE PC 의 로컬 브랜치는 그 PC 에서 `git fetch --prune` 뒤 `git branch --merged dev` 로 구해 같은 방식으로 지운다(지울지는 사용자가 정한다). `spike/mp1-isolated-worlds`·`docs/mp2-contact-brief` 는 남긴다(1절).
 
 ## 4. 작업 흐름 메모 (지켜 온 방식)
 
@@ -64,7 +64,7 @@
 - **장식 재빌드**: 프리팹 로컬 fileID 가 새로 나와 큰 diff 가 생기고 `TrackLook` 에 `music`·`ambience` 빈 줄이 붙는다 — 내용이 같으면 커밋하지 않는다. 재빌드 뒤 렌더가 이상하면(데이터는 정상) 에디터부터 다시 켠다.
 - **Codex**: 구현·검증을 Codex 에 맡기면 `tools/codex-unity.ps1 -PromptFile <파일> -Write -RunId <새 이름>`(Unity 허락이 있으면 `-Unity`, §7-5). 스크립트를 `run_in_background` 로 띄우고 `tools/codex-wait.ps1 -Result <지시서>.<RunId>.result.json` 을 따로 띄워 기다린다(무활동 10분이면 3 — 보고 첫 줄 `Codex 멈춤:`, 리뷰는 stderr 를 `-Watch`). 종료 코드별로 할 일은 §7-5 표에 있다. Codex 의 Unity MCP 는 사용자가 그 작업에서 허락할 때만 연다("codex로 구현" 만으로는 허락이 아니다). 서버는 이름이 아니라 relay 를 실행하는 서버로 찾는다(PC 마다 `unity_mcp`/`unity-mcp`).
 - **트랙 장식을 새로 만들 때 (2026-10-30 PALM COAST 방식)**: 레퍼런스 영상을 scratchpad 에 받아(yt-dlp `--js-runtimes node`) 1 s 접촉 시트로 색·소재를 읽고 → `TrackLook`(도로·벽·차선 표시) + `XxxEnvironmentBuilder`(`PalmCoastEnvironmentBuilder` 형식, 공통은 `ExteriorKit`·`ExteriorAssets`) → 발광 없는 차분한 색, `Hash` 로 자리마다 다르게. 도로 침범 검사는 축 정렬 경계라 대각선 도로에서 회전한 물체는 반경의 1.5배 밖에 둔다. 새 트랙은 빌더의 `BuildLook` 에 `ExteriorAssets.BuildSky` 를 넘긴다. 사용자 몫: 장식 씬 저장, 빌드 씬 목록(`ProjectSettings` 만 담은 브랜치), 로비 항목 저장. 기존 게임 트랙의 배치는 옮기지 않는다(DECISIONS 2026-11-12 "방향 재설정").
-- **마일스톤 태그**: 태그마다 `TitleScreen.Version` 을 같이 올린다(DECISIONS 2026-10-29 "M3 범위 조정"). 다음은 v0.7.
+- **마일스톤 태그**: 태그마다 `TitleScreen.Version` 을 같이 올린다(DECISIONS 2026-10-29 "M3 범위 조정"). 다음은 v0.7. 그때 `main` 의 README 가 11-15 판(읽기 전용 강제·조회 순서·훅)으로 바뀐다 — 지금 `main` README 는 11-09 판이고 따로 올리지 않는다(DECISIONS 2026-11-15 "읽기 전용 에이전트의 Bash").
 - **`dev` 병합**: 훅은 `dev`/`main` 에서의 `git commit` 만 막는다. `git switch dev` 뒤 `git merge --no-ff <브랜치> -F <메시지 파일>` 은 막지 않는다. 충돌이 나면 `git commit` 으로 마무리할 수 없으니, 기능 브랜치에 `dev` 를 먼저 병합해 거기서 푼다.
 
 ## 5. 환경 메모 (다음 세션이 헷갈릴 수 있는 것)
