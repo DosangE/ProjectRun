@@ -28,6 +28,8 @@ namespace ProtoHarness.ChainRush.Flow
         [SerializeField] private RunnerMotor player;
         [Tooltip("The race camera, which draws the track look's sky (UseSky).")]
         [SerializeField] private Camera viewCamera;
+        [Tooltip("Which face the runner wears: off the closed one (visor), on the open one (goggles). Set in the editor; no lobby page picks it.")]
+        [SerializeField] private bool openFace;
         private RaceSetup setup;
         private bool launched;
         private bool countedIn;
@@ -187,17 +189,21 @@ namespace ProtoHarness.ChainRush.Flow
         // the model is refused loudly and the race is not run in it: there is no right look to fall back to.
         private bool TryDress(GameObject look)
         {
-            Transform model = player.TryGetComponent(out RunnerTilt tilt) ? tilt.Body : null;
+            Transform body = player.TryGetComponent(out RunnerTilt tilt) ? tilt.Body : null;
+            RunnerVisual model = body != null ? body.GetComponentInChildren<RunnerVisual>(true) : null;
             if (model == null)
             {
-                Debug.LogError($"RaceAssembler: the runner has no RunnerTilt with a body to wear the look '{look.name}'.", this);
+                Debug.LogError($"RaceAssembler: the runner has no RunnerTilt with a body that has a RunnerVisual to wear the look '{look.name}'.", this);
                 game.enabled = false;
                 enabled = false;
                 return false;
             }
             try
             {
-                RunnerLook.Apply(model, look);
+                // A look with no RunnerVisual does not fit the model either: refused as RunnerLook refuses any other misfit.
+                RunnerVisual wanted = look.GetComponentInChildren<RunnerVisual>(true);
+                if (wanted == null) throw new System.ArgumentException($"RaceAssembler: the look '{look.name}' has no RunnerVisual.", nameof(look));
+                RunnerLook.Apply(model, wanted, openFace);
             }
             catch (System.ArgumentException e)
             {

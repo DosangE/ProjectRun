@@ -3,84 +3,157 @@ using ProtoHarness.ChainRush.Audio;
 
 namespace ProtoHarness.ChainRush.Visuals
 {
+    // Presentation only: picks the runner's pose from the sim's state each frame and hands it to the Animator
+    // (Art/Animations/Runner.controller, whose clips come from the runner FBX). The sim never reads this.
+    // The footstep and landing sounds are still timed here, from the gait phase. A pose is chosen, never blended by
+    // hand: the controller's transitions blend.
     [DefaultExecutionOrder(120)]
     public sealed class RunnerAnimation : MonoBehaviour
     {
+        // The controller's State values (Runner.controller: Any State -> the state of that number).
+        public enum Pose { Idle = 0, Run = 1, Air = 2, Land = 3, GrappleHang = 4, PoleSwing = 5, Boost = 6, Bump = 7, PoleSwingEdge = 8 }
+
+        // One run cycle of the Run clip (16 frames at 24 fps) and of the Boost clip (12 frames); a cycle is two steps.
+        private const float RunCycleSeconds = 16f / 24f;
+        private const float BoostCycleSeconds = 12f / 24f;
+        // The one-shot clips' lengths: how long the runner stays in them (Runner_Land 5 frames, Runner_Bump 7).
+        private const float LandSeconds = 5f / 24f;
+        private const float BumpSeconds = 7f / 24f;
+        // Gait phase runs this many radians per metre; a footstep is every pi (the old walk cycle, kept for the sounds).
+        private const float RadiansPerMetre = 1.65f;
+        // Forward speed under which a grounded runner stands rather than runs.
+        private const float MinRunSpeed = 0.1f;
+        private static readonly int StateParameter = Animator.StringToHash("State");
+        private static readonly int SpeedParameter = Animator.StringToHash("Speed");
+
         [SerializeField] private ChainRushGame game;
         [SerializeField] private RunnerMotor player;
         [SerializeField] private GrappleController grapple;
         [SerializeField] private ChainRushAudio sound;
+        [Tooltip("The runner's model (RunnerTilt.Body); its RunnerVisual's Animator is the one driven.")]
         [SerializeField] private Transform model;
-        [SerializeField] private Transform torso;
-        [SerializeField] private Transform leftArm;
-        [SerializeField] private Transform rightArm;
-        [SerializeField] private Transform leftLeg;
-        [SerializeField] private Transform rightLeg;
-        private Vector3 modelRest;
+        private Animator animator;
+        private Pose current = Pose.Idle;
         private float phase;
-        private float landing;
+        private float clock;
+        private float landUntil;
+        private float bumpUntil;
+        private bool bumpPending;
         private int lastStep;
-        private bool wasGrounded;
+        private bool wasGrounded = true;
         private float lastElapsed;
+
         public float GaitPhase => phase;
-        public Quaternion RightArmPose => rightArm.localRotation;
+        // The pose last handed to the Animator.
+        public Pose Current => current;
+        public Animator Animator => animator;
 
         private void Awake()
         {
-            if (game == null || player == null || grapple == null || sound == null || model == null || torso == null || leftArm == null || rightArm == null || leftLeg == null || rightLeg == null)
+            if (game == null || player == null || grapple == null || sound == null || model == null)
             {
-                Debug.LogError("RunnerAnimation: all runtime and joint references are required.", this);
+                Debug.LogError("RunnerAnimation: all runtime references and the model are required.", this);
                 enabled = false;
                 return;
             }
-            modelRest = model.localPosition;
+            RunnerVisual visual = model.GetComponentInChildren<RunnerVisual>(true);
+            if (visual == null || visual.Animator == null)
+            {
+                Debug.LogError("RunnerAnimation: the model has no RunnerVisual with an Animator.", this);
+                enabled = false;
+                return;
+            }
+            animator = visual.Animator;
+            animator.applyRootMotion = false;
         }
+
+        private void OnEnable()
+        {
+            if (game != null) game.CuePlayed += OnCue;
+        }
+
+        private void OnDisable()
+        {
+            if (game != null) game.CuePlayed -= OnCue;
+        }
+
+        // A guard hit hard enough to hear is a bump (RunnerMotor.GuardHitCueSpeed); the caller of Bump sets it up for
+        // contact with another runner.
+        private void OnCue(RaceCue cue)
+        {
+            if (cue == RaceCue.GuardHit) Bump();
+        }
+
+        // A hit that shoves the runner: plays Runner_Bump once, then the pose that state calls for.
+        public void Bump() => bumpPending = true;
 
         private void LateUpdate()
         {
-            if (game.IsPaused) return;
+            if (game.IsPaused)
+            {
+                animator.speed = 0f;
+                return;
+            }
             if (game.Elapsed < lastElapsed) ResetPose();
             lastElapsed = game.Elapsed;
             if (!game.IsRunning)
             {
-                if (game.HasFailed)
-                {
-                    torso.localRotation = Quaternion.Slerp(torso.localRotation, Quaternion.Euler(35f, 0f, -15f), Time.deltaTime * 5f);
-                }
+                // Before the run (ready, countdown) the runner stands; a finished or failed run holds its last pose.
+                bool held = game.HasFinished || game.HasFailed;
+                animator.speed = held ? 0f : 1f;
+                if (!held) Set(Pose.Idle, 1f);
                 return;
             }
+            animator.speed = 1f;
             bool ground = player.IsGrounded;
             float dt = Time.deltaTime;
-            if (ground && !wasGrounded && game.Elapsed > 0.2f) { landing = 1f; sound.PlayCue(RaceCue.Land); }
+            clock += dt;
+            if (ground && !wasGrounded && game.Elapsed > 0.2f) { landUntil = clock + LandSeconds; sound.PlayCue(RaceCue.Land); }
             wasGrounded = ground;
-            landing = Mathf.MoveTowards(landing, 0f, dt * 5f);
-            if (ground) phase += dt * Mathf.Max(0f, player.ForwardSpeed) * 1.65f;
+            float speed = Mathf.Max(0f, player.ForwardSpeed);
+            if (ground) phase += dt * speed * RadiansPerMetre;
             int step = Mathf.FloorToInt(phase / Mathf.PI);
             if (ground && step != lastStep) { sound.PlayCue(RaceCue.Footstep); lastStep = step; }
-            float stride = Mathf.Sin(phase) * 38f;
-            float armLeft = ground ? -stride * 0.8f - 12f : -35f;
-            float armRight = ground ? stride * 0.8f - 12f : -35f;
-            float legLeft = ground ? stride : -25f;
-            float legRight = ground ? -stride : 18f;
-            float lean = ground ? 8f : -5f;
-            if (grapple.IsAttached) { armRight = -155f; armLeft = -75f; legLeft = -35f; legRight = 28f; lean = -12f; }
-            float blend = 1f - Mathf.Exp(-dt * 18f);
-            Pose(leftArm, armLeft, -7f, blend); Pose(rightArm, armRight, 7f, blend);
-            Pose(leftLeg, legLeft + landing * 22f, 0f, blend); Pose(rightLeg, legRight + landing * 22f, 0f, blend);
-            Pose(torso, lean + landing * 14f, -player.SideSpeed * 1.2f, blend);
-            Vector3 position = modelRest;
-            position.y += (ground ? Mathf.Abs(Mathf.Sin(phase)) * 0.045f : 0f) - landing * 0.1f;
-            model.localPosition = position;
+            if (bumpPending) { bumpUntil = clock + BumpSeconds; bumpPending = false; }
+            bool booster = game.Racer.SlingTicks > 0 || game.Racer.GrappleEmpowered;
+            bool boosting = booster || FeedbackLook.PadShare(game.Racer.BoostZoneCarrySpeed, player.RunSpeed, player.BoostZoneSpeed) > 0f;
+            // The first that applies. A swing stays PoleSwing under a booster (the art contract), and the pose of a hit
+            // is held for its clip whatever else is going on.
+            Pose next;
+            if (player.IsRespawning) next = Pose.Idle;
+            else if (clock < bumpUntil) next = Pose.Bump;
+            else if (player.IsSwinging) next = Pose.PoleSwing;
+            else if (grapple.IsAttached) next = Pose.GrappleHang;
+            else if (!ground) next = Pose.Air;
+            else if (clock < landUntil) next = Pose.Land;
+            else if (boosting) next = Pose.Boost;
+            else if (speed > MinRunSpeed) next = Pose.Run;
+            else next = Pose.Idle;
+            // A step lasts as long as the ground takes to pass under it, so the feet keep up with the road.
+            float cycle = next == Pose.Boost ? BoostCycleSeconds : RunCycleSeconds;
+            Set(next, next == Pose.Run || next == Pose.Boost ? speed * RadiansPerMetre / (2f * Mathf.PI) * cycle : 1f);
         }
 
-        private static void Pose(Transform joint, float pitch, float roll, float blend)
-            => joint.localRotation = Quaternion.Slerp(joint.localRotation, Quaternion.Euler(pitch, 0f, roll), blend);
+        private void Set(Pose pose, float playbackSpeed)
+        {
+            if (pose != current)
+            {
+                current = pose;
+                animator.SetInteger(StateParameter, (int)pose);
+            }
+            animator.SetFloat(SpeedParameter, playbackSpeed);
+        }
 
+        // A restart starts over: the runner stands, mid-clip or not.
         public void ResetPose()
         {
-            phase = 0f; landing = 0f; lastStep = 0; wasGrounded = true; lastElapsed = 0f;
-            model.localPosition = modelRest;
-            torso.localRotation = leftArm.localRotation = rightArm.localRotation = leftLeg.localRotation = rightLeg.localRotation = Quaternion.identity;
+            phase = 0f; clock = 0f; landUntil = 0f; bumpUntil = 0f; bumpPending = false;
+            lastStep = 0; wasGrounded = true; lastElapsed = 0f;
+            current = Pose.Idle;
+            animator.SetInteger(StateParameter, (int)Pose.Idle);
+            animator.SetFloat(SpeedParameter, 1f);
+            animator.Play(Pose.Idle.ToString(), 0, 0f);
+            animator.Update(0f);
         }
     }
 }
