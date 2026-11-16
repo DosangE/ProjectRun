@@ -491,6 +491,7 @@ namespace ProtoHarness.ChainRush
             MetersPerSlot = SwingMetersPerSlot,
             RunSpeed = RunSpeed,
             RunAcceleration = RunAcceleration,
+            CarryDecay = swingCarryDecay,
         };
 
         // Puts a fallen runner on the centerline respawnBackoff metres before where it last stood, as high as the start

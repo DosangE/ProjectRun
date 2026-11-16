@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using ProtoHarness.ChainRush.Bots;
 using ProtoHarness.ChainRush.Control;
 using UnityEngine;
 
@@ -33,6 +34,9 @@ namespace ProtoHarness.ChainRush.Race
         private Vector3[] contactMoves;
         private Vector3[] contactChanges;
         private Vector3[] contactWallNormals;
+        private Vector3[] observedPositions, observedVelocities;
+        private int[] contactSwingBreaks;
+        private bool observationReady;
         public bool ContactEnabled { get; set; } = true;
         private bool stopped;
         // Match the existing running-order hysteresis (RaceServer); finishers are ranked separately below.
@@ -42,6 +46,17 @@ namespace ProtoHarness.ChainRush.Race
         public IReadOnlyList<RaceWorld> Opponents => opponents ?? Array.Empty<RaceWorld>();
         public int RacerCount => opponents == null ? 0 : opponents.Length + 1;
         public bool HasResult { get; private set; }
+        // A common snapshot captured once immediately before input. No live motor references escape this API.
+        public int ObservedRacerCount => observationReady ? RacerCount : 0;
+        public Vector3 ObservedPosition(int racer) => observedPositions[CheckedObservation(racer)];
+        public Vector3 ObservedVelocity(int racer) => observedVelocities[CheckedObservation(racer)];
+        public int ContactSwingBreaks(int racer) => contactSwingBreaks[Checked(racer)];
+
+        private int CheckedObservation(int racer)
+        {
+            if (!observationReady) throw new InvalidOperationException("RaceField: no input snapshot has been captured.");
+            return Checked(racer);
+        }
         // Raised only after every world has completed this tick and the standings are coherent.
         public event Action StandingsChanged;
         public int Place(int racer) => places[Checked(racer)];
@@ -107,6 +122,9 @@ namespace ProtoHarness.ChainRush.Race
             contactMoves = new Vector3[RacerCount];
             contactChanges = new Vector3[RacerCount];
             contactWallNormals = new Vector3[RacerCount];
+            observedPositions = new Vector3[RacerCount];
+            observedVelocities = new Vector3[RacerCount];
+            contactSwingBreaks = new int[RacerCount];
             game.SelfStepping = false;
             for (int i = 0; i < opponents.Length; i++)
             {
@@ -116,7 +134,9 @@ namespace ProtoHarness.ChainRush.Race
                 games[i + 1] = opponents[i].Game;
                 inputs[i] = opponentInputs[i];
                 games[i + 1].SetInputSource(inputs[i]);
+                if (inputs[i] is RaceBot bot) bot.Observe(this, i + 1);
             }
+            if (game.InputSource is RaceBot playerBot) playerBot.Observe(this, 0);
             Stage();
         }
 
@@ -152,6 +172,12 @@ namespace ProtoHarness.ChainRush.Race
             }
             try
             {
+                for (int i = 0; i < RacerCount; i++)
+                {
+                    observedPositions[i] = games[i].Player.transform.position;
+                    observedVelocities[i] = games[i].Player.Velocity;
+                }
+                observationReady = true;
                 for (int i = 0; i < RacerCount; i++) stepping[i] = games[i].InputTick();
                 for (int i = 0; i < RacerCount; i++) if (stepping[i]) games[i].MoveTick();
                 if (ContactEnabled) ResolveContact();
@@ -207,7 +233,11 @@ namespace ProtoHarness.ChainRush.Race
                     RunnerContact.Restitution, contactMoves, contactChanges, count, contactWallNormals);
                 for (int i = 0; i < count; i++)
                 {
+                    bool swinging = contactMotors[i].IsSwinging;
                     Vector3 wall = contactMotors[i].ApplyContact(contactMoves[i], contactChanges[i]);
+                    if (swinging && !contactMotors[i].IsSwinging)
+                        for (int r = 0; r < RacerCount; r++)
+                            if (games[r].Player == contactMotors[i]) { contactSwingBreaks[r]++; break; }
                     if (wall != Vector3.zero) contactWallNormals[i] = wall;
                 }
             }
@@ -220,6 +250,8 @@ namespace ProtoHarness.ChainRush.Race
             Array.Clear(finishTicks, 0, finishTicks.Length);
             Array.Clear(progress, 0, progress.Length);
             Array.Clear(ended, 0, ended.Length);
+            Array.Clear(contactSwingBreaks, 0, contactSwingBreaks.Length);
+            observationReady = false;
             HasResult = false;
             StandingsChanged?.Invoke();
         }

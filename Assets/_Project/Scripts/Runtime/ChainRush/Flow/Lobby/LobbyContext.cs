@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using ProtoHarness.ChainRush.Bots;
 
 namespace ProtoHarness.ChainRush.Flow.Lobby
 {
@@ -42,5 +43,6 @@ namespace ProtoHarness.ChainRush.Flow.Lobby
         public int Runner { get; set; }
         public RaceMode Mode { get; set; } = RaceMode.Single;
         public int Seed { get; set; }
+        public BotDifficulty Difficulty { get; set; } = BotDifficulty.Easy;
     }
 }

@@ -1,17 +1,16 @@
-using ProtoHarness.ChainRush.Bots;
 using ProtoHarness.ChainRush;
 using ProtoHarness.ChainRush.Control;
 using ProtoHarness.ChainRush.Track;
 using UnityEngine;
 
-namespace ProtoHarness.Tests.PlayMode
+namespace ProtoHarness.ChainRush.Bots
 {
     // A test bot for a track's shortcuts (Finger Lanes' nails, DECISIONS 2026-10-25): it follows the centerline
     // (TrackFollower) and at each shortcut hooks the first corner pole as it reaches the junction, lets go a quarter turn
     // later, hooks the second at the end of the straight and lets go on the next row. It does not steer while it swings:
     // steering works the rope (PoleSwing). HoldInnerKey has it hold the key toward the pole instead, shortening the rope
     // the whole swing (the probe of the shortcut's swing speed, user 2026-10-27).
-    internal sealed class ShortcutBot : IInputSource
+    public sealed class ShortcutBot : IInputSource
     {
         private const float QuarterTurn = 88f;
         // How far before a hook point the bot presses: more than one tick's run at the fastest speed class.
@@ -55,7 +54,19 @@ namespace ProtoHarness.Tests.PlayMode
         public bool HoldInnerKey;
 
         public void Poll() { }
-        public void Clear() { }
+        // Taken/Missed are lifetime diagnostics read by probes, not control state.
+        public void Clear()
+        {
+            stage = Stage.OnLoop;
+            active = -1;
+            turnFrom = 0f;
+            pressed = false;
+            follower.SwingHold = false;
+            follower.SwingPress = false;
+            follower.Steering = true;
+            follower.Override = 0f;
+            follower.ChainAction = false;
+        }
 
         public TickInput Consume()
         {

@@ -1,7 +1,7 @@
 namespace ProtoHarness.ChainRush.Flow.Lobby
 {
     // The first page of a single race (user 2026-11-13): a time attack alone, which keeps records and ghosts, or a race
-    // against bots, which keeps neither. Either goes on to the speed page; a bot race draws its lineup's seed here, so
+    // against bots, which keeps neither. Bots choose difficulty before speed; a bot race draws its lineup's seed here, so
     // going back and forth through the later pages keeps the same bots.
     public sealed class SingleModePage : LobbyPage
     {
@@ -27,7 +27,9 @@ namespace ProtoHarness.ChainRush.Flow.Lobby
         {
             Context.Mode = row == BotsRow ? RaceMode.Bots : RaceMode.Single;
             if (Context.Mode == RaceMode.Bots) Context.Seed = UnityEngine.Random.Range(0, int.MaxValue);
-            return Step.Open(LobbyMenu.Page.Speed, Context.Speed);
+            return Context.Mode == RaceMode.Bots
+                ? Step.Open(LobbyMenu.Page.Difficulty, (int)Context.Difficulty)
+                : Step.Open(LobbyMenu.Page.Speed, Context.Speed);
         }
 
         public override Step Back() => Step.Open(LobbyMenu.Page.Main, MainPage.SingleRow);

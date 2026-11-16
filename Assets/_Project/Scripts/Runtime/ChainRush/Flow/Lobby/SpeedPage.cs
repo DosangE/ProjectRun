@@ -31,6 +31,8 @@ namespace ProtoHarness.ChainRush.Flow.Lobby
             return Step.Open(LobbyMenu.Page.Track, Context.Track);
         }
 
-        public override Step Back() => Step.Open(LobbyMenu.Page.Mode, SingleModePage.RowOf(Context.Mode));
+        public override Step Back() => Context.Mode == RaceMode.Bots
+            ? Step.Open(LobbyMenu.Page.Difficulty, (int)Context.Difficulty)
+            : Step.Open(LobbyMenu.Page.Mode, SingleModePage.RowOf(Context.Mode));
     }
 }
