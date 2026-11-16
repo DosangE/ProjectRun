@@ -12,12 +12,12 @@
 
 ## 2026-11-16 · K1 RoadsideKit 3·4차: PALM COAST·SUMMIT DROP 코너 화살표판 (`feature/art-roadside-palm-summit`)
 
-> 현재 상태: SUMMIT 은 자기 `Palette("Chevron")` 로 만든 `M_SummitChevron.mat` 을 사용하며 PALM 노란 재질 참조는 0개다. 아래 `amber`·PALM 공유 재질·이전 XML 값은 단계별 이력이고, 최신 검증은 끝의 "전용 재질 검증"(07:41:14Z, EditMode 1/1)이다. 쓰이지 않는 에셋 둘은 삭제했다(아래 "누적 에셋과 중간 생성물"). 병합 보류(`unity-reviewer`·사용자 플레이 확인 대기).
+> 현재 상태: SUMMIT 은 자기 `Palette("Chevron")` 로 만든 `M_SummitChevron.mat` 을 사용하며 PALM 노란 재질 참조는 0개다. 아래 `amber`·PALM 공유 재질·이전 XML 값은 단계별 이력이고, 최신 검증은 끝의 "전용 재질 검증"(07:41:14Z, EditMode 1/1)이다. 쓰이지 않는 에셋 둘은 삭제했다(아래 "누적 에셋과 중간 생성물"). 커밋 `707c79c`, `unity-reviewer` 리뷰 치명·중대·보통 0건, 사용자 플레이 확인 2026-11-16 "읽힌다". 병합은 사용자 지시 대기.
 
 - **결정 (사용자, 2026-11-16)**: 요청서 `docs/PROPOSAL_K1_PALM_SUMMIT.md` 의 "정할 것" 1·2 에 "둘다 그대로". 화살표는 킷 그대로 균일 배율(PALM 굵기 0.232·SUMMIT 0.258 — 옛 막대 0.16·0.17 보다 굵다), SUMMIT 판 두께는 0.2 → 0.158 로 한다. 구현은 Codex 가 했다(`-Write` 없이 지시서를 붙여 넣은 직접 실행, Unity MCP 허용). 병합 메시 두 개의 범위 누락을 물은 비동기 질문에 사용자가 "예, 기존 병합 메시 2개까지 허용하고 진행" 으로 답했고, 이후 2026-11-16 "추천대로" 로 두 에셋을 이번 변경으로 인정하고 요청서를 정정하도록 했다. 이 대화의 답을 당시 추가 승인의 출처로 기록한다.
 - **연결**: FINGER·SKYWAY 와 같은 `KitMesh`·`Shape` 형식. 킷 화살표 끝은 로컬 +x, 반대 방향은 판 법선(z) 둘레 180°. 위치·개수·다리·통로 검사와 SUMMIT 지름길 표지판은 그대로다.
   - `Assets/_Project/Scripts/Editor/ChainRush/PalmCoastEnvironmentBuilder.cs`: 필드·`ArrowOut` 0.128(`:100-102`, 판 앞면 0.071 + 화살표 두께 절반 0.057), 킷 로드(`:152`), 판·화살표(`:612-619`). 판 `Box` → `ChevronPanel`(3.6 × 1.326 × 0.142, `dark`), 막대 `Beam` 여섯 → `ChevronArrow` 셋(0.852 × 0.947 × 0.114, `yellow`, x `c * 1.0`, y 1.9).
-  - `Assets/_Project/Scripts/Editor/ChainRush/SummitDropEnvironmentBuilder.cs`: 필드·`ArrowOut` 0.142(`:102-104`, 판 앞면 0.079 + 화살표 두께 절반 0.063), 킷 로드(`:149`), 판·화살표(`:608-613`). 판 `Box` → `ChevronPanel`(4.0 × 1.474 × 0.158, `ink`), 막대 `Beam` 여섯 → `ChevronArrow` 셋(0.948 × 1.053 × 0.126, `amber`, x `arrow * 1.1`, y 3.4).
+  - `Assets/_Project/Scripts/Editor/ChainRush/SummitDropEnvironmentBuilder.cs`: 필드·`ArrowOut` 0.142(`:103-105`, 판 앞면 0.079 + 화살표 두께 절반 0.063), 킷 로드(`:150`), 판·화살표(`:609-614`). 판 `Box` → `ChevronPanel`(4.0 × 1.474 × 0.158, `ink`), 막대 `Beam` 여섯 → `ChevronArrow` 셋(0.948 × 1.053 × 0.126, 최종 `chevron`(SUMMIT 전용 노랑), x `arrow * 1.1`, y 3.4).
   - **요청서 누락 정정**: SUMMIT 은 `MergeByMaterial` 로 합친 메시를 `Assets/_Project/Art/Models/SummitDropExterior_05_M_SummitInk.asset`·`SummitDropExterior_05_M_SummitAmber.asset` 에 저장한다. 코너판 변경은 이 두 기존 에셋에 나타나고, `Assets/_Project/Prefabs/SummitDropExterior.prefab` 은 재빌드해도 내용이 같다. 원래 요청서가 이 두 에셋을 놓쳤다.
 - **측정** (프리팹을 프리뷰 씬에 꺼내 `MeshFilter.sharedMesh.vertexCount` 합): PALM 렌더러 5,361 → 5,319, 정점 338,098 → 340,282(+0.65%), 코너판 14개 그대로, 판 하나 정점 216 → 372(다리 포함). SUMMIT 렌더러 38 그대로, 정점 1,038,780 → 1,039,404, 코너판 4개. 병합 정점으로 본 판 96 → 576·화살표 576 → 720(킷 원본 판 144·화살표 60). SUMMIT 병합 정점 전체를 옛 판 위치와 비교한 최대 오차 0.00006951 m.
 - **검증** (에디터 6000.3.19f1, Codex 보고): 컴파일 `*** Tundra build success (4.52 seconds), 13 items updated, 1618 evaluated`, `error CS` 0. 재빌드 로그는 다음과 같다.

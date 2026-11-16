@@ -1,10 +1,10 @@
 # K1 RoadsideKit 3·4차 — PALM COAST·SUMMIT DROP 코너 화살표판 (§3-2 합의 요청서 초안)
 
-> 작성: 2026-11-16. 승인 상태: **사용자 2026-11-16 "정할 것 1·2 둘다 그대로", "추천대로" 로 승인. 밝기 후속과 "FINGER 방식 — SUMMIT 전용 재질 (추천)" 선택까지 반영·재빌드 끝. 최종 플레이 확인·리뷰 대기, 커밋·병합 안 함.**
-> 브랜치: `feature/art-roadside-palm-summit` (`dev` `0ce9854` 에서 분기, 커밋 없음).
+> 작성: 2026-11-16. 승인 상태: **사용자 2026-11-16 "정할 것 1·2 둘다 그대로", "추천대로" 로 승인. 밝기 후속과 "FINGER 방식 — SUMMIT 전용 재질 (추천)" 선택까지 반영·재빌드·커밋(`707c79c`)·`unity-reviewer` 리뷰(치명·중대·보통 0건) 끝. 사용자 플레이 확인 2026-11-16 "읽힌다". 병합은 사용자 지시 대기.**
+> 브랜치: `feature/art-roadside-palm-summit` (`dev` `0ce9854` 에서 분기, 구현 커밋 `707c79c`).
 > 원본 규칙: `docs/ART_REQUEST_PROPS.md` K1 (판은 한 크기 3.8 로 만들고 Unity 에서 균일 스케일 A5 — PALM 0.947배, SUMMIT 1.053배). 앞의 두 트랙: `docs/DECISIONS.md` 2026-11-11 "K1 RoadsideKit 1차(FINGER)", "2차(SKYWAY)".
 > 줄 번호는 2026-11-16 `dev` `0ce9854` 기준이다. 구현 직전에 다시 대조한다.
-> Codex 지시서: `docs/CODEX_K1_PALM_SUMMIT.md`.
+> Codex 지시서: 실제로는 사용자가 Codex 에 프롬프트를 직접 붙여 넣어 진행했고, 지시서 파일은 커밋하지 않았다.
 
 유사 자산: 기존 `FingerLanesEnvironmentBuilder.cs:425-447`, `SkywayEnvironmentBuilder.cs:590-607` 을 참고했고 같은 형식으로 맞춘다. 새 형식은 없다.
 
@@ -25,7 +25,7 @@ PALM COAST·SUMMIT DROP 의 코너 화살표판을 Blender 킷 메시(`art-src/R
 
 정정: 원래 요청서는 SUMMIT 코너판 변경이 기록되는 병합 메시 에셋 두 개를 작업 범위에서 놓쳤다.
 
-현재 누적 변경은 빌더 2개 + 프리팹 2개 + 병합 메시 4개 + SUMMIT 전용 재질 1개이며, 새 에셋의 Unity 생성 `.meta` 3개를 포함하면 `Assets/` 변경은 12개다. 병합 메시 4개 중 중간 단계 두 개는 현재 참조가 없다. 3개 이상 수정이라 §3-1 규모 기준, 프리팹 수정이라 환경 기준에 해당한다.
+현재 누적 변경은 빌더 2개 + 프리팹 2개 + 병합 메시 4개 + SUMMIT 전용 재질 1개이며, 새 에셋의 Unity 생성 `.meta` 를 포함하면 작업 중 `Assets/` 변경은 12개였다. 병합 메시 4개 중 중간 단계 두 개(`SummitAmber`·`PalmYellow`)는 참조가 없어 삭제했고, `PalmYellow` 는 추적된 적이 없어 커밋 `707c79c` 의 `Assets/` 변경은 10개다. 3개 이상 수정이라 §3-1 규모 기준, 프리팹 수정이라 환경 기준에 해당한다.
 
 ## 새로 만들 것
 
@@ -71,7 +71,7 @@ PALM COAST·SUMMIT DROP 의 코너 화살표판을 Blender 킷 메시(`art-src/R
 - Blender·`art-src/`·`RoadsideKit.fbx` 수정, 새 킷 메시. 광고판(PALM·SUMMIT 에는 없다), SKYWAY 막다른 베이·고속도로 광고판.
 - SUMMIT 의 지름길 표지판(`SummitDropEnvironmentBuilder.cs:563-565` 의 `Beam("Arrow")` — `ShortcutSign` 별도 작업), 룩(`Rebuild … Look`)·씬·`ProjectSettings`·패키지.
 - 테스트 파일 수정, 다른 트랙(FINGER·SKYWAY·STADIUM), 문서(`HANDOFF.md`·`DECISIONS.md` — 병합 때 Claude 가 쓴다).
-- 파일·에셋 삭제, 커밋·푸시.
+- 위 표의 참조 없는 병합 메시 둘 밖의 파일·에셋 삭제, 푸시. (삭제는 사용자 2026-11-16 승인)
 
 ## 위험·확인 못 한 것
 
