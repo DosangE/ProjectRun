@@ -94,10 +94,15 @@ namespace ProtoHarness.Editor.ChainRush
             private readonly Material ink = Palette("Ink", new Color(0.12f, 0.15f, 0.15f));
             private readonly Material cream = Palette("Cream", new Color(0.75f, 0.71f, 0.55f));
             private readonly Material amber = Palette("Amber", new Color(0.70f, 0.48f, 0.18f));
+            private readonly Material chevron = Palette("Chevron", new Color(0.92f, 0.78f, 0.30f));
             private readonly Material water = Palette("Water", new Color(0.31f, 0.49f, 0.52f));
             private readonly Material foam = Palette("Foam", new Color(0.71f, 0.79f, 0.76f));
             private readonly Material roof = Palette("Roof", new Color(0.29f, 0.26f, 0.21f));
             private Mesh pineTier, pineTrunk;
+            // The corner chevron board from the roadside kit (docs/ART_REQUEST_PROPS.md K1).
+            private Mesh chevronPanel, chevronArrow;
+            // The board's front (0.079) plus half the arrow's thickness (0.063).
+            private const float ArrowOut = 0.142f;
             private Mesh[] crags;
             private Vector3 min = Vector3.positiveInfinity, max = Vector3.negativeInfinity;
             private int terrainLeft, terrainRight, terrainBottom, terrainTop;
@@ -142,6 +147,7 @@ namespace ProtoHarness.Editor.ChainRush
                 var root = new GameObject("Summit Drop Exterior");
                 SceneManager.MoveGameObjectToScene(root, scene);
                 pineTier = KitMesh("TreeKit", "PineCrownTier"); pineTrunk = KitMesh("TreeKit", "TreeTrunk");
+                chevronPanel = KitMesh("RoadsideKit", "ChevronPanel"); chevronArrow = KitMesh("RoadsideKit", "ChevronArrow");
                 crags = new[] { KitMesh("RockKit", "CragA"), KitMesh("RockKit", "CragB"), KitMesh("RockKit", "CragC") };
                 Terrain(Group("01 Descending mountain and valley", root.transform));
                 MountainLedges(Group("09 Mountain overhangs below upper road", root.transform));
@@ -600,13 +606,12 @@ namespace ProtoHarness.Editor.ChainRush
                     Transform board = Group("Zigzag chevrons " + index, parent);
                     board.SetPositionAndRotation(p, Flat(-f.Right * outside));
                     for (int leg = -1; leg <= 1; leg += 2) Box("Board leg", board, new Vector3(leg * 1.5f, 1.5f, 0f), new Vector3(0.18f, 3.5f, 0.18f), wood);
-                    Box("Board", board, new Vector3(0f, 3.4f, 0f), new Vector3(4f, 1.5f, 0.2f), ink);
+                    Shape("Board", board, new Vector3(0f, 3.4f, 0f), new Vector3(4f, 1.474f, 0.158f), ink, chevronPanel);
                     float direction = segment.Degrees > 0f ? -1f : 1f;
+                    // The kit arrow's tip is +x and is the same upside down: reverse it around the board's normal.
+                    Quaternion turn = direction > 0f ? Quaternion.identity : Quaternion.Euler(0f, 0f, 180f);
                     for (int arrow = -1; arrow <= 1; arrow++)
-                    {
-                        Beam("Chevron", board, new Vector3(arrow * 1.1f - direction * 0.3f, 2.9f, 0.14f), new Vector3(arrow * 1.1f + direction * 0.3f, 3.4f, 0.14f), 0.17f, amber);
-                        Beam("Chevron", board, new Vector3(arrow * 1.1f + direction * 0.3f, 3.4f, 0.14f), new Vector3(arrow * 1.1f - direction * 0.3f, 3.9f, 0.14f), 0.17f, amber);
-                    }
+                        Shape("Chevron", board, new Vector3(arrow * 1.1f, 3.4f, ArrowOut), new Vector3(0.948f, 1.053f, 0.126f), chevron, chevronArrow).transform.localRotation = turn;
                     bool rockPlaced = false;
                     Vector3? firstClear = null;
                     foreach (float offset in new[] { 20f, 28f, 38f, 50f, 65f, 80f, 100f })

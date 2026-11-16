@@ -96,6 +96,10 @@ namespace ProtoHarness.Editor.ChainRush
             // used at its real size; its stalk end sits at (0, 0.56, -2) from its centre: measured 2026-11-11 on the
             // vertices at z -2, whose top is at y 0.58, less half the 0.04 leaf. Build checks the size it was measured on.
             private Mesh palmTrunk, palmFrond;
+            // The corner chevron board from the roadside kit (docs/ART_REQUEST_PROPS.md K1).
+            private Mesh chevronPanel, chevronArrow;
+            // The board's front (0.071) plus half the arrow's thickness (0.057).
+            private const float ArrowOut = 0.128f;
             private const float FrondTilt = 10f;
             private static readonly Vector3 FrondSize = new Vector3(1.2f, 1.2f, 4f);
             private static readonly Vector3 FrondStalk = new Vector3(0f, 0.56f, -2f);
@@ -145,6 +149,7 @@ namespace ProtoHarness.Editor.ChainRush
                 var root = new GameObject("Palm Coast Exterior");
                 SceneManager.MoveGameObjectToScene(root, scene);
                 palmTrunk = KitMesh("TreeKit", "PalmTrunk"); palmFrond = KitMesh("TreeKit", "PalmFrond");
+                chevronPanel = KitMesh("RoadsideKit", "ChevronPanel"); chevronArrow = KitMesh("RoadsideKit", "ChevronArrow");
                 // A re-exported frond of another size would leave FrondStalk off its stalk and the fronds off the coconuts.
                 if ((palmFrond.bounds.size - FrondSize).sqrMagnitude > 1e-4f)
                     throw new InvalidOperationException($"Kit mesh PalmFrond is {palmFrond.bounds.size}, not {FrondSize}; measure its stalk end again and update FrondSize and FrondStalk.");
@@ -604,15 +609,14 @@ namespace ProtoHarness.Editor.ChainRush
                     board.SetPositionAndRotation(position, Flat(-frame.Right * outside));
                     for (int side = -1; side <= 1; side += 2)
                         Box("Board leg", board, new Vector3(side * 1.4f, 0.4f, 0f), new Vector3(0.18f, 2.4f, 0.18f), dark);
-                    Box("Board", board, new Vector3(0f, 1.9f, 0f), new Vector3(3.6f, 1.3f, 0.15f), dark);
+                    Shape("Board", board, new Vector3(0f, 1.9f, 0f), new Vector3(3.6f, 1.326f, 0.142f), dark, chevronPanel);
                     // Seen from the road the board's +x runs back along the track on the left, forward on the right: the
                     // chevrons point the way the runner goes.
                     float point = segment.Degrees > 0f ? -1f : 1f;
+                    // The kit arrow's tip is +x and is the same upside down: reverse it around the board's normal.
+                    Quaternion turn = point > 0f ? Quaternion.identity : Quaternion.Euler(0f, 0f, 180f);
                     for (int c = -1; c <= 1; c++)
-                    {
-                        Beam("Chevron", board, new Vector3(c * 1f - point * 0.3f, 1.45f, 0.12f), new Vector3(c * 1f + point * 0.3f, 1.9f, 0.12f), 0.16f, yellow);
-                        Beam("Chevron", board, new Vector3(c * 1f + point * 0.3f, 1.9f, 0.12f), new Vector3(c * 1f - point * 0.3f, 2.35f, 0.12f), 0.16f, yellow);
-                    }
+                        Shape("Chevron", board, new Vector3(c * 1f, 1.9f, ArrowOut), new Vector3(0.852f, 0.947f, 0.114f), yellow, chevronArrow).transform.localRotation = turn;
                     corridor.Reserve(position, 2f);
                 }
             }
