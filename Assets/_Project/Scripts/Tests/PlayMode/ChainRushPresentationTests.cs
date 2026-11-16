@@ -64,7 +64,7 @@ namespace ProtoHarness.Tests.PlayMode
         public IEnumerator TearDown() { yield return null; LogAssert.NoUnexpectedReceived(); }
 
         [UnityTest]
-        public IEnumerator Presentation_RunPauseRestart_SynchronizesAudioAndJoints()
+        public IEnumerator Presentation_RunPauseRestart_SynchronizesAudioAndPose()
         {
             Assert.That(sound.IsPlaying, Is.False);
             game.SetInputSource(new FullThrottleInputSource());
@@ -72,27 +72,29 @@ namespace ProtoHarness.Tests.PlayMode
             yield return new WaitForSeconds(0.4f);
             Assert.That(sound.IsPlaying, Is.True);
             Assert.That(animation.GaitPhase, Is.GreaterThan(0f));
+            Assert.That(animation.Current, Is.EqualTo(RunnerAnimation.Pose.Run), "A runner on the road runs.");
             ScreenCapture.CaptureScreenshot(Path.Combine(Path.GetTempPath(), "ChainRush-art-running.png"));
             game.TogglePause();
             yield return null;
             float phase = animation.GaitPhase;
-            Quaternion pose = animation.RightArmPose;
+            RunnerAnimation.Pose pose = animation.Current;
             yield return new WaitForSeconds(0.15f);
             Assert.That(sound.IsPaused, Is.True);
             Assert.That(animation.GaitPhase, Is.EqualTo(phase));
-            Assert.That(animation.RightArmPose, Is.EqualTo(pose));
+            Assert.That(animation.Current, Is.EqualTo(pose));
+            Assert.That(animation.Animator.speed, Is.Zero, "The pose is frozen while paused.");
             sound.SetMuted(true);
             Assert.That(sound.Muted, Is.True);
             game.StartRun();
             Assert.That(animation.GaitPhase, Is.Zero);
-            Assert.That(animation.RightArmPose, Is.EqualTo(Quaternion.identity));
+            Assert.That(animation.Current, Is.EqualTo(RunnerAnimation.Pose.Idle), "A restart stands the runner up again.");
             yield return null;
             Assert.That(sound.IsPaused, Is.False);
             Assert.That(sound.Muted, Is.True, "Restart must preserve mute preference.");
         }
 
         [UnityTest]
-        public IEnumerator Animation_JumpAndGrapple_ChangesArmPoseWithoutMovingMotor()
+        public IEnumerator Animation_JumpAndGrapple_HangsFromTheChainWithoutMovingMotor()
         {
             // 4.5 m before the edge of a grapple gap at the circuit's running speed (20 m/s), where the test bot jumps: jump,
             // then grab the anchor once it is offered. Since 2026-10-19 an anchor is in reach only within its height over the
@@ -119,7 +121,9 @@ namespace ProtoHarness.Tests.PlayMode
             Assert.That(grapple.TryAttach(), Is.True);
             Assert.That(heard, Has.Exactly(1).EqualTo(RaceCue.Grapple));
             yield return new WaitForSeconds(0.2f);
-            Assert.That(Quaternion.Angle(animation.RightArmPose, Quaternion.identity), Is.GreaterThan(110f));
+            Assert.That(animation.Current, Is.EqualTo(RunnerAnimation.Pose.GrappleHang));
+            Assert.That(animation.Animator.GetCurrentAnimatorStateInfo(0).IsName("GrappleHang"), Is.True,
+                "The Animator is in the hang state once the 0.08 s blend is over.");
             Assert.That(player.transform.position.y, Is.GreaterThan(1f));
             ScreenCapture.CaptureScreenshot(Path.Combine(Path.GetTempPath(), "ChainRush-art-grapple.png"));
             yield return null;

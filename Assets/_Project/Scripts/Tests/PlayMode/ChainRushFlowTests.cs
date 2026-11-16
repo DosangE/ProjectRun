@@ -568,7 +568,7 @@ namespace ProtoHarness.Tests.PlayMode
         }
 
         // The chosen runner's look is what the race shows (presentation only, RunnerLook): BETA from the lobby puts BETA's
-        // look on the runner model, part by part in order.
+        // two faces on the runner model and shows the closed one.
         [UnityTest]
         public IEnumerator Race_FromTheLobby_WearsTheChosenRunnersLook()
         {
@@ -579,16 +579,18 @@ namespace ProtoHarness.Tests.PlayMode
             yield return Load(RacePath, scene => assembler = Find<RaceAssembler>(scene));
             Assert.That(assembler.IsLaunched, Is.True);
             Transform body = Find<RunnerTilt>(assembler.gameObject.scene).Body;
-            MeshFilter[] worn = body.GetComponentsInChildren<MeshFilter>(true);
-            MeshFilter[] look = beta.Look.GetComponentsInChildren<MeshFilter>(true);
-            Assert.That(worn.Length, Is.EqualTo(look.Length));
-            Assert.That(worn.Length, Is.GreaterThan(0));
-            for (int i = 0; i < worn.Length; i++)
-            {
-                Assert.That(worn[i].sharedMesh, Is.SameAs(look[i].sharedMesh), worn[i].name);
-                Assert.That(worn[i].GetComponent<MeshRenderer>().sharedMaterials,
-                    Is.EqualTo(look[i].GetComponent<MeshRenderer>().sharedMaterials), worn[i].name);
-            }
+            RunnerVisual worn = body.GetComponentInChildren<RunnerVisual>(true);
+            RunnerVisual look = beta.Look.GetComponentInChildren<RunnerVisual>(true);
+            Assert.That(worn, Is.Not.Null, "The runner model has no RunnerVisual.");
+            Assert.That(look, Is.Not.Null, "BETA's look has no RunnerVisual.");
+            Assert.That(worn.ClosedFace.sharedMesh, Is.SameAs(look.ClosedFace.sharedMesh));
+            Assert.That(worn.ClosedFace.sharedMaterials, Is.EqualTo(look.ClosedFace.sharedMaterials));
+            Assert.That(worn.OpenFace.sharedMesh, Is.SameAs(look.OpenFace.sharedMesh));
+            Assert.That(worn.OpenFace.sharedMaterials, Is.EqualTo(look.OpenFace.sharedMaterials));
+            var shown = new System.Collections.Generic.List<SkinnedMeshRenderer>();
+            foreach (SkinnedMeshRenderer face in body.GetComponentsInChildren<SkinnedMeshRenderer>(true))
+                if (face.enabled) shown.Add(face);
+            Assert.That(shown, Is.EqualTo(new[] { worn.ClosedFace }), "Exactly the closed face shows.");
         }
 
         [UnityTest]

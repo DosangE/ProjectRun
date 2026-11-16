@@ -391,11 +391,6 @@ Transform:
   - {fileID: 1188745497}
   m_Father: {fileID: 1927120374}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!4 &488331323 stripped
-Transform:
-  m_CorrespondingSourceObject: {fileID: 5168360070085458602, guid: 3f56bccaf9bbff748a65359b70735be0, type: 3}
-  m_PrefabInstance: {fileID: 1256964004434069242}
-  m_PrefabAsset: {fileID: 0}
 --- !u!1 &493584855
 GameObject:
   m_ObjectHideFlags: 0
@@ -1548,16 +1543,6 @@ Transform:
   - {fileID: 2032354255}
   m_Father: {fileID: 1927120374}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!4 &1673167332 stripped
-Transform:
-  m_CorrespondingSourceObject: {fileID: 9153208205486002486, guid: 3f56bccaf9bbff748a65359b70735be0, type: 3}
-  m_PrefabInstance: {fileID: 1256964004434069242}
-  m_PrefabAsset: {fileID: 0}
---- !u!4 &1673714787 stripped
-Transform:
-  m_CorrespondingSourceObject: {fileID: 9139942456227178538, guid: 3f56bccaf9bbff748a65359b70735be0, type: 3}
-  m_PrefabInstance: {fileID: 1256964004434069242}
-  m_PrefabAsset: {fileID: 0}
 --- !u!1 &1767972835
 GameObject:
   m_ObjectHideFlags: 0
@@ -1670,16 +1655,6 @@ MeshFilter:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1767972835}
   m_Mesh: {fileID: 10207, guid: 0000000000000000e000000000000000, type: 0}
---- !u!4 &1786783891 stripped
-Transform:
-  m_CorrespondingSourceObject: {fileID: 8374881394333933610, guid: 3f56bccaf9bbff748a65359b70735be0, type: 3}
-  m_PrefabInstance: {fileID: 1256964004434069242}
-  m_PrefabAsset: {fileID: 0}
---- !u!4 &1798900006 stripped
-Transform:
-  m_CorrespondingSourceObject: {fileID: 4323279423463016359, guid: 3f56bccaf9bbff748a65359b70735be0, type: 3}
-  m_PrefabInstance: {fileID: 1256964004434069242}
-  m_PrefabAsset: {fileID: 0}
 --- !u!1 &1823466831
 GameObject:
   m_ObjectHideFlags: 0
@@ -1860,11 +1835,6 @@ LineRenderer:
   m_UseWorldSpace: 0
   m_Loop: 1
   m_ApplyActiveColorSpace: 1
---- !u!4 &1875347087 stripped
-Transform:
-  m_CorrespondingSourceObject: {fileID: 6896016446602726305, guid: 3f56bccaf9bbff748a65359b70735be0, type: 3}
-  m_PrefabInstance: {fileID: 1256964004434069242}
-  m_PrefabAsset: {fileID: 0}
 --- !u!1 &1925527724
 GameObject:
   m_ObjectHideFlags: 0
@@ -1919,7 +1889,7 @@ MonoBehaviour:
   game: {fileID: 2105445612}
   motor: {fileID: 1925527727}
   rope: {fileID: 1119458507}
-  ropeOrigin: {fileID: 1875347087}
+  ropeOrigin: {fileID: 1256964004434069243}
   anchors:
   - {fileID: 1447568046}
   - {fileID: 1511399304}
@@ -2033,11 +2003,6 @@ MonoBehaviour:
   grapple: {fileID: 1925527726}
   sound: {fileID: 2105445617}
   model: {fileID: 1415225579}
-  torso: {fileID: 488331323}
-  leftArm: {fileID: 1786783891}
-  rightArm: {fileID: 1673714787}
-  leftLeg: {fileID: 1798900006}
-  rightLeg: {fileID: 1673167332}
 --- !u!114 &1925527730
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2799,6 +2764,7 @@ MonoBehaviour:
   circuit: {fileID: 1927120373}
   player: {fileID: 1925527727}
   viewCamera: {fileID: 493584858}
+  openFace: 0
 --- !u!1001 &1256964004434069242
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -2856,6 +2822,11 @@ PrefabInstance:
     m_AddedGameObjects: []
     m_AddedComponents: []
   m_SourcePrefab: {fileID: 100100000, guid: 3f56bccaf9bbff748a65359b70735be0, type: 3}
+--- !u!4 &1256964004434069243 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 7497709704275461673, guid: 3f56bccaf9bbff748a65359b70735be0, type: 3}
+  m_PrefabInstance: {fileID: 1256964004434069242}
+  m_PrefabAsset: {fileID: 0}
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0
