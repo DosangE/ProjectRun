@@ -197,7 +197,7 @@ namespace ProtoHarness.Tests.PlayMode
         {
             RaceWorld world = null;
             yield return RaceBotTests.LoadRace(track, difficulty, false, 0, (w, _) => world = w);
-            var source = new InputRecorder(RaceBotTests.InputFor(world, difficulty));
+            var source = new LastInputSpy(RaceBotTests.InputFor(world, difficulty));
             world.Game.SetInputSource(source);
             using (var writer = new StreamWriter(path, false))
             {
@@ -236,11 +236,11 @@ namespace ProtoHarness.Tests.PlayMode
             Debug.Log($"BotBench Trace {track} {difficulty}: botTicks={world.Game.Tick}, ghostTicks={(ghost == null ? 0 : ghost.Count)}, file={path}.");
         }
 
-        private sealed class InputRecorder : IInputSource
+        private sealed class LastInputSpy : IInputSource
         {
             private readonly IInputSource inner;
             public TickInput Last { get; private set; }
-            public InputRecorder(IInputSource inner) => this.inner = inner ?? throw new ArgumentNullException(nameof(inner));
+            public LastInputSpy(IInputSource inner) => this.inner = inner ?? throw new ArgumentNullException(nameof(inner));
             public void Poll() => inner.Poll();
             public void Clear() => inner.Clear();
             public TickInput Consume() => Last = inner.Consume();
