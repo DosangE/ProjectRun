@@ -299,7 +299,11 @@ namespace ProtoHarness.ChainRush.Flow
                     yield break;
                 }
                 worlds.Add(world);
-                inputs.Add(new CircuitBot(world.Game, world.Player, world.Grapple, world.Circuit));
+                if (setup.Difficulty == BotDifficulty.Easy)
+                    inputs.Add(new CircuitBot(world.Game, world.Player, world.Grapple, world.Circuit));
+                else
+                    inputs.Add(new RaceBot(world.Game, world.Player, world.Grapple, world.Circuit,
+                        setup.Difficulty == BotDifficulty.Normal ? BotTuning.Normal : BotTuning.Hard));
             }
             if (setup.Mode == RaceMode.Bots)
             {

@@ -1,4 +1,5 @@
 using System;
+using ProtoHarness.ChainRush.Bots;
 using ProtoHarness.ChainRush.Race;
 using ProtoHarness.ChainRush.Track;
 
@@ -17,6 +18,7 @@ namespace ProtoHarness.ChainRush.Flow
         public string EnvironmentScene { get; }
         public RaceMode Mode { get; }
         public int Seed { get; }
+        public BotDifficulty Difficulty { get; }
         public SpeedClass Speed { get; }
         public RunnerProfile Runner { get; }
         // The track's own road and wall materials; null keeps the race scene's.
@@ -65,6 +67,7 @@ namespace ProtoHarness.ChainRush.Flow
             EnvironmentScene = environmentScene;
             Mode = from.Mode;
             Seed = from.Seed;
+            Difficulty = from.Difficulty;
             Speed = from.Speed;
             Runner = runner;
             Look = look;
@@ -74,7 +77,7 @@ namespace ProtoHarness.ChainRush.Flow
         }
 
         public RaceSetup(TrackDefinition track, string title, string environmentScene, RaceMode mode, SpeedClass speed, RunnerProfile runner,
-            TrackLook look = null, int firstStage = 0, int seed = 0)
+            TrackLook look = null, int firstStage = 0, int seed = 0, BotDifficulty difficulty = BotDifficulty.Easy)
         {
             if (track == null) throw new ArgumentNullException(nameof(track));
             if (string.IsNullOrWhiteSpace(title)) throw new ArgumentException("A race needs the track's title for the HUD.", nameof(title));
@@ -82,12 +85,15 @@ namespace ProtoHarness.ChainRush.Flow
             if (!Enum.IsDefined(typeof(RaceMode), mode)) throw new ArgumentOutOfRangeException(nameof(mode), mode, "Unknown race mode.");
             if (!Enum.IsDefined(typeof(SpeedClass), speed)) throw new ArgumentOutOfRangeException(nameof(speed), speed, "Unknown speed class.");
             if (runner == null) throw new ArgumentNullException(nameof(runner));
+            if (!Enum.IsDefined(typeof(BotDifficulty), difficulty)) throw new ArgumentException("Unknown bot difficulty.", nameof(difficulty));
+            if (mode != RaceMode.Bots && difficulty != BotDifficulty.Easy) throw new ArgumentException("Only a bot race takes a difficulty other than Easy.", nameof(difficulty));
             if (firstStage < 0) throw new ArgumentOutOfRangeException(nameof(firstStage), firstStage, "A first stage cannot be negative.");
             Track = track;
             Title = title;
             EnvironmentScene = environmentScene;
             Mode = mode;
             Seed = seed;
+            Difficulty = difficulty;
             Speed = speed;
             Runner = runner;
             Look = look;

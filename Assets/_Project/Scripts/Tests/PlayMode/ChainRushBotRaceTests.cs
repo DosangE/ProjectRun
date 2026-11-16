@@ -117,10 +117,16 @@ namespace ProtoHarness.Tests.PlayMode
             menu.Highlight(SingleModePage.BotsRow);
             Assert.That(menu.Description, Does.Contain("봇 3명"));
             menu.Confirm();
+            Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Difficulty));
+            Assert.That(menu.Cursor, Is.EqualTo(0));
+            menu.Confirm();
             Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Speed));
+            menu.Back();
+            Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Difficulty));
             menu.Back();
             Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Mode));
             Assert.That(menu.Cursor, Is.EqualTo(SingleModePage.BotsRow));
+            menu.Confirm();
             menu.Confirm();
             menu.Highlight(0);
             menu.Confirm();

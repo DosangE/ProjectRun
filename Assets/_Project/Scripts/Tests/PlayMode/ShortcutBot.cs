@@ -55,7 +55,19 @@ namespace ProtoHarness.Tests.PlayMode
         public bool HoldInnerKey;
 
         public void Poll() { }
-        public void Clear() { }
+        // Taken/Missed are lifetime diagnostics read by probes, not control state.
+        public void Clear()
+        {
+            stage = Stage.OnLoop;
+            active = -1;
+            turnFrom = 0f;
+            pressed = false;
+            follower.SwingHold = false;
+            follower.SwingPress = false;
+            follower.Steering = true;
+            follower.Override = 0f;
+            follower.ChainAction = false;
+        }
 
         public TickInput Consume()
         {

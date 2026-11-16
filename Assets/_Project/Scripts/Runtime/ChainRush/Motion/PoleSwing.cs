@@ -20,6 +20,7 @@ namespace ProtoHarness.ChainRush.Motion
             public float MetersPerSlot;
             public float RunSpeed;
             public float RunAcceleration;
+            public float CarryDecay;
         }
 
         // Hooks the pole at the rope length and speed of this moment.
@@ -46,17 +47,24 @@ namespace ProtoHarness.ChainRush.Motion
             // A booster on a swing speeds the swing up (user 2026-10-19, "C"): the hook's speed, the swing's speed (Step),
             // rises toward the booster's speed by the same push a booster gives on the ground.
             // The rope keeps the facing, so the slingshot's pull does not turn it.
+            // Faster than the booster (a pad's speed), the extra wears off toward the booster's speed by CarryDecay of itself
+            // a second, as it wears off toward the throttle's without one (user 2026-11-16, "부스터 사용중이라면
+            // 부스터+스윙 최대속도까지 감속").
             if (pulling || carrying)
             {
                 float boostSpeed = pulling ? sling.TopSpeed : sling.CarrySpeed;
-                if (hookSpeed < boostSpeed) hookSpeed = Mathf.Min(boostSpeed, hookSpeed + Slingshot.BoostAcceleration(hookSpeed, boostSpeed, sling) * dt);
+                if (hookSpeed > boostSpeed) hookSpeed -= settings.CarryDecay * (hookSpeed - boostSpeed) * dt;
+                else if (hookSpeed < boostSpeed) hookSpeed = Mathf.Min(boostSpeed, hookSpeed + Slingshot.BoostAcceleration(hookSpeed, boostSpeed, sling) * dt);
             }
             // Without a booster the throttle speeds the swing up too (user 2026-10-22), by the run acceleration and up to
-            // ThrottleSpeedScale times the run speed. A faster hook (a booster's) is kept; let go, the speed stays.
-            else if (!coasting)
+            // ThrottleSpeedScale times the run speed. A faster hook (a booster's that ended, a pad's, a fast entry) wears off
+            // toward that speed by CarryDecay of the part above it a second, as a released swing's or a pad's carry does on
+            // the ground (user 2026-11-16: "부스트 상태가 아닌 스윙 속도까지 줄어야 한다"); let go, the speed stays.
+            else
             {
                 float throttleSpeed = settings.RunSpeed * settings.ThrottleSpeedScale;
-                if (hookSpeed < throttleSpeed) hookSpeed = Mathf.Min(throttleSpeed, hookSpeed + settings.RunAcceleration * dt);
+                if (hookSpeed > throttleSpeed) hookSpeed -= settings.CarryDecay * (hookSpeed - throttleSpeed) * dt;
+                else if (!coasting) hookSpeed = Mathf.Min(throttleSpeed, hookSpeed + settings.RunAcceleration * dt);
             }
         }
 

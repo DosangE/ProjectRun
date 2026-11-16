@@ -1,8 +1,8 @@
 namespace ProtoHarness.ChainRush.Flow.Lobby
 {
-    // The speed classes, all open (M3; SpeedScale has their scales). Comes after the mode page of a single race (user
-    // 2026-10-29 speed before track, 2026-11-13 mode first); choosing one goes on to the track page, which shows that
-    // speed's records.
+    // The speed classes, all open (M3; SpeedScale has their scales). Comes after the mode page of a time attack, or after
+    // the difficulty page of a bot race (user 2026-10-29 speed before track, 2026-11-13 mode first, 2026-11-15 difficulty);
+    // choosing one goes on to the track page, which shows that speed's records.
     public sealed class SpeedPage : LobbyPage
     {
         private static readonly SpeedClass[] Classes = { SpeedClass.Normal, SpeedClass.Fast, SpeedClass.VeryFast };
@@ -31,6 +31,8 @@ namespace ProtoHarness.ChainRush.Flow.Lobby
             return Step.Open(LobbyMenu.Page.Track, Context.Track);
         }
 
-        public override Step Back() => Step.Open(LobbyMenu.Page.Mode, SingleModePage.RowOf(Context.Mode));
+        public override Step Back() => Context.Mode == RaceMode.Bots
+            ? Step.Open(LobbyMenu.Page.Difficulty, (int)Context.Difficulty)
+            : Step.Open(LobbyMenu.Page.Mode, SingleModePage.RowOf(Context.Mode));
     }
 }

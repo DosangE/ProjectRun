@@ -43,7 +43,7 @@ $course  = @('ChainRushCurveTests', 'ChainRushSlopeTests', 'ChainRushRoadTests',
 
 # 전체 실행에서만 도는 클래스, 이름으로 따로 돌리는 클래스. 표가 모든 클래스를 아는지 확인할 때 쓴다.
 $allOnly      = @('ChainRushTests')
-$explicitOnly = @('NetworkRaceTests', 'ChainRushProbeTests')
+$explicitOnly = @('NetworkRaceTests', 'ChainRushProbeTests', 'BotLapBenchTests')
 
 # 위에서부터 처음 맞는 줄을 쓴다. All = 전체, Classes = 돌릴 클래스, Tests = 클래스 일부('클래스.이름접두사정규식'),
 # Fingerprint = $false 면 지문을 넣지 않는다, Note = 보고에 붙일 말.
@@ -67,6 +67,7 @@ $rules = @(
     @{ Pattern = '^' + $scripts + 'Tests/PlayMode/(ShortcutBot|TestRoad|StateTrace)\.cs$'; All = $true; Why = '테스트 보조 파일' }
     @{ Pattern = '^' + $scripts + 'Tests/EditMode/';                Classes = @(); Why = 'EditMode 만 (EditMode 전체는 늘 돈다)' }
     @{ Pattern = '^' + $scripts + 'Tests/PlayMode/NetworkRaceTests\.cs$'; Classes = @(); Why = '네트워크 레이스'; Note = 'NetworkRaceTests 는 [Explicit] 이라 여기서 고르지 않는다. 플레이어 빌드 뒤 이름으로 따로 돌린다 (HANDOFF 1절)' }
+    @{ Pattern = '^' + $scripts + 'Tests/PlayMode/BotLapBenchTests\.cs$'; Classes = @(); Why = '봇 측정은 Explicit, 이름으로만 실행'; Fingerprint = $false }
     @{ Pattern = '^' + $scripts + 'Tests/PlayMode/(\w+)\.cs$';      Own = $true;  Why = '테스트 클래스 파일' }
     @{ Pattern = '^' + $scripts + 'Runtime/Net/';                   Classes = $net; Why = 'ProtoHarness.Net (다른 런타임·에디터 어셈블리가 참조하지 않는다)' }
     @{ Pattern = '^' + $runtime + '(RunnerMotor|GrappleController|ChainRushGame|RacerState|Ticks|SimSnapshot|RunRules|CourseTarget)\.cs$'; All = $true; LapTracks = @('*'); Why = '코어 시뮬' }
@@ -78,6 +79,7 @@ $rules = @(
     @{ Pattern = '^' + $runtime + 'Race/CircuitRace\.cs$'; Classes = @('ChainRushCircuitTests', 'ChainRushWorldTests', 'ChainRushControllerCostTests', 'ChainRushReplayTests', 'ChainRushRollbackTests', 'ChainRushFlowTests') + $net; LapTracks = @('*'); Why = '서킷 구성·랩·앵커' }
     @{ Pattern = '^' + $runtime + 'Control/(IInputSource|TickInput)\.cs$'; All = $true; LapTracks = @('*'); Why = '시뮬이 소비하는 컨트롤러 입력' }
     @{ Pattern = '^' + $runtime + 'Bots/(CircuitBot|TrackFollower)\.cs$'; All = $true; Why = '시험 봇(옮기기 전 테스트 보조 파일): CircuitBot·TrackFollower 를 테스트 14파일이 직접 생성한다' }
+    @{ Pattern = '^' + $runtime + 'Bots/(BotDifficulty|BotTuning|RaceBot)\.cs$'; Classes = @('RaceBotTests', 'ChainRushBotRaceTests', 'ChainRushRaceFieldTests', 'ChainRushContactTests'); Why = '난이도 선택·입력 동등성·관측 결정성' }
     @{ Pattern = '^' + $runtime + 'Bots(/|$)'; Classes = @('ChainRushBotRaceTests', 'ChainRushRaceFieldTests'); Why = '봇전 구성(BotLineup 등). 폴더 메타 Bots.meta 는 .meta 를 뗀 뒤(아래 $p) Bots 로 비교된다' }
     @{ Pattern = '^' + $runtime + 'Race/RaceOrder\.cs$'; Classes = @('ChainRushBotRaceTests', 'ChainRushRaceFieldTests') + $net; Why = '로컬·Net 공용 주행 순위' }
     @{ Pattern = '^' + $runtime + 'Race/';                          Classes = @('ChainRushCircuitTests', 'ChainRushWorldTests', 'ChainRushControllerCostTests', 'ChainRushReplayTests', 'ChainRushRollbackTests', 'ChainRushFlowTests', 'ChainRushRaceFieldTests', 'ChainRushBotRaceTests', 'ChainRushContactTests') + $net; Why = '서킷 레이스·격리 월드·상대 월드를 같은 틱으로, 봇전 접촉·출발 격자 (RaceAssembler 가 정의를 바꿔 끼운다)' }

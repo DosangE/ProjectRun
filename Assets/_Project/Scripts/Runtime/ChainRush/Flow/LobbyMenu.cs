@@ -20,7 +20,7 @@ namespace ProtoHarness.ChainRush.Flow
     public sealed class LobbyMenu : MonoBehaviour
     {
         // In the order of the page list built in Awake.
-        public enum Page { Main, Settings, Track, Speed, Runner, Keys, Tutorial, Mode }
+        public enum Page { Main, Settings, Track, Speed, Runner, Keys, Tutorial, Mode, Difficulty }
 
         // One track the lobby offers: what the circuit is built from and the scene loaded around it for looks.
         [Serializable]
@@ -148,7 +148,7 @@ namespace ProtoHarness.ChainRush.Flow
             {
                 new MainPage(context), new SettingsPage(context), trackPage,
                 new SpeedPage(context), new RunnerPage(context), new KeysPage(context), new TutorialPage(context),
-                new SingleModePage(context),
+                new SingleModePage(context), new DifficultyPage(context),
             };
             for (int i = 0; i < pages.Length; i++)
                 if (pages[i].Id != (Page)i)
@@ -240,7 +240,8 @@ namespace ProtoHarness.ChainRush.Flow
             TrackChoice track = tracks[context.Track];
             var setup = new RaceSetup(track.Definition, track.Title, track.EnvironmentScene, context.Mode,
                 SpeedPage.ClassAt(context.Speed), runners[context.Runner], track.Look,
-                seed: context.Mode == RaceMode.Bots ? context.Seed : 0);
+                seed: context.Mode == RaceMode.Bots ? context.Seed : 0,
+                difficulty: context.Mode == RaceMode.Bots ? context.Difficulty : BotDifficulty.Easy);
             if (context.Mode != RaceMode.Bots) return setup;
             RunnerProfile[] opponents = BotLineup.Pick(runners, setup.Runner, setup.Seed);
             Debug.Log($"ChainRush bot lineup: seed {setup.Seed}", this);

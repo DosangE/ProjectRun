@@ -181,6 +181,39 @@ namespace ProtoHarness.Tests.PlayMode
             Assert.That(swing.Gauge, Is.EqualTo(gauge));
         }
 
+        // A bot whose swing a contact broke hooks nothing new for BotTuning.ContactRehookTicks (user 2026-11-16, "다시 스윙을
+        // 거는 속도는 0.5초로"), even with a corner pole in reach the whole time, then hooks on the next tick. Without the wait
+        // the press comes on the first tick. The spot is where a Hard bot presses a STADIUM corner hook (S 140, tick 415 of
+        // its solo trace).
+        [UnityTest, Timeout(120000)]
+        public IEnumerator Contact_BrokenBotSwing_WaitsTheRehookTicksWithAPoleInReach_ThenHooks()
+        {
+            yield return Load();
+            Begin();
+            ParkUnused();
+            RaceWorld bot = worlds[1], other = worlds[2];
+            var spot = new Vector3(3.854f, 1.05f, 140.09f);
+            Place(bot, spot, Vector3.zero);
+            Assert.That(bot.Player.IsGrounded, Is.True, "precondition: on the road.");
+            Assert.That(bot.Game.Track.Frame(bot.Player.transform.position).Curvature, Is.Not.EqualTo(0f), "precondition: in the corner.");
+            Assert.That(bot.Player.TryFindPole(out Vector3 pole), Is.True, "precondition: the corner pole is in reach.");
+            PoleSwing.Hook(bot.Game.Racer, bot.Player.transform.position, pole);
+            var input = new RaceBot(bot.Game, bot.Player, bot.Grapple, bot.Circuit, BotTuning.Hard);
+            input.Observe(Field, 1);
+            Place(other, bot.Player.transform.position + Vector3.right * 0.3f, Vector3.zero);
+            ContactPass.Invoke(Field, null);
+            Assert.That(Field.ContactSwingBreaks(1), Is.EqualTo(1), "precondition: the contact broke the bot's swing.");
+            Assert.That(bot.Player.IsSwinging, Is.False);
+            ParkUnused();
+            Place(bot, spot, Vector3.zero);
+            Assert.That(bot.Player.TryFindPole(out _), Is.True, "precondition: back beside the pole.");
+            int wait = BotTuning.Hard.ContactRehookTicks;
+            Assert.That(wait, Is.EqualTo(25), "0.5 s at 50 ticks a second.");
+            for (int tick = 1; tick <= wait; tick++)
+                Assert.That(input.Consume().SwingPressed, Is.False, $"No new hook {tick} ticks after the break.");
+            Assert.That(input.Consume().SwingPressed, Is.True, "Once the wait ends the same pole is hooked.");
+        }
+
         [UnityTest, Timeout(120000)]
         public IEnumerator Contact_NoOverlap_DoesNotMoveAgainOrChangeSwingTimersAndGroundedPushUpdatesReturnS()
         {
