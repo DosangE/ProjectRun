@@ -10,6 +10,15 @@
 
 ---
 
+## 2026-11-17 · 옛 러너 모형 에셋 28개 삭제, 드로 배치 측정은 MP2 남은 것으로 옮긴다 (`feature/runner-old-assets-measure`)
+
+- **승인**: 사용자 2026-11-17 "진행, 안쓰는것도 삭제" — 요청서의 20개 + `Runner*Geometry.asset` 5개 + `RunnerChamfer.asset`, 그리고 목록 밖에서 참조 0 으로 나온 `M_RunnerArmor.mat`(요청서 작성 때는 `ArmoredRunner.prefab` 4곳, `docs/PROPOSAL_RUNNER_UNITY.md:302`)·`M_RunnerTrim.mat`(처음부터 0, 같은 문서 `:303`).
+- **한 것**: 28쌍(에셋 + `.meta`, 56파일)을 `git rm`. 방식은 2026-10 무한 모드 삭제와 같다(`docs/archive/DECISIONS-2026-10.md:817`). `Unity_RunCommand` 의 `AssetDatabase.DeleteAsset` 은 쓰지 않았다(§0).
+- **지우기 전 확인**: 각 `.meta` 의 GUID 를 `Assets/`·`ProjectSettings/` 의 `.meta` 밖 파일에서 grep → 28개 모두 0건. `.cs` 에서 이름·경로를 조립하는 곳(`"M_" + …`, `Geometry.asset`, `Chamfer`)도 0건. 지금 쓰는 `M_RunnerBody_*`·`M_RunnerGlow_*`·`M_RunnerVisor*`·`RunnerFlatFoot.fbx`·`Runner<이름>.prefab`·`ArmoredRunner.prefab` 은 남겼다.
+- **검증 (에디터 6000.3.19f1, 작업 트리 = `7ad0af9` + 삭제)**: `Unity_RunCommand` 로 `AssetDatabase.Refresh` → 지운 경로 4개의 `LoadMainAssetAtPath` 가 모두 `False`, `scriptCompilationFailed=False`. 선택 도구는 이 PC 의 버전 차이 파일로 "전체" → 영향 평가: 지운 에셋을 읽는 곳 0 → `select-tests.ps1:57` 러너 에셋 줄이 고르는 7묶음. PlayMode `testcasecount="20" result="Passed" passed="20" failed="0" skipped="0"`, 05:44:50Z~05:45:20Z(`-Record`). Console 에러 6건은 모두 `Audio_UnusableSwingRecording_…` 가 기대한 로그(`ChainRushPresentationTests.cs:238,242`)이고 Missing 참조 로그는 없다.
+- **드로 배치 측정 (⑤) 을 옮긴 이유**: 옛 모형을 지워 지금 같은 조건의 "전" 측정은 못 한다. 카운트다운은 Esc 로 멈추지 않는다(`ChainRushGame.cs:170,343` — `TogglePause` 는 `Running` 만, 카운트다운은 `RaceAssembler.cs:471` 이 저절로 시작). 그래서 사용자 플레이로 재기 어렵다. 사용자 "MP2 남은것 하고 하자" → `docs/PROPOSAL_MP2_REMAINING.md` 의 ④ 로 옮겼다. 그곳에서 2026-11-12 스파이크의 옛 모형 값(러너 하나 ≈150 배치, "MP1 구조")과 같은 식으로 비교한다.
+- **버린 대안**: 에디터 업데이트 콜백으로 카운트다운 값을 받아 적는 측정기(사용자 "측정기가 필요한 이유가 뭔가" — 목적이 약해진 측정에 승인 한 번·플레이 네 번이 든다). 옛 커밋을 체크아웃해 "전" 값 다시 재기(같은 작업 트리에서 재임포트).
+
 ## 2026-11-17 · 러너 캐릭터 Unity 반영 3·4단계 (코드 부분): 러너 간 접촉 Bump `RaceField.ContactSequence`·`RunnerAnimation.BindField`, 고스트 Animator 정지·얼굴 복사, `select-tests.ps1` 러너 에셋 줄 (`feature/runner-unity-bump`)
 
 > 현재 상태: 구현·① 검증·사용자 플레이 확인 끝, `dev` 병합(사용자 2026-11-17 "확인했다. 커밋 ㄱㄱ 병합까지 ㄱㄱ"). 드로 배치 측정·옛 에셋 삭제는 남았다 — 아래 "남은 것".
