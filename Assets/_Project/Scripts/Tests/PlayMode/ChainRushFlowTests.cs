@@ -811,6 +811,61 @@ namespace ProtoHarness.Tests.PlayMode
             }
         }
 
+        // Runner art 3·4 (docs/PROPOSAL_RUNNER_UNITY.md "복제본 처리"): the ghost is a still copy of the runner's skinned
+        // model that shows the same face the runner wears, open or closed, and no other.
+        [UnityTest, Timeout(60000)]
+        public IEnumerator Race_TheBestsGhost_HoldsItsCopiedPoseAndWearsTheRunnersFace()
+        {
+            var trace = new GhostTrace();
+            for (int i = 0; i < 10; i++) trace.Add(new Vector3(i * 0.5f, 1f, 3f), 0f);
+            ghosts.Save(Stadium().name, SpeedClass.Fast, trace);
+            RaceLaunch.Request(new RaceSetup(Stadium(), "STADIUM", "", RaceMode.Single, SpeedClass.Fast, runner));
+            RaceAssembler assembler = null;
+            yield return Load(RacePath, scene => assembler = Find<RaceAssembler>(scene));
+            assembler.Records = TestRecords();
+            assembler.Ghosts = ghosts;
+            yield return null;
+            Assert.That(assembler.HasGhost, Is.True);
+            ChainRushGame game = Find<ChainRushGame>(assembler.gameObject.scene);
+            Transform model = game.Player.GetComponent<RunnerTilt>().Body;
+            RunnerVisual worn = model.GetComponentInChildren<RunnerVisual>(true);
+            Assert.That(worn, Is.Not.Null);
+            Assert.That(worn.OpenFaceSelected, Is.False, "precondition: the scene's runner wears the closed face.");
+            AssertGhostCopies(assembler.Ghost, model);
+
+            worn.Select(true);
+            var root = new GameObject("Open-face ghost (test)");
+            try
+            {
+                GhostRunner open = root.AddComponent<GhostRunner>();
+                open.Initialize(game, trace, model);
+                yield return null;
+                AssertGhostCopies(open, model);
+                RunnerVisual copied = open.GetComponentInChildren<RunnerVisual>(true);
+                Assert.That(copied.OpenFace.enabled && !copied.ClosedFace.enabled, Is.True, "The ghost wears the open face the runner wears.");
+            }
+            finally
+            {
+                worn.Select(false);
+                UnityEngine.Object.Destroy(root);
+            }
+        }
+
+        // No Animator of the copy runs, and each skinned renderer of the copy shows exactly when the runner's does.
+        private static void AssertGhostCopies(GhostRunner ghost, Transform model)
+        {
+            Animator[] animators = ghost.GetComponentsInChildren<Animator>(true);
+            Assert.That(animators, Is.Not.Empty, "The ghost copies the runner's skinned model.");
+            foreach (Animator animator in animators) Assert.That(animator.enabled, Is.False, "The ghost's pose stays as copied: " + animator.name);
+            SkinnedMeshRenderer[] runner = model.GetComponentsInChildren<SkinnedMeshRenderer>(true);
+            SkinnedMeshRenderer[] copy = ghost.GetComponentsInChildren<SkinnedMeshRenderer>(true);
+            Assert.That(copy.Length, Is.EqualTo(runner.Length));
+            for (int i = 0; i < runner.Length; i++)
+                Assert.That(copy[i].enabled, Is.EqualTo(runner[i].enabled), "renderer " + runner[i].name);
+            RunnerVisual copied = ghost.GetComponentInChildren<RunnerVisual>(true);
+            Assert.That(copied.OpenFace.enabled != copied.ClosedFace.enabled, Is.True, "One face shows, never both or none.");
+        }
+
         [UnityTest, Timeout(60000)]
         public IEnumerator Race_ABrokenGhostFile_RacesWithoutAGhostAndSaysSo()
         {

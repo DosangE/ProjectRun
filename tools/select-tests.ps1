@@ -51,7 +51,11 @@ $rules = @(
     # Lap eligibility is separate from the ordinary test table; see VERIFICATION §4-4 (one rule source).
     @{ Pattern = '^Assets/_Project/Data/Circuit_(Stadium|Skyway|FingerLanes|PalmCoast|SummitDrop)\.asset$'; Classes = @('ChainRushCircuitTests'); LapAsset = $true; Why = '트랙 정의: 해당 트랙의 Lap 칸' }
     @{ Pattern = '^Assets/_Project/Data/TrackLook_'; Tests = @('ChainRushFlowTests.Race_WithATrackLook_'); Fingerprint = $false; Why = '트랙 표현 SO (주행 시뮬 참조 없음)' }
-    @{ Pattern = '^Assets/_Project/(Art/(Materials/|Textures/|Models/(\w+Exterior_|StadiumSports_))|Prefabs/.*Exterior\.prefab$|Scenes/ChainRushTrack)'; Classes = @(); Fingerprint = $false; Why = '장식·머티리얼 (빌더 침범 검사·해당 구조/표현 테스트는 영향 평가로 더한다)' }
+    # The runner's model, clips' controller, looks, materials and portraits (docs/PROPOSAL_RUNNER_UNITY.md, DECISIONS
+    # 2026-11-16 "러너 캐릭터 Unity 반영 1·2단계"). Before the decoration line, which would take the runner's materials
+    # and textures. No colliders in them; the fingerprint stays in, as the user asked when the model was swapped.
+    @{ Pattern = '^Assets/_Project/(Art/(Models/Runner\w*\.(fbx|prefab|asset)|Animations/Runner\.controller|Materials/M_Runner\w*\.mat|Textures/T_Runner\w*\.png)|Prefabs/ArmoredRunner\.prefab)$'; Classes = @('ChainRushPresentationTests'); Tests = @('ChainRushProfileTests.Profiles_TheFiveRunners_EachHaveALookThatFitsTheRunnerModel', 'ChainRushFlowTests.Race_FromTheLobby_WearsTheChosenRunnersLook', 'ChainRushFlowTests.Lobby_RunnerPage_', 'ChainRushFlowTests.Race_TheBestsGhost_', 'ChainRushRaceFieldTests.Race_WithThreeOpponents_LoadsAnIsolatedWorldForEach_ShowingOnlyItsRunner', 'ChainRushContactTests.Contact_BumpSequence_'); Why = '러너 모델·Animator·겉모습·초상 (표현, 콜라이더 없음)' }
+    @{ Pattern = '^Assets/_Project/(Art/(Materials/|Textures/|Models/(\w+Exterior_|StadiumSports_))|Prefabs/.*Exterior\.prefab$|Scenes/ChainRushTrack)';Classes = @(); Fingerprint = $false; Why = '장식·머티리얼 (빌더 침범 검사·해당 구조/표현 테스트는 영향 평가로 더한다)' }
     # Revisit when a prefab or builder starts using this model (docs/DECISIONS.md 2026-11-09 "Blender 시험 제작").
     @{ Pattern = '^Assets/_Project/Art/Models/ShortcutSign\.fbx(\.meta)?$'; Classes = @(); Fingerprint = $false; Why = '지름길 표지판 FBX (아직 참조하는 코드·씬·프리팹 없음)' }
     # Decoration kit FBX read only by the exterior builders (docs/ART_REQUEST_PROPS.md).

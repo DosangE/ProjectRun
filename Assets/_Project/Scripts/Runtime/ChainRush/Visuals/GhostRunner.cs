@@ -10,7 +10,7 @@ namespace ProtoHarness.ChainRush.Visuals
     // exactly as the runner does (both step on ticks, neither is interpolated). Before the start it waits on the first
     // entry; past the trace's end (the ghost has finished) it is hidden, and a restart brings it back from tick 1.
     // Presentation only: the simulation never reads it, and the copy has no colliders. Its pose stays as copied
-    // (RunnerAnimation does not drive it), as RemoteGhost's does.
+    // (RunnerAnimation does not drive it and its Animator is off), as RemoteGhost's does, and it wears the runner's face.
     public sealed class GhostRunner : MonoBehaviour
     {
         // Mint (NightUi.Accent) at a third: the runner's shape, plainly not the runner.
@@ -44,6 +44,13 @@ namespace ProtoHarness.ChainRush.Visuals
             copy.transform.localRotation = Quaternion.identity;
             copy.transform.localScale = model.localScale;
             copy.SetActive(true);
+            // The pose stays as copied: the copy's Animator would play its controller's first state on its own.
+            foreach (Animator animator in copy.GetComponentsInChildren<Animator>(true)) animator.enabled = false;
+            // The face the runner wears. Which face shows is not serialized (RunnerVisual), so the copy's Awake picked the
+            // closed one whatever the runner wears; a face the respawn blink has hidden shows on the ghost all the same.
+            RunnerVisual worn = model.GetComponentInChildren<RunnerVisual>(true);
+            RunnerVisual copied = copy.GetComponentInChildren<RunnerVisual>(true);
+            if (worn != null && copied != null) copied.Select(worn.OpenFaceSelected);
             // Visual only: it must never collide, even in the frame before the colliders are destroyed.
             foreach (Collider collider in copy.GetComponentsInChildren<Collider>(true))
             {

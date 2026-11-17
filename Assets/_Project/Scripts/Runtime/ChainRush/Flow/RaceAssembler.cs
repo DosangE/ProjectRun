@@ -342,7 +342,23 @@ namespace ProtoHarness.ChainRush.Flow
                 StopAssembling("the opponents' worlds could not make a field.");
                 yield break;
             }
+            BindBumps(game, 0);
+            for (int i = 0; i < worlds.Count; i++) BindBumps(worlds[i].Game, i + 1);
             CountIn();
+        }
+
+        // Each runner's model flinches when a contact with another runner begins (RaceField.ContactSequence). Presentation
+        // only. A world without the presentation (ChainRushGame.HasPresentation off) has no poses to bump; one with it
+        // whose runner carries no RunnerAnimation is a scene that does not fit, and says so.
+        private void BindBumps(ChainRushGame racerGame, int racer)
+        {
+            if (!racerGame.HasPresentation) return;
+            if (!racerGame.Player.TryGetComponent(out RunnerAnimation animation))
+            {
+                Debug.LogError($"RaceAssembler: racer {racer}'s runner has no RunnerAnimation; it will not flinch at contact.", racerGame.Player);
+                return;
+            }
+            animation.BindField(field, racer);
         }
 
         private void OpponentLoaded(Scene scene, LoadSceneMode mode)
