@@ -41,6 +41,7 @@
   - 06:15:13Z 유령 단언·고치기 전 → `testcasecount="3" result="Failed(Child)" passed="0" failed="3"` (위 원문).
   - 06:16:55Z `RaceField` 수정 뒤·정지 장치 교체 전 `ChainRushContactTests$` → `testcasecount="17" result="Failed(Child)" passed="11" failed="6"` (위 6건).
   - **06:19:38Z~06:25:46Z 최종** — `select-tests.ps1:89` 의 `Race/` 줄이 고르는 클래스 전부(`ChainRushCircuitTests`·`WorldTests`·`ControllerCostTests`·`ReplayTests`·`RollbackTests`·`FlowTests`·`RaceFieldTests`·`BotRaceTests`·`ContactTests` + Net 5) `categories !Device !Enemy !NetEndReplay !^Lap$` → `testcasecount="202" result="Passed" passed="200" failed="0" skipped="2"`(건너뜀 2 = `[Explicit]` 측정). 서킷 지문 `0xEF92FB76BFD1D767`, 봇전 4명×300틱 위치 해시 `0xAB407E424EDC7FAE` 둘 다 그대로다(그 300틱에는 복귀 대기 중의 접촉이 없었다). Lap 은 돌리지 않았다 — 바뀐 것은 봇전의 접촉 패스뿐이고, 랩 런은 혼자 런이라 `RaceField` 를 거치지 않는다.
+  - 병합(`948db63`): `select-tests.ps1 -Range dev...HEAD` → PlayMode 클래스 14개 + 지문(위 06:19:38Z 실행과 같은 목록, `test-runs -Last -Passed` "실행한 코드 = 지금 커밋한 코드"), Lap 없음, **EditMode 전체** → 06:41:56Z~06:42:08Z `categories !Enemy` → `testcasecount="433" result="Passed" passed="433" failed="0" skipped="0"`.
 - **남은 것**: 사용자 플레이 확인(v0.7 마일스톤 확인 때) — 봇은 채택 프리셋에서 떨어지지 않으므로(`docs/BOT_TUNING_LOG.tsv` 회차 21~24 `falls=0`) 볼 수 있는 장면은 플레이어가 떨어져 깜빡이는 동안 뒤의 봇이 통과하는 것이다(STADIUM·Easy, 봇보다 앞서 첫 틈 S 119 에 떨어진다). 측정을 포커스 상태에서 다시 잴지. **확인 못 한 것**: 유령 둘이 같은 점에서 대기가 끝날 때 0.76 m 를 한 틱에 갈라지는 것이 화면에서 튀어 보이는지.
 
 ## 2026-11-17 · 옛 러너 모형 에셋 28개 삭제, 드로 배치 측정은 MP2 남은 것으로 옮긴다 (`feature/runner-old-assets-measure`)
