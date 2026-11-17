@@ -11,6 +11,7 @@ using ProtoHarness.ChainRush.Flow;
 using ProtoHarness.ChainRush.Motion;
 using ProtoHarness.ChainRush.Race;
 using ProtoHarness.ChainRush.Track;
+using ProtoHarness.ChainRush.Visuals;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.TestTools;
@@ -234,6 +235,77 @@ namespace ProtoHarness.Tests.PlayMode
             player.Player.ApplyContact(Vector3.forward * 0.1f, Vector3.zero);
             Assert.That(player.Player.IsGrounded, Is.True);
             Assert.That(state.LastGroundedS, Is.EqualTo(player.Game.Track.Project(player.Player.transform.position).S).Within(0.00001d));
+        }
+
+        // Runner art 3·4 (docs/PROPOSAL_RUNNER_UNITY.md "러너 간 Bump"): the field counts each contact that begins, once,
+        // and every runner's model in the bot race flinches at its own.
+        [UnityTest, Timeout(120000)]
+        public IEnumerator Contact_BumpSequence_CountsEachContactOnceAsItBegins_ClearsOnRestart_AndBumpsThatRunnersModel()
+        {
+            yield return Load();
+            Begin();
+            ParkUnused();
+            var animations = new RunnerAnimation[worlds.Length];
+            for (int i = 0; i < worlds.Length; i++)
+            {
+                animations[i] = worlds[i].Player.GetComponent<RunnerAnimation>();
+                Assert.That(animations[i], Is.Not.Null, "racer " + i);
+            }
+            Assert.Throws<ArgumentNullException>(() => animations[0].BindField(null, 0));
+            Assert.Throws<ArgumentOutOfRangeException>(() => animations[0].BindField(Field, -1));
+            Assert.Throws<ArgumentOutOfRangeException>(() => animations[0].BindField(Field, worlds.Length));
+            Assert.Throws<ArgumentOutOfRangeException>(() => Field.ContactSequence(worlds.Length));
+            Step();
+            AssertSequences(0, 0, 0, 0, "Runners apart do not count.");
+
+            // Every runner's model: the player's (racer 0) and each opponent's (i + 1) flinch at their own contact only.
+            // Checked first: with time stopped (SetUp) a flinch never runs out, so no other contact may come before.
+            Overlap(worlds[0], worlds[3], 14f);
+            Step();
+            AssertSequences(1, 0, 0, 1, "The player and the third opponent.");
+            foreach (RaceWorld world in worlds) world.Game.Racer.RespawnHoldTicks = 0;
+            yield return null;
+            Assert.That(animations[0].Current, Is.EqualTo(RunnerAnimation.Pose.Bump), "The player's model flinches.");
+            Assert.That(animations[3].Current, Is.EqualTo(RunnerAnimation.Pose.Bump), "The third opponent's model flinches.");
+            Assert.That(animations[1].Current, Is.Not.EqualTo(RunnerAnimation.Pose.Bump), "No contact began for racer 1.");
+            Assert.That(animations[2].Current, Is.Not.EqualTo(RunnerAnimation.Pose.Bump), "No contact began for racer 2.");
+
+            ParkUnused();
+            Step();
+            Overlap(worlds[1], worlds[2], 10f);
+            Step();
+            AssertSequences(1, 1, 1, 1, "One contact, three solve passes: one count each, for those two only.");
+            Overlap(worlds[1], worlds[2], 10f);
+            Step();
+            AssertSequences(1, 1, 1, 1, "Still pressed together on the next tick: the same contact.");
+            ParkUnused();
+            Step();
+            AssertSequences(1, 1, 1, 1, "Apart again.");
+            Overlap(worlds[1], worlds[2], 10f);
+            Step();
+            AssertSequences(1, 2, 2, 1, "A new contact counts again.");
+
+            player.Game.StartRun();
+            Step();
+            AssertSequences(0, 0, 0, 0, "A restart starts the count over.");
+            yield return null;
+            foreach (RunnerAnimation animation in animations)
+                Assert.That(animation.Current, Is.Not.EqualTo(RunnerAnimation.Pose.Bump), "The count starting over is no bump.");
+        }
+
+        // Two runners, the first moving into the second (the rear impact above), held so input does not move them.
+        private static void Overlap(RaceWorld rear, RaceWorld front, float z)
+        {
+            Place(rear, new Vector3(0f, 1.05f, z), Vector3.forward * 8f);
+            Place(front, new Vector3(0f, 1.05f, z + 0.6f), Vector3.forward * 2f);
+            rear.Game.Racer.RespawnHoldTicks = front.Game.Racer.RespawnHoldTicks = 10;
+        }
+
+        private void AssertSequences(uint a, uint b, uint c, uint d, string because)
+        {
+            uint[] expected = { a, b, c, d };
+            for (int i = 0; i < expected.Length; i++)
+                Assert.That(Field.ContactSequence(i), Is.EqualTo(expected[i]), because + " racer " + i);
         }
 
         [UnityTest, Timeout(120000)]

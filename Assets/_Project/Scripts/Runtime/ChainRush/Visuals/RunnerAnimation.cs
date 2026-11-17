@@ -1,5 +1,7 @@
+using System;
 using UnityEngine;
 using ProtoHarness.ChainRush.Audio;
+using ProtoHarness.ChainRush.Race;
 
 namespace ProtoHarness.ChainRush.Visuals
 {
@@ -42,6 +44,9 @@ namespace ProtoHarness.ChainRush.Visuals
         private int lastStep;
         private bool wasGrounded = true;
         private float lastElapsed;
+        private RaceField field;
+        private int fieldRacer;
+        private uint seenContact;
 
         public float GaitPhase => phase;
         // The pose last handed to the Animator.
@@ -77,8 +82,8 @@ namespace ProtoHarness.ChainRush.Visuals
             if (game != null) game.CuePlayed -= OnCue;
         }
 
-        // A guard hit hard enough to hear is a bump (RunnerMotor.GuardHitCueSpeed); the caller of Bump sets it up for
-        // contact with another runner.
+        // A guard hit hard enough to hear is a bump (RunnerMotor.GuardHitCueSpeed); so is a contact with another runner
+        // that has begun, once BindField has named this runner's place in a field.
         private void OnCue(RaceCue cue)
         {
             if (cue == RaceCue.GuardHit) Bump();
@@ -86,6 +91,26 @@ namespace ProtoHarness.ChainRush.Visuals
 
         // A hit that shoves the runner: plays Runner_Bump once, then the pose that state calls for.
         public void Bump() => bumpPending = true;
+
+        // This runner is racer `racer` of the field (RaceAssembler: the player 0, opponent i as i + 1): each contact that
+        // begins for it (RaceField.ContactSequence) is a bump. A race on its own has no field and bumps on guards only.
+        public void BindField(RaceField field, int racer)
+        {
+            if (field == null) throw new ArgumentNullException(nameof(field));
+            if (racer < 0 || racer >= field.RacerCount) throw new ArgumentOutOfRangeException(nameof(racer), racer, "RunnerAnimation: no such racer in the field.");
+            this.field = field;
+            fieldRacer = racer;
+            seenContact = field.ContactSequence(racer);
+        }
+
+        // A contact begun since the last frame bumps. The field's count starts over at zero on a restart, which is no bump.
+        private void ReadContact()
+        {
+            if (field == null) return;
+            uint sequence = field.ContactSequence(fieldRacer);
+            if (sequence > seenContact) bumpPending = true;
+            seenContact = sequence;
+        }
 
         private void LateUpdate()
         {
@@ -114,6 +139,7 @@ namespace ProtoHarness.ChainRush.Visuals
             if (ground) phase += dt * speed * RadiansPerMetre;
             int step = Mathf.FloorToInt(phase / Mathf.PI);
             if (ground && step != lastStep) { sound.PlayCue(RaceCue.Footstep); lastStep = step; }
+            ReadContact();
             if (bumpPending) { bumpUntil = clock + BumpSeconds; bumpPending = false; }
             bool booster = game.Racer.SlingTicks > 0 || game.Racer.GrappleEmpowered;
             bool boosting = booster || FeedbackLook.PadShare(game.Racer.BoostZoneCarrySpeed, player.RunSpeed, player.BoostZoneSpeed) > 0f;
@@ -149,6 +175,8 @@ namespace ProtoHarness.ChainRush.Visuals
         {
             phase = 0f; clock = 0f; landUntil = 0f; bumpUntil = 0f; bumpPending = false;
             lastStep = 0; wasGrounded = true; lastElapsed = 0f;
+            // The field may start its count over before or after this; ReadContact takes the lower count without a bump.
+            if (field != null) seenContact = field.ContactSequence(fieldRacer);
             current = Pose.Idle;
             animator.SetInteger(StateParameter, (int)Pose.Idle);
             animator.SetFloat(SpeedParameter, 1f);

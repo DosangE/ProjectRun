@@ -36,6 +36,10 @@ namespace ProtoHarness.ChainRush.Race
         private Vector3[] contactWallNormals;
         private Vector3[] observedPositions, observedVelocities;
         private int[] contactSwingBreaks;
+        // Presentation only (RunnerAnimation's bump): never in RacerState, a snapshot or the contact solve.
+        private int[] contactRacers;
+        private uint[] contactSequences;
+        private bool[] touchedThisTick, touchedLastTick;
         private bool observationReady;
         public bool ContactEnabled { get; set; } = true;
         private bool stopped;
@@ -51,6 +55,10 @@ namespace ProtoHarness.ChainRush.Race
         public Vector3 ObservedPosition(int racer) => observedPositions[CheckedObservation(racer)];
         public Vector3 ObservedVelocity(int racer) => observedVelocities[CheckedObservation(racer)];
         public int ContactSwingBreaks(int racer) => contactSwingBreaks[Checked(racer)];
+        // Counts the contacts with other runners that began for this racer: one more on a tick on which the solve moved
+        // it or changed its velocity after a tick on which it did not, so a shove counts once however long the runners
+        // stay pressed together. At most one a tick. Zero again on a restart. Presentation only, as ContactSwingBreaks.
+        public uint ContactSequence(int racer) => contactSequences[Checked(racer)];
 
         private int CheckedObservation(int racer)
         {
@@ -125,6 +133,10 @@ namespace ProtoHarness.ChainRush.Race
             observedPositions = new Vector3[RacerCount];
             observedVelocities = new Vector3[RacerCount];
             contactSwingBreaks = new int[RacerCount];
+            contactRacers = new int[RacerCount];
+            contactSequences = new uint[RacerCount];
+            touchedThisTick = new bool[RacerCount];
+            touchedLastTick = new bool[RacerCount];
             game.SelfStepping = false;
             for (int i = 0; i < opponents.Length; i++)
             {
@@ -222,6 +234,7 @@ namespace ProtoHarness.ChainRush.Race
                 {
                     if (!games[i].IsRunning) continue;
                     RunnerMotor motor = games[i].Player;
+                    contactRacers[count] = i;
                     contactMotors[count] = motor;
                     contactPositions[count] = motor.ContactCenter;
                     contactVelocities[count] = motor.Velocity;
@@ -233,13 +246,19 @@ namespace ProtoHarness.ChainRush.Race
                     RunnerContact.Restitution, contactMoves, contactChanges, count, contactWallNormals);
                 for (int i = 0; i < count; i++)
                 {
+                    int racer = contactRacers[i];
+                    if (contactMoves[i] != Vector3.zero || contactChanges[i] != Vector3.zero) touchedThisTick[racer] = true;
                     bool swinging = contactMotors[i].IsSwinging;
                     Vector3 wall = contactMotors[i].ApplyContact(contactMoves[i], contactChanges[i]);
-                    if (swinging && !contactMotors[i].IsSwinging)
-                        for (int r = 0; r < RacerCount; r++)
-                            if (games[r].Player == contactMotors[i]) { contactSwingBreaks[r]++; break; }
+                    if (swinging && !contactMotors[i].IsSwinging) contactSwingBreaks[racer]++;
                     if (wall != Vector3.zero) contactWallNormals[i] = wall;
                 }
+            }
+            for (int r = 0; r < RacerCount; r++)
+            {
+                if (touchedThisTick[r] && !touchedLastTick[r]) contactSequences[r]++;
+                touchedLastTick[r] = touchedThisTick[r];
+                touchedThisTick[r] = false;
             }
         }
 
@@ -251,6 +270,9 @@ namespace ProtoHarness.ChainRush.Race
             Array.Clear(progress, 0, progress.Length);
             Array.Clear(ended, 0, ended.Length);
             Array.Clear(contactSwingBreaks, 0, contactSwingBreaks.Length);
+            Array.Clear(contactSequences, 0, contactSequences.Length);
+            Array.Clear(touchedThisTick, 0, touchedThisTick.Length);
+            Array.Clear(touchedLastTick, 0, touchedLastTick.Length);
             observationReady = false;
             HasResult = false;
             StandingsChanged?.Invoke();
