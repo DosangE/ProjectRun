@@ -9,6 +9,7 @@ using ProtoHarness.ChainRush.Control;
 using ProtoHarness.ChainRush.Flow;
 using ProtoHarness.ChainRush.Race;
 using ProtoHarness.ChainRush.Track;
+using ProtoHarness.ChainRush.Visuals;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.TestTools;
@@ -365,6 +366,63 @@ namespace ProtoHarness.Tests.PlayMode
             yield return WaitForTick(game, 5);
             AssertInStep(field, game, "restarted");
             Assert.That(field.enabled, Is.True);
+        }
+
+        // ---- measurement ---------------------------------------------------------------------------
+
+        // docs/PROPOSAL_MP2_REMAINING.md ④ (user 2026-11-17 "현상유지인 4인으로"): the draw batches of the race as the player
+        // sees it on the start line, alone and with three opponents, with the closed and the open face; one runner's share
+        // is (4 − 1) ÷ 3. The setup is the 2026-11-12 spike's (no environment scene, no look; DECISIONS "MP1 구조"), whose
+        // old model came to ≈150 batches a runner. The face is selected on every runner's model after the field is gathered:
+        // each copy dresses its runner with its own RaceAssembler's openFace. Measures only. UnityStats reads the last Game
+        // view frame, so keep the editor in front; focused is logged. Frame time is not judged here.
+        [UnityTest, Explicit, Timeout(600000)]
+        public IEnumerator Measure_DrawBatches_AloneAndWithThreeOpponents_ClosedAndOpenFace([Values("Stadium", "PalmCoast")] string track)
+        {
+#if UNITY_EDITOR
+            const int SettleFrames = 30;
+            var definition = AssetDatabase.LoadAssetAtPath<TrackDefinition>("Assets/_Project/Data/Circuit_" + track + ".asset");
+            Assert.That(definition, Is.Not.Null, "No track " + track);
+            var lines = new List<string>();
+            foreach (bool openFace in new[] { false, true })
+            {
+                var batches = new int[2];
+                for (int c = 0; c < 2; c++)
+                {
+                    bool withOpponents = c == 1;
+                    var setup = new RaceSetup(definition, track, "", withOpponents ? RaceMode.Bots : RaceMode.Single, SpeedClass.Fast, Profile("Alpha"));
+                    if (withOpponents) setup = setup.WithOpponents(Profile("Beta"), Profile("Theta"), Profile("Delta"));
+                    yield return LoadRace(setup);
+                    Time.timeScale = 0f;
+                    var shown = new List<RaceWorld> { player };
+                    if (withOpponents) shown.AddRange(assembler.Field.Opponents);
+                    int runnerRenderers = 0, runnerSlots = 0;
+                    foreach (RaceWorld world in shown)
+                    {
+                        RunnerVisual model = world.Player.GetComponentInChildren<RunnerVisual>(true);
+                        Assert.That(model, Is.Not.Null, "A runner without a RunnerVisual.");
+                        model.Select(openFace);
+                        foreach (Renderer part in world.Player.GetComponentsInChildren<Renderer>())
+                        {
+                            if (!part.enabled) continue;
+                            runnerRenderers++;
+                            runnerSlots += part.sharedMaterials.Length;
+                        }
+                    }
+                    for (int f = 0; f < SettleFrames; f++) yield return null;
+                    batches[c] = UnityStats.batches;
+                    bool focused = UnityEditorInternal.InternalEditorUtility.isApplicationActive;
+                    lines.Add($"{track} {(openFace ? "open" : "closed")} face, {shown.Count} runner(s): batches={UnityStats.batches} setPass={UnityStats.setPassCalls} " +
+                              $"tris={UnityStats.triangles} verts={UnityStats.vertices} | runner renderers shown={runnerRenderers} material slots={runnerSlots} | focused={focused}");
+                    Time.timeScale = timeScale;
+                }
+                lines.Add($"{track} {(openFace ? "open" : "closed")} face: one runner = ({batches[1]} - {batches[0]}) / 3 = {(batches[1] - batches[0]) / 3f:F1} batches (old model ≈150, DECISIONS 2026-11-12 \"MP1 구조\")");
+            }
+            Debug.Log("ChainRush draw batches:\n" + string.Join("\n", lines));
+#else
+            Assert.Fail("Race field tests require the Unity Editor.");
+            yield break;
+#endif
         }
 
         // ---- helpers -------------------------------------------------------------------------------
