@@ -10,6 +10,40 @@
 
 ---
 
+## 2026-11-17 · MP2 남은 것: 봇전은 4인 유지(8인 보류), D8 복귀 대기 중인 러너는 유령, 러너 드로 배치 측정 (`feature/mp2-remaining`)
+
+> 현재 상태: 구현·① 검증 끝, `dev` 병합(사용자 2026-11-17 "제대로 구현되었다면 미루고 커밋, 병합하라"). 사용자 플레이 확인은 v0.7 마일스톤 확인으로 미뤘다.
+
+- **승인**: 사용자 2026-11-17 Q1 "맵이 좁아서 8인은 무리인거같고 현상유지인 4인으로하는게 나을 거같다", Q2·Q3·브랜치 "나머지는 추천대로"(Q2 (a) 멈추고 보고, Q3 (a) `[Explicit]` 측정). 관찰 보고 뒤 "고쳐봐" → 방법 B "그 깜빡이는 동안은 유령이다". 규칙 확인: "맵에서 떨어지는 등 낙하로 트랙에 다시 돌아오면 깜빡거리는 효과가 1초가량 있는데 이 동안은 유저 충돌 무시 상태- 하지만 벽은 충돌된다" — 바꾼 것은 러너끼리 접촉(`RaceField.ResolveContact`)뿐이고 벽(가드)은 `CharacterController.Move` 로 그대로 막힌다(`RunnerMotor.cs` 무변경). 대기 중에는 러너가 스스로 움직이지 않는다(`RunnerMotor.cs:278-283`). 요청서 `docs/PROPOSAL_MP2_REMAINING.md`.
+- **8인 보류 (Q1)**: 봇전은 플레이어 + 봇 3 = 4명을 유지한다. 요청서의 ①(8명 `StartGridTests`)·③(8명 봇전 해시) 은 하지 않았다. 코드의 8명 상한(`StartGrid.Assign` 1~8, `RaceSetup.MaxOpponents = 7`)은 그대로 두고 8명 검증도 없다 — 다시 열 때 이 줄부터 본다. D1 "구조 8인" 은 구조만 남는다.
+- **D8 결정: 복귀 대기 중인 러너는 접촉에서 빠진다(유령)**. D8 "따로 처리하지 않는다"(`docs/PROPOSAL_MP2_BOT_RACE.md:27`)를 바꾼다. 유령 구간은 모형이 깜빡이는 구간과 같다 — 둘 다 `RunnerMotor.IsRespawning`(`RunnerTilt.cs:65`, `RespawnLook.cs:15`). 구현은 `RaceField.ResolveContact` 가 묶을 때 `IsRespawning` 인 러너를 건너뛰는 한 줄이다. 밀지도 밀리지도 않고, 대기 끝에 쓸 속도도 받지 않는다. 둘이 같은 점에 복귀하면 대기 동안 겹쳐 있다가, 대기가 끝나는 틱의 접촉 패스에서 갈라진다.
+  - **고치기 전 관찰** (런타임 그대로, 06:05:56Z 실행): 같은 점 복귀는 복귀 틱에 0.760 m 로 갈라졌다(ⓐ 문제 없음). 틈 앞 대기(STADIUM 첫 틈 S 119, 4 m 앞 S 115)에 OMEGA 가 11.075 m/s 로 닿자, BETA 는 **대기 중 3.671 m 밀려 틈까지 0.329 m 남았고, 대기 끝에 9.572 m/s 가 남았다**. 대기 중 받은 임펄스가 `Step` 의 대기 조기 반환(`RunnerMotor.cs:278-283`) 때문에 줄지 않고 남는다(ⓑ). 대기 중에는 낙하 판정도 돌지 않는다.
+  - **버린 대안**: A 서 있는 벽(대기 중인 러너는 위치·속도 고정, 상대가 다 받음 — 추천했던 것), C 속도 변화만 막음(ⓒ 의 위치 밀림이 남는다), 복귀 자리를 칸으로 비키기(ⓒ 를 못 막는다).
+- **D8 테스트** (`ChainRushContactTests`): 고치기 전에 유령 단언으로 바꿔 돌려 **3건 모두 실패**를 확인했다(06:15:13Z — ⓒ "Not moved, hold tick 9 · Expected (0.00, 0.94, 115.00) But was (0.00, 0.94, 115.10)", ⓐ 두 곳 "Ghosts … Expected less than 0.001 But was 0.760").
+  - `Respawn_TwoRunnersFallingAtOnePlace_AreGhostsWhileHeld_AndPartOnTheRoadAsTheHoldEnds(True/False)` — OMEGA·BETA 를 같은 S 에서 실제로 떨어뜨려(도로 20 m 아래, `LastGroundedS = 자리 + respawnBackoff`) 같은 점에 복귀시킨다. 도로가 월드 X 방향인 곳(STADIUM S 175)과 수직인 곳(S 0)을 트랙 프레임으로 고른다. 단언: 대기 49틱 동안 둘 다 제자리이고 접촉 수가 늘지 않는다. 대기가 끝나는 틱에 겹침 ≤ 2 cm·접지·도로 폭 안이고 접촉이 1 번 시작된다. 관찰: 0.760 m 로 갈라짐, 속도 0, 다음 틱 0.134 / 0.154 m/s.
+  - `Respawn_RunnerHoldingBeforeAGap_IsAGhost_TheRunnerBehindPassesThroughWithoutMovingIt` — 위 틈 앞 장면. 단언: 대기 50틱 내내 BETA 의 위치·속도가 그대로이고, OMEGA 가 반지름 합보다 가까이 지나갔으며(전제, 가장 가까울 때 중심 간 0.110 m), 접촉 수가 늘지 않는다.
+  - **기존 테스트의 정지 장치**: 접촉 테스트 6건(`Contact_OverlappingRunners_…`, `Contact_RearImpact_…`, `Contact_SideImpact_…`, `Contact_WallPressure…`, `Contact_SwingBreaks_…`, `Contact_BumpSequence_…` 의 `Overlap`)은 `RespawnHoldTicks = 10` 으로 러너를 세워 두고 `Step` 했다. 유령 규칙 뒤에는 접촉이 일어나지 않아 6건 모두 실패했다(06:16:55Z, 17건 중 11 통과 — 실패 6건이 정확히 이 6건). 그래서 대기 대신 `ResolveContact` 만 부르게 바꿨다(새 도우미 `Contact()`, 기존 `Contact_SwingBreaks_…` 가 이미 쓰던 방식). 단언 값은 바꾸지 않았다. 하나만 다르다: `Contact_SwingBreaks_…` 는 "대기 7틱이 접촉 뒤에도 7" 을 단언했다. 대기 중인 러너는 이제 접촉에 끼지 않으므로 "접촉이 대기를 시작하지 않는다(0 그대로)" 로 바꿨다.
+- **드로 배치 측정** (`ChainRushRaceFieldTests.Measure_DrawBatches_AloneAndWithThreeOpponents_ClosedAndOpenFace("Stadium"/"PalmCoast")`, `[Explicit]`): 2026-11-12 스파이크와 같은 설정(환경 씬·룩 없음, `SpeedClass.Fast`). 혼자(`Single`) / 봇 3(`Bots`, BETA·THETA·DELTA), 모일 때까지 기다린 뒤 `timeScale 0`, 30프레임 뒤 `UnityStats`.
+  - 얼굴은 각 러너 모형의 `RunnerVisual.Select(open)` 로 바꿨다. 요청서는 `RaceAssembler.openFace` 를 `SerializedObject` 로 넣는다고 했지만, 복사본은 저마다 자기 `RaceAssembler` 로 옷을 입히고(`RaceAssembler.cs:206`) 그 값은 씬 저장값이라 플레이어 쪽에 넣어도 상대에게 가지 않는다.
+  - 값 (focused=False):
+
+    | 트랙 · 얼굴 | 1명 배치 | 4명 배치 | 러너 1명 = (4−1)÷3 | setPass 1→4 | 러너당 렌더러 · 슬롯 |
+    |---|---|---|---|---|---|
+    | STADIUM 닫힌 | 163 | 198 | 11.7 | 33→26 | 1 · 3 |
+    | STADIUM 열린 | 157 | 174 | 5.7 | 33→26 | 1 · 2 |
+    | PALM 닫힌 | 427 | 450 | 7.7 | 29→26 | 1 · 3 |
+    | PALM 열린 | 423 | 426 | 1.0 | 29→26 | 1 · 2 |
+
+  - 읽는 법: 옛 모형은 러너 하나 ≈150 배치였다("MP1 구조", 8개와 1개의 차이). 지금은 러너 하나가 1~12 배치이고 렌더러 1개(요청서 기대 "렌더러 1개·슬롯 3개" 와 같다, 열린 얼굴은 슬롯 2). 차이가 작아 프레임마다 흔들리는 값(setPass 가 4명에서 오히려 줄었다)과 크기가 비슷하다 — 소수점 아래는 의미가 없다. 상대가 카메라 화면 안에 다 들어왔는지는 확인하지 않았다. 프레임 시간은 재지 않았다.
+- **검증 (에디터 6000.3.19f1, `47bcde5` + `RaceField.cs`·테스트 2파일)**: 컴파일은 매번 `Editor.log` 의 새 `Tundra build success` 줄(마지막 "`*** Tundra build success (1.46 seconds), 2 items updated, 1618 evaluated`"). 실행은 모두 `test-runs.ps1 -Record`:
+  - 06:05:56Z 관찰(런타임 그대로) `groupNames ChainRushContactTests\.Respawn_` → `testcasecount="3" result="Passed" passed="3" failed="0"`.
+  - 06:06:43Z 측정 `testNames` 2건 → `testcasecount="2" result="Passed" passed="2" failed="0"`.
+  - 06:15:13Z 유령 단언·고치기 전 → `testcasecount="3" result="Failed(Child)" passed="0" failed="3"` (위 원문).
+  - 06:16:55Z `RaceField` 수정 뒤·정지 장치 교체 전 `ChainRushContactTests$` → `testcasecount="17" result="Failed(Child)" passed="11" failed="6"` (위 6건).
+  - **06:19:38Z~06:25:46Z 최종** — `select-tests.ps1:89` 의 `Race/` 줄이 고르는 클래스 전부(`ChainRushCircuitTests`·`WorldTests`·`ControllerCostTests`·`ReplayTests`·`RollbackTests`·`FlowTests`·`RaceFieldTests`·`BotRaceTests`·`ContactTests` + Net 5) `categories !Device !Enemy !NetEndReplay !^Lap$` → `testcasecount="202" result="Passed" passed="200" failed="0" skipped="2"`(건너뜀 2 = `[Explicit]` 측정). 서킷 지문 `0xEF92FB76BFD1D767`, 봇전 4명×300틱 위치 해시 `0xAB407E424EDC7FAE` 둘 다 그대로다(그 300틱에는 복귀 대기 중의 접촉이 없었다). Lap 은 돌리지 않았다 — 바뀐 것은 봇전의 접촉 패스뿐이고, 랩 런은 혼자 런이라 `RaceField` 를 거치지 않는다.
+  - 병합(`948db63`): `select-tests.ps1 -Range dev...HEAD` → PlayMode 클래스 14개 + 지문(위 06:19:38Z 실행과 같은 목록, `test-runs -Last -Passed` "실행한 코드 = 지금 커밋한 코드"), Lap 없음, **EditMode 전체** → 06:41:56Z~06:42:08Z `categories !Enemy` → `testcasecount="433" result="Passed" passed="433" failed="0" skipped="0"`.
+- **남은 것**: 사용자 플레이 확인(v0.7 마일스톤 확인 때) — 봇은 채택 프리셋에서 떨어지지 않으므로(`docs/BOT_TUNING_LOG.tsv` 회차 21~24 `falls=0`) 볼 수 있는 장면은 플레이어가 떨어져 깜빡이는 동안 뒤의 봇이 통과하는 것이다(STADIUM·Easy, 봇보다 앞서 첫 틈 S 119 에 떨어진다). 측정을 포커스 상태에서 다시 잴지. **확인 못 한 것**: 유령 둘이 같은 점에서 대기가 끝날 때 0.76 m 를 한 틱에 갈라지는 것이 화면에서 튀어 보이는지.
+
 ## 2026-11-17 · 옛 러너 모형 에셋 28개 삭제, 드로 배치 측정은 MP2 남은 것으로 옮긴다 (`feature/runner-old-assets-measure`)
 
 - **승인**: 사용자 2026-11-17 "진행, 안쓰는것도 삭제" — 요청서의 20개 + `Runner*Geometry.asset` 5개 + `RunnerChamfer.asset`, 그리고 목록 밖에서 참조 0 으로 나온 `M_RunnerArmor.mat`(요청서 작성 때는 `ArmoredRunner.prefab` 4곳, `docs/PROPOSAL_RUNNER_UNITY.md:302`)·`M_RunnerTrim.mat`(처음부터 0, 같은 문서 `:303`).

@@ -66,8 +66,7 @@ namespace ProtoHarness.Tests.PlayMode
             Place(worlds[1], new Vector3(-0.3f, 1.05f, 10f), Vector3.right * 8f); // OMEGA 1.2
             Place(worlds[2], new Vector3(0.3f, 1.05f, 10f), Vector3.right * 2f);  // BETA 0.9
             Vector3 a = worlds[1].Player.transform.position, b = worlds[2].Player.transform.position;
-            worlds[1].Game.Racer.RespawnHoldTicks = worlds[2].Game.Racer.RespawnHoldTicks = 10;
-            Step();
+            Contact();
             float heavyMove = Mathf.Abs(worlds[1].Player.transform.position.x - a.x);
             float lightMove = Mathf.Abs(worlds[2].Player.transform.position.x - b.x);
             Assert.That(heavyMove, Is.GreaterThan(0f).And.LessThan(lightMove));
@@ -83,9 +82,8 @@ namespace ProtoHarness.Tests.PlayMode
             ParkUnused();
             Place(worlds[1], new Vector3(0f, 1.05f, 10f), Vector3.forward * 8f);
             Place(worlds[2], new Vector3(0f, 1.05f, 10.6f), Vector3.forward * 2f);
-            worlds[1].Game.Racer.RespawnHoldTicks = worlds[2].Game.Racer.RespawnHoldTicks = 10;
             float before = 1.2f * 8f + 0.9f * 2f;
-            Step();
+            Contact();
             float rear = worlds[1].Player.Velocity.z, front = worlds[2].Player.Velocity.z;
             Assert.That(rear, Is.LessThan(8f));
             Assert.That(front, Is.GreaterThan(2f));
@@ -102,8 +100,7 @@ namespace ProtoHarness.Tests.PlayMode
             ParkUnused();
             Place(worlds[1], new Vector3(-0.3f, 1.05f, 10f), new Vector3(4f, 0f, 7f));
             Place(worlds[2], new Vector3(0.3f, 1.05f, 10f), new Vector3(-4f, 0f, 7f));
-            worlds[1].Game.Racer.RespawnHoldTicks = worlds[2].Game.Racer.RespawnHoldTicks = 10;
-            Step();
+            Contact();
             Assert.That(worlds[1].Player.transform.position.x, Is.LessThan(-0.3f));
             Assert.That(worlds[2].Player.transform.position.x, Is.GreaterThan(0.3f));
             Assert.That(worlds[1].Player.Velocity.z, Is.EqualTo(7f));
@@ -123,9 +120,8 @@ namespace ProtoHarness.Tests.PlayMode
                 {
                     float radius = worlds[i].Player.ContactRadius;
                     Place(worlds[i], new Vector3(width - radius - i * (radius * 2f - 0.04f), 1.05f, 10f), Vector3.zero);
-                    worlds[i].Game.Racer.RespawnHoldTicks = 10;
                 }
-                Step();
+                Contact();
                 for (int i = 0; i < count; i++)
                 {
                     CharacterController capsule = worlds[i].Player.GetComponent<CharacterController>();
@@ -165,7 +161,6 @@ namespace ProtoHarness.Tests.PlayMode
             grapple.Attach(0, 9f);
             swing.SlingTicks = 17;
             swing.BoostZoneCarrySpeed = 35f;
-            swing.RespawnHoldTicks = 7;
             swing.AddGauge(1.25f);
             int tick = worlds[1].Game.Tick;
             float gauge = swing.Gauge;
@@ -177,7 +172,7 @@ namespace ProtoHarness.Tests.PlayMode
             Assert.That(grapple.RopeLength, Is.EqualTo(9f));
             Assert.That(worlds[1].Game.Tick, Is.EqualTo(tick));
             Assert.That(swing.SlingTicks, Is.EqualTo(17));
-            Assert.That(swing.RespawnHoldTicks, Is.EqualTo(7));
+            Assert.That(swing.RespawnHoldTicks, Is.EqualTo(0), "Contact starts no respawn hold.");
             Assert.That(swing.BoostZoneCarrySpeed, Is.EqualTo(35f));
             Assert.That(swing.Gauge, Is.EqualTo(gauge));
         }
@@ -261,7 +256,7 @@ namespace ProtoHarness.Tests.PlayMode
             // Every runner's model: the player's (racer 0) and each opponent's (i + 1) flinch at their own contact only.
             // Checked first: with time stopped (SetUp) a flinch never runs out, so no other contact may come before.
             Overlap(worlds[0], worlds[3], 14f);
-            Step();
+            Contact();
             AssertSequences(1, 0, 0, 1, "The player and the third opponent.");
             foreach (RaceWorld world in worlds) world.Game.Racer.RespawnHoldTicks = 0;
             yield return null;
@@ -273,16 +268,16 @@ namespace ProtoHarness.Tests.PlayMode
             ParkUnused();
             Step();
             Overlap(worlds[1], worlds[2], 10f);
-            Step();
+            Contact();
             AssertSequences(1, 1, 1, 1, "One contact, three solve passes: one count each, for those two only.");
             Overlap(worlds[1], worlds[2], 10f);
-            Step();
+            Contact();
             AssertSequences(1, 1, 1, 1, "Still pressed together on the next tick: the same contact.");
             ParkUnused();
             Step();
             AssertSequences(1, 1, 1, 1, "Apart again.");
             Overlap(worlds[1], worlds[2], 10f);
-            Step();
+            Contact();
             AssertSequences(1, 2, 2, 1, "A new contact counts again.");
 
             player.Game.StartRun();
@@ -293,12 +288,11 @@ namespace ProtoHarness.Tests.PlayMode
                 Assert.That(animation.Current, Is.Not.EqualTo(RunnerAnimation.Pose.Bump), "The count starting over is no bump.");
         }
 
-        // Two runners, the first moving into the second (the rear impact above), held so input does not move them.
+        // Two runners, the first moving into the second (the rear impact above), for the contact pass alone (Contact).
         private static void Overlap(RaceWorld rear, RaceWorld front, float z)
         {
             Place(rear, new Vector3(0f, 1.05f, z), Vector3.forward * 8f);
             Place(front, new Vector3(0f, 1.05f, z + 0.6f), Vector3.forward * 2f);
-            rear.Game.Racer.RespawnHoldTicks = front.Game.Racer.RespawnHoldTicks = 10;
         }
 
         private void AssertSequences(uint a, uint b, uint c, uint d, string because)
@@ -306,6 +300,163 @@ namespace ProtoHarness.Tests.PlayMode
             uint[] expected = { a, b, c, d };
             for (int i = 0; i < expected.Length; i++)
                 Assert.That(Field.ContactSequence(i), Is.EqualTo(expected[i]), because + " racer " + i);
+        }
+
+        // D8 (user 2026-11-17 "그 깜빡이는 동안은 유령이다"): a runner blinking out its respawn hold (RunnerMotor.IsRespawning,
+        // RunnerTilt) is a ghost — the field's contact pass leaves it out. Two runners who fall at one place come back on
+        // one point of the centreline (RunnerMotor.RespawnOnTrack), stay there through each other while held, and the
+        // contact pass parts them on the tick their hold runs out. Coincident centres part along world +X
+        // (RunnerContact.cs:54), so once where the road runs along X and once across it.
+        [UnityTest, Timeout(120000)]
+        public IEnumerator Respawn_TwoRunnersFallingAtOnePlace_AreGhostsWhileHeld_AndPartOnTheRoadAsTheHoldEnds([Values(true, false)] bool roadAlongX)
+        {
+            yield return Load();
+            Begin();
+            ParkUnused();
+            HoldStill(worlds[0], worlds[3]);
+            RaceWorld heavy = worlds[1], light = worlds[2]; // OMEGA 1.2, BETA 0.9
+            float backoff = Serialized(heavy.Player, "respawnBackoff");
+            double spot = RespawnSpot(roadAlongX, Serialized(heavy.Player, "respawnPadReach"));
+            TrackFrame frame = player.Game.Track.FrameAt(spot);
+            float forwardX = Mathf.Abs(frame.Forward.x);
+            Assert.That(roadAlongX ? forwardX > 0.95f : forwardX < 0.05f, Is.True, $"precondition: the road at S {spot:F1} runs {(roadAlongX ? "along" : "across")} world X (|forward.x| {forwardX:F3}).");
+            Fall(heavy, spot, backoff);
+            Fall(light, spot, backoff);
+            Step();
+            foreach (RaceWorld world in new[] { heavy, light })
+            {
+                Assert.That(world.Player.IsRespawning, Is.True, "precondition: both fell and came back on this tick.");
+                Assert.That(world.Game.Track.Project(world.Player.transform.position).S, Is.EqualTo(spot).Within(1d), "precondition: both came back at the spot.");
+            }
+            Vector3 heavyAt = heavy.Player.transform.position, lightAt = light.Player.transform.position;
+            Assert.That(Horizontal(heavyAt - lightAt), Is.LessThan(0.001f), "Ghosts: the contact pass leaves both on the point they came back on.");
+            uint heavyContacts = Field.ContactSequence(1), lightContacts = Field.ContactSequence(2);
+            int hold = heavy.Game.Racer.RespawnHoldTicks;
+            Assert.That(light.Game.Racer.RespawnHoldTicks, Is.EqualTo(hold));
+            for (int t = 1; t < hold; t++)
+            {
+                Step();
+                Assert.That(heavy.Player.transform.position, Is.EqualTo(heavyAt), "OMEGA held in place, hold tick " + t);
+                Assert.That(light.Player.transform.position, Is.EqualTo(lightAt), "BETA held in place, hold tick " + t);
+            }
+            Assert.That(Field.ContactSequence(1), Is.EqualTo(heavyContacts), "No contact while both are ghosts.");
+            Assert.That(Field.ContactSequence(2), Is.EqualTo(lightContacts), "No contact while both are ghosts.");
+            Step();
+            Assert.That(heavy.Player.IsRespawning || light.Player.IsRespawning, Is.False, "The hold ran out on this tick.");
+            AssertSeparated(heavy, light, 0.02f);
+            AssertOnTheRoad(heavy, "OMEGA as the hold ends");
+            AssertOnTheRoad(light, "BETA as the hold ends");
+            Assert.That(Field.ContactSequence(1), Is.EqualTo(heavyContacts + 1), "Their contact begins as the hold ends.");
+            Vector3 apart = light.Player.transform.position - heavy.Player.transform.position;
+            apart.y = 0f;
+            float alongRoad = Vector3.Dot(apart, frame.Forward), acrossRoad = Vector3.Dot(apart, frame.Right);
+            float heavyLeft = Horizontal(heavy.Player.Velocity), lightLeft = Horizontal(light.Player.Velocity);
+            Step();
+            float heavyNext = Horizontal(heavy.Player.Velocity), lightNext = Horizontal(light.Player.Velocity);
+            Debug.Log($"ChainRush D8 coincident respawn: road {(roadAlongX ? "along" : "across")} world +X at S {spot:F1} (|forward.x| {forwardX:F3}); " +
+                      $"ghosts on one point for the {hold}-tick hold, parted as it ended {apart.magnitude:F3} m (along the road {alongRoad:F3}, across {acrossRoad:F3}); " +
+                      $"speed then OMEGA {heavyLeft:F3} / BETA {lightLeft:F3} m/s, on the next tick {heavyNext:F3} / {lightNext:F3} m/s.");
+        }
+
+        // D8 ⓒ: a runner that fell into a gap blinks out its hold respawnBackoff before the gap while a heavier runner with
+        // the throttle on comes from behind on the same line. A ghost, it is passed through: not moved, and left with no
+        // speed for the end of its hold. Before ghosts (2026-11-17, DECISIONS "MP2 남은 것") this push moved it 3.671 m, to
+        // 0.329 m before the gap, and left it 9.572 m/s to set off with.
+        [UnityTest, Timeout(120000)]
+        public IEnumerator Respawn_RunnerHoldingBeforeAGap_IsAGhost_TheRunnerBehindPassesThroughWithoutMovingIt()
+        {
+            yield return Load();
+            Begin();
+            ParkUnused();
+            HoldStill(worlds[0], worlds[3]);
+            RaceWorld runner = worlds[1], held = worlds[2]; // OMEGA 1.2 behind BETA 0.9
+            const int HeldRacer = 2;
+            float backoff = Serialized(held.Player, "respawnBackoff");
+            double gapStart = player.Circuit.Definition.Gaps()[0].Start;
+            Fall(held, gapStart - backoff, backoff);
+            Step();
+            Assert.That(held.Player.IsRespawning, Is.True, "precondition: it fell and came back.");
+            double start = held.Game.Track.Project(held.Player.transform.position).S;
+            Assert.That(start, Is.EqualTo(gapStart - backoff).Within(0.5d), "precondition: it came back respawnBackoff before the gap (no pad behind).");
+            TrackFrame frame = held.Game.Track.FrameAt(start);
+            Place(runner, frame.TransformPoint(new Vector3(0f, 1.05f, -2.5f)), frame.Forward * 10f);
+            runner.Game.Racer.RespawnHoldTicks = 0;
+            runner.Game.Racer.Heading = Mathf.Atan2(frame.Forward.x, frame.Forward.z) * Mathf.Rad2Deg;
+            Vector3 at = held.Player.transform.position;
+            uint contacts = Field.ContactSequence(HeldRacer);
+            int hold = held.Game.Racer.RespawnHoldTicks;
+            float closest = float.PositiveInfinity;
+            for (int t = 1; t <= hold; t++)
+            {
+                Step();
+                closest = Mathf.Min(closest, Horizontal(runner.Player.ContactCenter - held.Player.ContactCenter));
+                Assert.That(held.Player.transform.position, Is.EqualTo(at), "Not moved, hold tick " + t);
+                Assert.That(held.Player.Velocity, Is.EqualTo(Vector3.zero), "No speed taken, hold tick " + t);
+            }
+            Assert.That(closest, Is.LessThan(runner.Player.ContactRadius + held.Player.ContactRadius), "precondition: the runner behind went through it during the hold.");
+            Assert.That(held.Player.IsRespawning, Is.False, "The hold ran out.");
+            Assert.That(Field.ContactSequence(HeldRacer), Is.EqualTo(contacts), "No contact began with the ghost.");
+            AssertOnTheRoad(held, "as the hold ends");
+            Debug.Log($"ChainRush D8 ghost before a gap: came back at S {start:F2}, {gapStart - start:F2} m before the gap at {gapStart:F2}; " +
+                      $"OMEGA passed through it ({closest:F3} m between centres at the closest), not moved, 0 m/s as the hold ran out.");
+        }
+
+        // The S nearest the start (away from the parked runners, gaps and the pads a fall comes back before) where the road
+        // runs most nearly along world X, or most nearly across it.
+        private double RespawnSpot(bool roadAlongX, float padReach)
+        {
+            TrackDefinition track = player.Circuit.Definition;
+            List<(double Start, double End)> gaps = track.Gaps();
+            double best = double.NaN;
+            float bestScore = -1f;
+            for (double s = 0d; s < track.LapLength; s += 0.5d)
+            {
+                if (Math.Abs(s - 25d) < 12d) continue; // ParkUnused
+                bool nearGap = false;
+                foreach ((double Start, double End) gap in gaps) if (s > gap.Start - 8d && s < gap.End + 8d) nearGap = true;
+                if (nearGap || player.Game.Track.TryBoostZoneBehind(s, padReach, out _)) continue;
+                float along = Mathf.Abs(player.Game.Track.FrameAt(s).Forward.x);
+                float score = roadAlongX ? along : 1f - along;
+                if (score <= bestScore) continue;
+                bestScore = score;
+                best = s;
+            }
+            Assert.That(double.IsNaN(best), Is.False, "No spot on the track to come back on.");
+            return best;
+        }
+
+        // Below the road at the spot with its last ground respawnBackoff past it: the next tick it falls and comes back there.
+        private static void Fall(RaceWorld world, double respawnAt, float backoff)
+        {
+            world.Game.Racer.RespawnHoldTicks = 0;
+            world.Game.Racer.LastGroundedS = respawnAt + backoff;
+            Place(world, world.Game.Track.FrameAt(respawnAt).TransformPoint(new Vector3(0f, -20f, 0f)), Vector3.zero);
+        }
+
+        private static void HoldStill(params RaceWorld[] held)
+        {
+            foreach (RaceWorld world in held) world.Game.Racer.RespawnHoldTicks = 10000;
+        }
+
+        private static void AssertOnTheRoad(RaceWorld world, string when)
+        {
+            TrackCoord at = world.Game.Track.Project(world.Player.transform.position);
+            Assert.That(world.Player.IsGrounded, Is.True, when + ": on the ground.");
+            Assert.That(Mathf.Abs(at.D), Is.LessThanOrEqualTo(world.Circuit.Definition.HalfWidthAt(at.S)), when + ": inside the road.");
+        }
+
+        private static float Horizontal(Vector3 vector) => new Vector2(vector.x, vector.z).magnitude;
+
+        private static float Serialized(RunnerMotor motor, string field)
+        {
+#if UNITY_EDITOR
+            SerializedProperty property = new SerializedObject(motor).FindProperty(field);
+            Assert.That(property, Is.Not.Null, "RunnerMotor has no serialized " + field);
+            return property.floatValue;
+#else
+            Assert.Fail("Contact tests require the Unity Editor.");
+            return 0f;
+#endif
         }
 
         [UnityTest, Timeout(120000)]
@@ -439,6 +590,10 @@ namespace ProtoHarness.Tests.PlayMode
         }
 
         private void Step() => FieldTick.Invoke(Field, null);
+
+        // The field's contact pass alone, on where the runners stand: no input or movement first. A runner standing out
+        // its respawn hold is a ghost to it (D8), so a hold cannot keep runners still for a contact.
+        private void Contact() => ContactPass.Invoke(Field, null);
 
         private void ParkUnused()
         {

@@ -225,7 +225,9 @@ namespace ProtoHarness.ChainRush.Race
 
         private void ResolveContact()
         {
-            // Pack only running racers, preserving their field index order, into a prefix of the cached arrays.
+            // Pack only running racers, preserving their field index order, into a prefix of the cached arrays. A runner
+            // blinking out its respawn hold is a ghost (user 2026-11-17, "그 깜빡이는 동안은 유령이다"): left out, it is
+            // neither pushed nor pushes, and keeps no velocity change for the end of its hold (DECISIONS "MP2 남은 것").
             Array.Clear(contactWallNormals, 0, contactWallNormals.Length);
             for (int pass = 0; pass < 3; pass++)
             {
@@ -234,6 +236,7 @@ namespace ProtoHarness.ChainRush.Race
                 {
                     if (!games[i].IsRunning) continue;
                     RunnerMotor motor = games[i].Player;
+                    if (motor.IsRespawning) continue;
                     contactRacers[count] = i;
                     contactMotors[count] = motor;
                     contactPositions[count] = motor.ContactCenter;
