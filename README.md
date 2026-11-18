@@ -1,22 +1,34 @@
 # ProjectRun
 
-체인을 봉에 걸어 코너를 돌고, 스윙으로 모은 게이지를 부스터로 쓰는 3D 레이싱 게임 프로토타입입니다. Unity 6로 만들고 있으며, 지금은 혼자 달리는 싱글 레이스를 플레이할 수 있습니다. 2D 게임 [Chain Rush](https://github.com/DosangE/Chain-Rush)의 조작을 러너 뒤에서 따라가는 3인칭 시점과 카트라이더식 트랙으로 옮겼습니다.
+체인을 봉에 걸어 코너를 돌고, 스윙으로 모은 게이지를 부스터로 쓰는 3D 레이싱 게임 프로토타입입니다. Unity 6로 만들고 있으며, 지금은 혼자 달리는 타임어택과 봇 3명과 겨루는 봇전을 플레이할 수 있습니다. 2D 게임 [Chain Rush](https://github.com/DosangE/Chain-Rush)의 조작을 러너 뒤에서 따라가는 3인칭 시점과 카트라이더식 트랙으로 옮겼습니다.
 
 Claude Code와 Codex로 개발하고 있습니다. 에이전트가 지킬 규칙을 문서로 정해 두고, 그 규칙대로 작업하게 하는 방법을 시험하는 것도 이 저장소의 목적입니다.
 
-> **현재 버전: v0.6.** 다음 버전(v0.7)에서 AI 상대를 추가합니다.
+> **현재 버전: v0.7.** 봇 3명과 부딪히며 겨루는 봇전을 추가했습니다.
 
 ![SUMMIT DROP 주행 — 다운힐, 숲 공터의 봉 스윙 지름길](docs/images/race.gif)
 
-| 타이틀 | 로비 | 튜토리얼 |
+| 타이틀 | 모드 선택 | 러너 선택 |
 |---|---|---|
-| ![타이틀](docs/images/title.png) | ![로비 메인 메뉴](docs/images/lobby.png) | ![튜토리얼 설명 팝업](docs/images/tutorial.png) |
+| ![타이틀](docs/images/title.png) | ![타임어택과 봇전 선택](docs/images/lobby-mode.png) | ![러너 선택과 3D 미리보기](docs/images/lobby.png) |
 
-| PALM COAST | FINGER LANES | 결과 화면 |
+| 튜토리얼 | PALM COAST | FINGER LANES |
 |---|---|---|
-| ![PALM COAST 해변 도로](docs/images/palm-coast.png) | ![FINGER LANES 연속 U턴](docs/images/finger-lanes.png) | ![결과 화면의 기록 비교](docs/images/result.png) |
+| ![튜토리얼 설명 팝업](docs/images/tutorial.png) | ![PALM COAST 해변과 다리](docs/images/palm-coast.png) | ![FINGER LANES 시계탑 마을 길](docs/images/finger-lanes.png) |
 
-<sub>v0.6 에디터에서 캡처. 주행 화면은 테스트용 자동 조종.</sub>
+<sub>v0.7 에디터에서 캡처. 주행 화면은 어려움 봇이 플레이어 러너를 조종.</sub>
+
+## v0.7에서 바뀐 것
+
+- **봇전**: 싱글 레이스에서 타임어택과 봇전 중 선택. 봇 3명과 4명이 출발 격자에서 함께 출발하고, 주행 중과 결과 화면에 순위 표시
+- **봇 난이도 3단계**: 쉬움 · 보통 · 어려움. 봇도 플레이어와 같은 조작(입력)만으로 달림
+- **몸싸움**: 러너끼리 부딪히면 서로 밀려나고 움찔하는 동작. 떨어져 복귀하는 동안에는 부딪히지 않음
+- **새 러너 캐릭터**: 5명 모두 레이싱 슈트 모델과 달리기·스윙 동작으로 교체, 로비 초상도 새로 그림
+- **봇전 재현**: 4명 모두의 입력을 다시 넣으면 같은 판이 그대로 재현됨(테스트로 확인)
+
+| 봇전 주행 | 봇전 결과 |
+|---|---|
+| ![STADIUM 봇전 — 출발 격자에서 4명이 함께 출발](docs/images/bot-race.gif) | ![봇전 결과 화면의 순위](docs/images/bot-result.png) |
 
 ## v0.6에서 바뀐 것
 
@@ -65,7 +77,7 @@ Claude Code와 Codex로 개발하고 있습니다. 에이전트가 지킬 규칙
 | v0.4 | 트랙·속도 선택: FINGER LANES, 세 트랙 장식, 속도 3단계, 봉 스윙 시간 한도, 화면 설정 | 완료 |
 | v0.5 | 기록과 고스트: 트랙×속도 최고 기록과 고스트, 결과 화면 기록 비교, 낙하 복귀 연출, 조작 이펙트 | 완료 |
 | v0.6 | 소리와 새 트랙: 효과음, 봉 스윙 이펙트, PALM COAST, SUMMIT DROP, 튜토리얼 | 완료 |
-| v0.7 | AI 상대: 부딪히며 겨루는 봇, 상대 달리기 동작 | 다음 |
+| v0.7 | AI 상대: 부딪히며 겨루는 봇, 봇 난이도, 새 러너 캐릭터와 동작 | 완료 |
 | v0.8~ | 멀티 레이스 재개 | 예정 |
 
 ## 시작하기
