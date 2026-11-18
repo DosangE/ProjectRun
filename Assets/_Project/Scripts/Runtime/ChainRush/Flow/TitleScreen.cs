@@ -23,7 +23,6 @@ namespace ProtoHarness.ChainRush.Flow
         private const int CheckerSize = 14, CheckerColumns = 34;
         [SerializeField] private Texture2D nightBackground;
         private GUIStyle small;
-        private GUIStyle body;
         private GUIStyle title;
         private GUIStyle button;
         private GUIStyle accentTitle;
@@ -70,7 +69,6 @@ namespace ProtoHarness.ChainRush.Flow
                 return;
             }
             small = Style(15, Muted);
-            body = Style(21, Color.white);
             title = NightUi.Style(displayFont, 160, Color.white, FontStyle.BoldAndItalic);
             accentTitle = NightUi.Style(displayFont, 160, Mint, FontStyle.BoldAndItalic);
             brand = NightUi.Style(displayFont, 34, Color.white, FontStyle.BoldAndItalic);
@@ -129,11 +127,9 @@ namespace ProtoHarness.ChainRush.Flow
             Stripe(canvas, pivot, new Rect(-300, 395, 1060, 3), NightUi.Action);
             Stripe(canvas, pivot, new Rect(-300, 520, 900, 2), new Color(Mint.r, Mint.g, Mint.b, .35f));
 
-            GUI.Label(new Rect(100, 205, 700, 30), "N I G H T   C I R C U I T", small);
             NightUi.ShadowLabel(new Rect(87, 235, 780, 190), "CHAIN", title);
             NightUi.ShadowLabel(new Rect(167, 387, 780, 190), "RUSH", accentTitle);
             Checker(100, 590);
-            GUI.Label(new Rect(100, 640, 700, 36), "도시가 잠들면, 레이스가 시작된다.", body);
 
             // The start button, its glow breathing so the eye finds it.
             Rect enter = new Rect(100, height - 190, 450, 84);

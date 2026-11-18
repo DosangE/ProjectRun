@@ -10,6 +10,15 @@
 
 ---
 
+## 2026-11-18 · 화면 텍스트 정리: 추상적인 분위기 문구 삭제, 안 쓰는 안내 삭제, 잠금 안내는 "다음 업데이트에 열립니다" (`feature/ui-text-cleanup`)
+
+- **승인**: 사용자 2026-11-18 "도시가 잠들면 레이스가 시작된다 같은 AI 느낌의 추상적인 텍스트들 없애고 싶다" → 점검 결과 ①②③ 에 "1은 다 지워, 2는 얼추 유지, 3에서 안쓰이는건 삭제. 다만 멀티레이스나 이런것에 대해 다음 업데이트에 열립니다로 수정", 요청서 A 에 "A 진행해줘", 확인 뒤 "다 확인했고 커밋 병합 ㄱㄱ". 게임 이름(Chain Rush)·`productName` 은 유지("추후 바꿀것", "일단 유지").
+- **지운 것 (① 추상 문구)**: 타이틀의 부제 `N I G H T   C I R C U I T`·문구 `도시가 잠들면, 레이스가 시작된다.`(`TitleScreen.cs`, 쓰는 곳이 없어진 `body` 스타일도), 결과 화면 실패 단어 `SIGNAL` → 봇전 결과와 같은 `RACE`(`RACE / LOST`), 출발 전 화면의 `FIELD TEST …`·`CHAIN / THE SKY.`·`달리고, 걸고, 도약하세요.`·`READ THE COURSE` 상자(범례 3줄과 `INSPIRED BY CHAIN-RUSH / DOSANGE` 포함, 쓰는 곳이 없어진 `title` 스타일도). 출발 전 화면은 로비를 거치면 나오지 않는다(`ChainRushHud.cs:356-357`, 로비에서는 로딩 화면).
+- **지운 것 (③ 안 쓰는 안내)**: 키 안내의 `SPACE 공격`(레이스 하단 `ChainRushHud.cs` `DrawControls`, 로비 `KeysPage`) — 서킷에 공격 대상이 없다. 입력 코드는 그대로 스페이스를 읽는다(HANDOFF 2절 5번). 실패 결과의 조언 `다시 도전하세요. 점프 후 앵커를 잡으세요.`(옛 직선 코스용) — 서킷은 떨어지면 복귀하고(`RunnerMotor.cs:438`) 실패는 체력이 다 닳을 때뿐이다(`ChainRushGame.cs:363`).
+- **바꾼 것**: `M7 에서 열립니다`(`MainPage` 설명·잠금 알림)·`이후 마일스톤에서 열립니다`(`TrackPage` 잠금 알림) → `다음 업데이트에 열립니다`. 내부 마일스톤 이름을 플레이어에게 보이지 않는다.
+- **두는 것 (② 설명 문장)**: 난이도·속도·메인 메뉴·트랙 설명의 채움 문장은 "얼추 유지". 출발 전 화면의 옛 직선 코스 안내(`496m`, `약 50초 · 체력 3칸`)는 테스트벤치 전용이라 그대로 두었다.
+- **검증 (에디터 6000.3.19f1, `0b6b982` + 위 5파일)**: 컴파일 `*** Tundra build success (18.50 seconds), 11 items updated, 1618 evaluated`, `error CS` 없음. 선택 도구는 이 PC 의 버전 차이 파일로 "전체" → `Assets/` 줄의 목록(봇전·로비·레이스 HUD 4건) + 결과 화면 문구를 바꿔 `Race_FinishFromTheLobby_KeepsTheBestAndItsGhost_AndRunAgainRacesIt`. 시뮬을 읽지 않아 지문 없음. `groupNames { ChainRushBotRaceTests\., ChainRushFlowTests\.Lobby_, …Race_FromTheLobby_RacesTheChosenDefinitionAndCountsIn, …Race_PauseMenu, …Race_OpenedDirectly_RunsAsSavedAndWaitsForEnter, …Race_FinishFromTheLobby_… }` `categories !Device !Enemy !NetEndReplay !^Lap$` → `testcasecount="46" result="Passed" passed="46" failed="0" skipped="0"`, 04:50:14Z~04:51:16Z(`-Record`). Console 에러 1건 `RaceAssembler: a bot race needs opponents. The race is not run.` 은 테스트가 기대한 로그(`ChainRushBotRaceTests.cs:168`). 타이틀을 그리는 테스트는 없다 — 사용자 눈 확인 "다 확인했고".
+
 ## 2026-11-17 · MP2 남은 것: 봇전은 4인 유지(8인 보류), D8 복귀 대기 중인 러너는 유령, 러너 드로 배치 측정 (`feature/mp2-remaining`)
 
 > 현재 상태: 구현·① 검증 끝, `dev` 병합(사용자 2026-11-17 "제대로 구현되었다면 미루고 커밋, 병합하라"). 사용자 플레이 확인은 v0.7 마일스톤 확인으로 미뤘다.
