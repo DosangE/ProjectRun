@@ -11,7 +11,7 @@ namespace ProtoHarness.ChainRush.Flow.Lobby
         private static readonly string[] Descriptions =
         {
             "혼자 기록에 도전하는 타임어택,\n봇 3명과 순위를 겨루는 봇전.\n속도와 트랙, 러너를 골라 출발하세요.",
-            "다른 러너들과 같은 코스에서 순위를 겨룹니다.\n멀티 레이스는 M7 에서 열립니다.",
+            "다른 러너들과 같은 코스에서 순위를 겨룹니다.\n멀티 레이스는 다음 업데이트에 열립니다.",
             "넓은 연습장에서 과제를 따라가며\n이동, 봉 스윙, 부스터를 익힙니다.",
             "볼륨과 속도 시야 효과를 조절하고\n조작 키를 확인합니다.",
         };
@@ -21,7 +21,7 @@ namespace ProtoHarness.ChainRush.Flow.Lobby
         public override int Count => Labels.Length;
         public override string Label(int row) => Labels[row];
         public override bool IsLocked(int row) => Locks[row];
-        public override string LockedNotice => "멀티는 M7 에서 열립니다.";
+        public override string LockedNotice => "멀티는 다음 업데이트에 열립니다.";
         public override string DescriptionTag => "MODE";
         public override string Description(int row) => Descriptions[row];
 

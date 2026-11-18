@@ -33,13 +33,14 @@
    - **K5 FacadeKit·BuildingKit**: 보류였는데 원본이 먼저 생겼다(1절). 쓰려면 먼저 사용자가 정한다 — 어느 트랙의 어떤 건물을 바꿀지, BuildingKit 을 요청서에 킷으로 넣을지. 그 뒤 요청서·DECISIONS 기록 → 4절 "장식 킷" 흐름.
    - K2·K7·K6 은 보류.
 4. **측정**: 트랙별 프레임·드로콜(PALM 렌더러 5,319, DECISIONS 2026-11-16 "K1 RoadsideKit 3·4차"; STADIUM 정점 약 98만, 재지 않음), MP1 복사본 프레임(에디터가 포커스 밖이라 판정 못 함 — Unity 창을 앞에 두고), 플레이어 빌드.
-5. **서킷에서 쓰지 않는 코드 정리**: 공격 입력·체력·`CourseTarget`·`RunRules` 의 공격 값·`Enemy` 테스트 — 아이템전이 v1.0 밖이라 쓸 곳이 없다(삭제는 합의 대상).
+5. **서킷에서 쓰지 않는 코드 정리**: 공격 입력·체력·`CourseTarget`·`RunRules` 의 공격 값·`Enemy` 테스트 — 아이템전이 v1.0 밖이라 쓸 곳이 없다(삭제는 합의 대상). 키 안내의 `SPACE 공격` 은 화면에서 지웠지만 입력은 아직 스페이스를 읽는다(DECISIONS 2026-11-18 "화면 텍스트 정리").
 6. **작은 후속 (`fix/` 로 묶는다, 테스트 필요)**
    - 튜토리얼 리뷰 후속 ①~⑦ (2026-11-06 `unity-reviewer`): ① 6번 스테이지에서 첫 목표 동안 스윙으로 게이지를 채우고 놓으면 Release 목표에 끝낼 스윙이 없다(다시 걸었다 놓으면 풀린다, `TutorialCourse.cs:177-179`) ② 줄 5 m 감기는 봉 8 m 안에서 건 줄로는 안 된다(`:161`) ③ `TryDress` 실패 때 고리가 해제되지 않는다(`RaceAssembler` 의 `TryDress` 호출, `setup.Mode` 로 판단) ④ 주석이 코드와 다르다(`TutorialDirector.cs:8-9`, `ChainRushHud.cs:147`) ⑤ `ChainRushHud.cs:595` 숫자가 상수를 베꼈다 ⑥ `GoalColor`·`BeaconColor` 중복, `Part`·`VisualPart` 중복 ⑦ 튜토리얼 테스트 이름이 2단(§1-3). 줄 번호는 2026-11-06 기준.
    - 녹음 리뷰 제안 4건 (DECISIONS 2026-11-09 "녹음을 못 쓰면"): `loadType` 메시지 중복, `Update` 의 `initialized` 가드, `UnloadAudioData`(스윙 원본 약 5 MB), WebGL 의 `GetData`(미확인).
    - `tools/select-tests.ps1` 기본 범위가 C:/Users/User/Desktop/PCUBE PC 에서 `packages-lock.json` 의 CRLF 경고(stderr)로 멈춘다(`$ErrorActionPreference = 'Stop'`, `Invoke-GitLines`). 지금은 `$env:GIT_CONFIG_PARAMETERS = "'core.safecrlf=false'"` 로 돌린다(DECISIONS 2026-11-17 "러너 캐릭터 Unity 반영 3·4단계" 의 "확인 못 한 것" ③).
    - `TestCallbacks` 가 실행마다 다른 XML 경로에 쓰기(지금은 한 파일을 덮어쓴다, `ChainRushSceneBuilder.cs` 의 `TestCallbacks`).
    - FBX 복사 → 임포트 → 확인 → 렌더 도구, 지름길 표지판(`ShortcutSign.fbx`) 트랙 배치.
+   - 출발 전 화면(씬을 직접 열 때만, `ChainRushHud.DrawReady`): 위쪽 문구를 지워 상단이 비고, 옛 직선 코스 안내(`496m`, `약 50초 · 체력 3칸`)가 남았다(DECISIONS 2026-11-18 "화면 텍스트 정리" 의 "두는 것"). 남은 채움 설명 문장(난이도·속도·메인 메뉴)은 사용자 "얼추 유지".
 7. **하네스·규칙 후보 (`.claude/`·`tools/` 변경, 따로 합의)**:
    - Codex 샌드박스 계약에서 확인 못 한 것(DECISIONS 2026-11-14): 10 뒤의 `-ResumeLast` 이어 가기, 실제 사용량 소진 때의 출력. 다음 Codex 쓰기 작업에서 처음 겪을 때 결과를 그 항목에 덧붙인다. 12 뒤(`docs/codex-blender`)와 11 뒤 이어 가기·`-Unity` 실제 실행(MP2 단계 B, `docs/readonly-agents` 가 덧붙임)은 확인해 그 항목에 덧붙였다.
    - 무활동 알림에서 확인 못 한 것(DECISIONS 2026-11-14 "Codex 무활동 알림"): 실제 Codex 실행이 10분 넘게 조용했을 때의 3, 자정을 넘는 실행.

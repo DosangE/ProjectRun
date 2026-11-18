@@ -26,7 +26,6 @@ namespace ProtoHarness.ChainRush
         private GUIStyle small;
         private GUIStyle body;
         private GUIStyle heading;
-        private GUIStyle title;
         private GUIStyle number;
         private GUIStyle button;
         private GUIStyle waiting;
@@ -310,7 +309,6 @@ namespace ProtoHarness.ChainRush
             small = Style(15, Muted);
             body = Style(21, Color.white);
             heading = NightUi.Style(displayFont, 36, Color.white, FontStyle.BoldAndItalic);
-            title = NightUi.Style(displayFont, 96, Color.white, FontStyle.BoldAndItalic);
             number = NightUi.Style(displayFont, 44, Color.white, FontStyle.BoldAndItalic);
             speedNumber = NightUi.Style(displayFont, 94, Color.white, FontStyle.BoldAndItalic);
             speedNumber.alignment = TextAnchor.MiddleRight;
@@ -423,18 +421,14 @@ namespace ProtoHarness.ChainRush
         {
             NightUi.Block(new Rect(0, height - 72, width, 72), new Color(.025f, .04f, .065f, .85f));
             GUI.Label(new Rect(64, height - 48, width - 128, 30), game.HasPresentation
-                ? "↑ 가속   ↓ 후진   ← / → 조향     ALT 점프 · 그래플     SHIFT 스윙     CTRL 부스터     SPACE 공격     ESC 일시정지     M 음소거"
-                : "↑ 가속   ↓ 후진   ← / → 조향     ALT 점프 · 그래플     SHIFT 스윙     CTRL 부스터     SPACE 공격     ESC 일시정지", small);
+                ? "↑ 가속   ↓ 후진   ← / → 조향     ALT 점프 · 그래플     SHIFT 스윙     CTRL 부스터     ESC 일시정지     M 음소거"
+                : "↑ 가속   ↓ 후진   ← / → 조향     ALT 점프 · 그래플     SHIFT 스윙     CTRL 부스터     ESC 일시정지", small);
         }
 
         private void DrawReady(float width, float height)
         {
             NightUi.Block(new Rect(32, 178, 750, height - 298), Ink);
-            GUI.Label(new Rect(69, 169, 640, 26), game.IsCircuit ? "FIELD TEST  /  003                         TIME ATTACK" : "FIELD TEST  /  001                         MOVEMENT PROTOTYPE", small);
-            GUI.Label(new Rect(62, 222, 660, 130), "CHAIN", title);
-            GUI.Label(new Rect(62, 326, 660, 130), "THE SKY.", title);
             NightUi.Block(new Rect(70, 470, 65, 4), Mint);
-            GUI.Label(new Rect(70, 500, 640, 37), "달리고, 걸고, 도약하세요.", heading);
             GUI.Label(new Rect(70, 551, 655, 35), game.IsCircuit ? "서킷을 " + game.Circuit.LapCount + "랩 달려 가장 빠른 기록을 세우세요." : "공중의 앵커를 이어 타고 496m 결승선에 도달하세요.", body);
             GUI.Label(new Rect(70, 590, 655, 30), "노란 선에서 ALT 점프 → 공중에서 다시 ALT 누르고 유지", body);
             Rect start = new Rect(70, height - 240, 370, 68);
@@ -452,13 +446,6 @@ namespace ProtoHarness.ChainRush
                 GUI.Label(start, "출발 신호를 기다리는 중", waiting);
             }
             GUI.Label(new Rect(470, height - 218, 240, 24), game.IsCircuit ? game.Circuit.LapCount + "랩  ·  타임어택" : "약 50초  ·  체력 3칸", small);
-
-            NightUi.Block(new Rect(width - 420, height - 390, 388, 255), Ink);
-            GUI.Label(new Rect(width - 391, height - 361, 320, 30), "READ THE COURSE", body);
-            GUI.Label(new Rect(width - 391, height - 308, 335, 27), "01   MINT      공중 그래플 앵커", small);
-            GUI.Label(new Rect(width - 391, height - 269, 335, 27), game.IsCircuit ? "02   GAP      틈은 점프 / 그래플" : "02   CORAL   위험물 / 좌우 회피", small);
-            GUI.Label(new Rect(width - 391, height - 230, 335, 27), game.IsCircuit ? "03   LINE     출발선 · 체크포인트" : "03   GOLD     표적 / SPACE 공격", small);
-            GUI.Label(new Rect(width - 391, height - 179, 330, 24), "INSPIRED BY CHAIN-RUSH  /  DOSANGE", small);
         }
 
         private void DrawPlay(float width, float height, float scale)
@@ -795,12 +782,12 @@ namespace ProtoHarness.ChainRush
             GUI.Label(new Rect(64, 35, 500, 56), "CHAIN RUSH", heading);
             float left = width * .06f, x = width * .53f, y = height * .22f;
             float panelWidth = width * .41f;
-            GUI.Label(new Rect(left, y + 10, width * .45f, 142), game.HasFinished ? "RACE" : "SIGNAL", raceWord);
+            GUI.Label(new Rect(left, y + 10, width * .45f, 142), "RACE", raceWord);
             GUI.Label(new Rect(left, y + 128, width * .45f, 142), game.HasFinished ? "FINISH" : "LOST", accentWord);
             bool compared = game.HasFinished && FromLobby && assembler.HasLastFinish;
-            GUI.Label(new Rect(left + 4, y + 294, width * .40f, 80), !game.HasFinished ? "다시 도전하세요. 점프 후 앵커를 잡으세요."
-                : compared && assembler.LastFinish.IsNewBest ? "새 기록! 고스트로 저장했습니다."
-                : "결승선 도착. 다음 기록에 도전하세요.", small);
+            if (game.HasFinished)
+                GUI.Label(new Rect(left + 4, y + 294, width * .40f, 80), compared && assembler.LastFinish.IsNewBest
+                    ? "새 기록! 고스트로 저장했습니다." : "결승선 도착. 다음 기록에 도전하세요.", small);
             NightUi.Surface(new Rect(x, y, panelWidth, 520));
             NightUi.Block(new Rect(x, y, panelWidth, 3), game.HasFailed ? Coral : Mint);
             GUI.Label(new Rect(x + 34, y + 30, panelWidth - 68, 30), "TOTAL TIME / RACE RESULT", small);
