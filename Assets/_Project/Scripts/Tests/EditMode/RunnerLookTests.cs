@@ -2,15 +2,17 @@ using System;
 using System.Collections.Generic;
 using NUnit.Framework;
 using ProtoHarness.ChainRush.Visuals;
+using UnityEditor;
 using UnityEngine;
 using Object = UnityEngine.Object;
 
 namespace ProtoHarness.Tests.EditMode
 {
-    // A runner's look (RunnerLook): a model with the same hierarchy lends its meshes and materials to the race's runner
-    // model, paired by child order; anything that does not fit is refused before the model changes.
+    // A runner's look (RunnerLook): a model on the same rig lends its two faces (mesh and materials) to the race's runner
+    // model, which keeps its own bones; a look whose bones do not match is refused before the model changes.
     public sealed class RunnerLookTests
     {
+        private static readonly string[] BoneNames = { "Root", "Pelvis" };
         private readonly List<Object> made = new List<Object>();
         private Shader shader;
 
@@ -30,131 +32,179 @@ namespace ProtoHarness.Tests.EditMode
         }
 
         [Test]
-        public void Apply_MatchingLook_CopiesMeshesAndMaterialsAndKeepsTransforms()
+        public void Apply_MatchingLook_LendsBothFacesAndShowsTheClosedOne()
         {
-            Transform model = Build("Armored Runner", "model", 0f);
-            Transform look = Build("RunnerBeta", "look", 10f);
-            Vector3[] positions = LocalPositions(model);
-            RunnerLook.Apply(model, look.gameObject);
-            MeshFilter[] modelFilters = model.GetComponentsInChildren<MeshFilter>(true);
-            MeshFilter[] lookFilters = look.GetComponentsInChildren<MeshFilter>(true);
-            Assert.That(modelFilters.Length, Is.EqualTo(4));
-            for (int i = 0; i < modelFilters.Length; i++)
-            {
-                Assert.That(modelFilters[i].sharedMesh, Is.SameAs(lookFilters[i].sharedMesh), modelFilters[i].name);
-                Assert.That(modelFilters[i].GetComponent<MeshRenderer>().sharedMaterials,
-                    Is.EqualTo(lookFilters[i].GetComponent<MeshRenderer>().sharedMaterials), modelFilters[i].name);
-            }
-            Assert.That(model.Find("Torso Joint").GetComponent<MeshRenderer>().sharedMaterials.Length, Is.EqualTo(2),
-                "Every material of a renderer is copied.");
-            Assert.That(LocalPositions(model), Is.EqualTo(positions), "The model's transforms stay as they were.");
+            RunnerVisual model = Build("Armored Runner", "model", 0f);
+            RunnerVisual look = Build("RunnerBeta", "look", 10f);
+            Transform[] closedBones = model.ClosedFace.bones, openBones = model.OpenFace.bones;
+            Vector3[] positions = LocalPositions(model.transform);
+            RunnerLook.Apply(model, look, false);
+            Assert.That(model.ClosedFace.sharedMesh, Is.SameAs(look.ClosedFace.sharedMesh));
+            Assert.That(model.ClosedFace.sharedMaterials, Is.EqualTo(look.ClosedFace.sharedMaterials));
+            Assert.That(model.ClosedFace.sharedMaterials.Length, Is.EqualTo(3), "Every material of the closed face is lent.");
+            Assert.That(model.OpenFace.sharedMesh, Is.SameAs(look.OpenFace.sharedMesh));
+            Assert.That(model.OpenFace.sharedMaterials, Is.EqualTo(look.OpenFace.sharedMaterials));
+            Assert.That(model.ClosedFace.bones, Is.EqualTo(closedBones), "The model keeps its own bones.");
+            Assert.That(model.OpenFace.bones, Is.EqualTo(openBones));
+            Assert.That(LocalPositions(model.transform), Is.EqualTo(positions), "The model's transforms stay as they were.");
             Assert.That(model.name, Is.EqualTo("Armored Runner"), "Only meshes and materials change.");
+            Assert.That(model.ClosedFace.enabled, Is.True);
+            Assert.That(model.OpenFace.enabled, Is.False);
+            Assert.That(model.OpenFaceSelected, Is.False);
         }
 
         [Test]
-        public void Apply_TwoSiblingsOfOneName_PairsThemByOrder()
+        public void Apply_OpenFace_ShowsTheGogglesOnly()
         {
-            Transform model = Build("Armored Runner", "model", 0f);
-            Transform look = Build("RunnerBeta", "look", 10f);
-            RunnerLook.Apply(model, look.gameObject);
-            Transform modelTorso = model.Find("Torso Joint"), lookTorso = look.Find("Torso Joint");
-            Assert.That(modelTorso.GetChild(0).name, Is.EqualTo(modelTorso.GetChild(1).name), "The test needs two of one name.");
-            for (int i = 0; i < 2; i++)
-                Assert.That(modelTorso.GetChild(i).GetComponent<MeshFilter>().sharedMesh,
-                    Is.SameAs(lookTorso.GetChild(i).GetComponent<MeshFilter>().sharedMesh), "Back circuit " + i);
-            Assert.That(modelTorso.GetChild(0).GetComponent<MeshFilter>().sharedMesh,
-                Is.Not.SameAs(modelTorso.GetChild(1).GetComponent<MeshFilter>().sharedMesh));
+            RunnerVisual model = Build("Armored Runner", "model", 0f);
+            RunnerVisual look = Build("RunnerBeta", "look", 10f);
+            RunnerLook.Apply(model, look, true);
+            Assert.That(model.ClosedFace.enabled, Is.False);
+            Assert.That(model.OpenFace.enabled, Is.True);
+            Assert.That(model.OpenFaceSelected, Is.True);
+            Assert.That(model.SelectedFace, Is.SameAs(model.OpenFace));
         }
 
         [Test]
-        public void Apply_ChildNameDiffers_ThrowsAndLeavesTheModel()
+        public void SetFaceShown_HidesAndShowsOnlyTheSelectedFace()
         {
-            Transform model = Build("Armored Runner", "model", 0f);
-            Transform look = Build("RunnerBeta", "look", 10f);
-            look.Find("Torso Joint").GetChild(1).name = "Front circuit";
-            AssertRefused(model, look, "Torso Joint/Back circuit[2]");
+            RunnerVisual model = Build("Armored Runner", "model", 0f);
+            model.Select(true);
+            model.SetFaceShown(false);
+            Assert.That(model.OpenFace.enabled, Is.False);
+            Assert.That(model.ClosedFace.enabled, Is.False, "The other face never comes on.");
+            model.SetFaceShown(true);
+            Assert.That(model.OpenFace.enabled, Is.True);
+            Assert.That(model.ClosedFace.enabled, Is.False);
         }
 
         [Test]
-        public void Apply_ChildCountDiffers_ThrowsAndLeavesTheModel()
+        public void Apply_BoneNameDiffers_ThrowsAndLeavesTheModel()
         {
-            Transform model = Build("Armored Runner", "model", 0f);
-            Transform look = Build("RunnerBeta", "look", 10f);
-            Track(new GameObject("Spur")).transform.SetParent(look.Find("Left Leg Joint"), false);
-            AssertRefused(model, look, "Left Leg Joint");
+            RunnerVisual model = Build("Armored Runner", "model", 0f);
+            RunnerVisual look = Build("RunnerBeta", "look", 10f);
+            look.ClosedFace.bones[1].name = "Hips";
+            AssertRefused(model, look, "closed face bone 1");
         }
 
         [Test]
-        public void Apply_RendererMissing_ThrowsAndLeavesTheModel()
+        public void Apply_BoneCountDiffers_ThrowsAndLeavesTheModel()
         {
-            Transform model = Build("Armored Runner", "model", 0f);
-            Transform look = Build("RunnerBeta", "look", 10f);
-            // The last part in order, so every part before it was checked and paired, and still nothing changes.
-            Object.DestroyImmediate(look.Find("Left Leg Joint/Boot").GetComponent<MeshRenderer>());
-            AssertRefused(model, look, "Left Leg Joint/Boot");
+            RunnerVisual model = Build("Armored Runner", "model", 0f);
+            RunnerVisual look = Build("RunnerBeta", "look", 10f);
+            look.OpenFace.bones = new[] { look.OpenFace.bones[0] };
+            AssertRefused(model, look, "open face");
+        }
+
+        [Test]
+        public void Apply_MaterialMissing_ThrowsAndLeavesTheModel()
+        {
+            RunnerVisual model = Build("Armored Runner", "model", 0f);
+            RunnerVisual look = Build("RunnerBeta", "look", 10f);
+            // The open face is checked after the closed one, which fits, and still nothing changes.
+            look.OpenFace.sharedMaterials = new Material[] { look.OpenFace.sharedMaterials[0], null };
+            AssertRefused(model, look, "open face material 1");
         }
 
         [Test]
         public void Apply_Null_Throws()
         {
-            Transform model = Build("Armored Runner", "model", 0f);
-            Assert.Throws<ArgumentNullException>(() => RunnerLook.Apply(null, model.gameObject));
-            Assert.Throws<ArgumentNullException>(() => RunnerLook.Apply(model, null));
+            RunnerVisual model = Build("Armored Runner", "model", 0f);
+            Assert.Throws<ArgumentNullException>(() => RunnerLook.Apply(null, model, false));
+            Assert.Throws<ArgumentNullException>(() => RunnerLook.Apply(model, null, false));
+        }
+
+        [Test]
+        public void Apply_ModelWithoutAnAnimator_Throws()
+        {
+            RunnerVisual model = Build("Armored Runner", "model", 0f);
+            RunnerVisual look = Build("RunnerBeta", "look", 10f);
+            Set(model, "animator", null);
+            var error = Assert.Throws<ArgumentException>(() => RunnerLook.Apply(model, look, false));
+            Assert.That(error.Message, Does.Contain("animator"));
         }
 
         // ---- helpers -------------------------------------------------------------------------------
 
-        // The look is refused with the path in the message, and the model keeps every mesh and material it had.
-        private void AssertRefused(Transform model, Transform look, string path)
+        // The look is refused with its name and the place in the message, and the model keeps every mesh, material and
+        // state it had.
+        private static void AssertRefused(RunnerVisual model, RunnerVisual look, string where)
         {
-            MeshFilter[] filters = model.GetComponentsInChildren<MeshFilter>(true);
-            var meshes = new Mesh[filters.Length];
-            var materials = new Material[filters.Length][];
-            for (int i = 0; i < filters.Length; i++)
-            {
-                meshes[i] = filters[i].sharedMesh;
-                materials[i] = filters[i].GetComponent<MeshRenderer>().sharedMaterials;
-            }
-            var error = Assert.Throws<ArgumentException>(() => RunnerLook.Apply(model, look.gameObject));
+            Mesh closedMesh = model.ClosedFace.sharedMesh, openMesh = model.OpenFace.sharedMesh;
+            Material[] closedMaterials = model.ClosedFace.sharedMaterials, openMaterials = model.OpenFace.sharedMaterials;
+            bool closedOn = model.ClosedFace.enabled, openOn = model.OpenFace.enabled, selectedOpen = model.OpenFaceSelected;
+            var error = Assert.Throws<ArgumentException>(() => RunnerLook.Apply(model, look, true));
             Assert.That(error.Message, Does.Contain(look.name));
-            Assert.That(error.Message, Does.Contain("'" + path + "'"));
-            for (int i = 0; i < filters.Length; i++)
-            {
-                Assert.That(filters[i].sharedMesh, Is.SameAs(meshes[i]), filters[i].name);
-                Assert.That(filters[i].GetComponent<MeshRenderer>().sharedMaterials, Is.EqualTo(materials[i]), filters[i].name);
-            }
+            Assert.That(error.Message, Does.Contain("'" + where + "'"));
+            Assert.That(model.ClosedFace.sharedMesh, Is.SameAs(closedMesh));
+            Assert.That(model.OpenFace.sharedMesh, Is.SameAs(openMesh));
+            Assert.That(model.ClosedFace.sharedMaterials, Is.EqualTo(closedMaterials));
+            Assert.That(model.OpenFace.sharedMaterials, Is.EqualTo(openMaterials));
+            Assert.That(model.ClosedFace.enabled, Is.EqualTo(closedOn));
+            Assert.That(model.OpenFace.enabled, Is.EqualTo(openOn));
+            Assert.That(model.OpenFaceSelected, Is.EqualTo(selectedOpen));
         }
 
-        // root
-        //   Torso Joint (rendered, two materials)
-        //     Back circuit (rendered)
-        //     Back circuit (rendered)
-        //   Left Leg Joint (not rendered)
-        //     Boot (rendered)
-        // Every part has its own mesh and materials, named after tag; offset moves every part so transforms differ.
-        private Transform Build(string rootName, string tag, float offset)
+        // root (RunnerVisual)
+        //   Rig (Animator)
+        //     Root, Pelvis, ChainOrigin (bones, in that order for the two skinned ones)
+        //   Closed face (skinned to Root and Pelvis, three materials)
+        //   Open face (skinned to Root and Pelvis, two materials)
+        // Every face has its own mesh and materials, named after tag; offset moves the bones so transforms differ.
+        private RunnerVisual Build(string rootName, string tag, float offset)
         {
             Transform root = Track(new GameObject(rootName)).transform;
-            Transform torso = Part("Torso Joint", root, tag, offset, 2);
-            Part("Back circuit", torso, tag, offset, 1);
-            Part("Back circuit", torso, tag, offset, 1);
-            Transform leg = Part("Left Leg Joint", root, tag, offset, 0);
-            Part("Boot", leg, tag, offset, 1);
-            return root;
+            Transform rig = Track(new GameObject("Rig")).transform;
+            rig.SetParent(root, false);
+            var animator = rig.gameObject.AddComponent<Animator>();
+            var bones = new Transform[BoneNames.Length];
+            for (int i = 0; i < bones.Length; i++)
+            {
+                bones[i] = Track(new GameObject(BoneNames[i])).transform;
+                bones[i].SetParent(rig, false);
+                bones[i].localPosition = new Vector3(offset + i, offset, i * 0.5f);
+            }
+            Transform chain = Track(new GameObject("ChainOrigin")).transform;
+            chain.SetParent(bones[1], false);
+            SkinnedMeshRenderer closed = Face("Closed face", root, bones, tag, 3);
+            SkinnedMeshRenderer open = Face("Open face", root, bones, tag, 2);
+            var visual = root.gameObject.AddComponent<RunnerVisual>();
+            Set(visual, "animator", animator);
+            Set(visual, "chainOrigin", chain);
+            Set(visual, "closedFace", closed);
+            Set(visual, "openFace", open);
+            closed.enabled = true;
+            open.enabled = false;
+            Assert.That(visual.TryValidate(out string error), Is.True, error);
+            return visual;
         }
 
-        private Transform Part(string name, Transform parent, string tag, float offset, int materialCount)
+        private SkinnedMeshRenderer Face(string name, Transform parent, Transform[] bones, string tag, int materialCount)
         {
-            var part = Track(new GameObject(name)).transform;
-            part.SetParent(parent, false);
-            part.localPosition = new Vector3(offset + parent.childCount, offset, parent.childCount * 0.5f);
-            if (materialCount == 0) return part;
-            string id = tag + " " + name + " " + parent.childCount;
-            part.gameObject.AddComponent<MeshFilter>().sharedMesh = Track(new Mesh { name = id });
+            var face = Track(new GameObject(name)).transform;
+            face.SetParent(parent, false);
+            var mesh = Track(new Mesh { name = tag + " " + name });
+            mesh.vertices = new[] { Vector3.zero, Vector3.right, Vector3.up };
+            mesh.triangles = new[] { 0, 1, 2 };
+            var poses = new Matrix4x4[bones.Length];
+            for (int i = 0; i < poses.Length; i++) poses[i] = Matrix4x4.identity;
+            mesh.bindposes = poses;
+            var renderer = face.gameObject.AddComponent<SkinnedMeshRenderer>();
+            renderer.sharedMesh = mesh;
+            renderer.bones = (Transform[])bones.Clone();
+            renderer.rootBone = bones[0];
             var materials = new Material[materialCount];
-            for (int i = 0; i < materialCount; i++) materials[i] = Track(new Material(shader) { name = id + " " + i });
-            part.gameObject.AddComponent<MeshRenderer>().sharedMaterials = materials;
-            return part;
+            for (int i = 0; i < materialCount; i++) materials[i] = Track(new Material(shader) { name = tag + " " + name + " " + i });
+            renderer.sharedMaterials = materials;
+            return renderer;
+        }
+
+        // The private serialized fields RunnerVisual is wired with in the editor.
+        private static void Set(RunnerVisual visual, string field, Object value)
+        {
+            var so = new SerializedObject(visual);
+            so.FindProperty(field).objectReferenceValue = value;
+            so.ApplyModifiedPropertiesWithoutUndo();
         }
 
         private static Vector3[] LocalPositions(Transform root)

@@ -10817,7 +10817,7 @@ Transform:
   m_PrefabAsset: {fileID: 0}
 --- !u!4 &613892960 stripped
 Transform:
-  m_CorrespondingSourceObject: {fileID: 6896016446602726305, guid: 3f56bccaf9bbff748a65359b70735be0, type: 3}
+  m_CorrespondingSourceObject: {fileID: 7497709704275461673, guid: 3f56bccaf9bbff748a65359b70735be0, type: 3}
   m_PrefabInstance: {fileID: 613892958}
   m_PrefabAsset: {fileID: 0}
 --- !u!1 &615364016
@@ -37870,9 +37870,9 @@ MonoBehaviour:
   anchors:
   - {fileID: 68805062}
   maxRange: 20
+  minHangHeight: 1.05
   retractSpeed: 3
   empoweredRetractSpeed: 12
-  chainVisual: {fileID: 0}
 --- !u!114 &1925527727
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -37895,14 +37895,21 @@ MonoBehaviour:
   turnAcceleration: 1200
   airTurnScale: 0.5
   minTurnRadius: 25
+  boostTurnRadiusScale: 2
   turnSpeedLoss: 0.2
+  turnSpeedLossScale: 0.5
+  turnFalloffScale: 0.11111111
   runAcceleration: 30
   coastDeceleration: 6
-  airAcceleration: 0
+  brakeDeceleration: 20
+  reverseSpeed: 6
+  reverseAcceleration: 8
+  airDeceleration: 0
   sideGrip: 60
   airSideGrip: 18
   guardSpeedLoss: 0.4
   guardScrapeDecel: 25
+  guardTurnRate: 60
   slopeSpeedFactor: 1.5
   minSlopeSpeedScale: 0.7
   maxSlopeSpeedScale: 1.3
@@ -37912,20 +37919,22 @@ MonoBehaviour:
   slingPullTime: 0.4
   slingPullAcceleration: 30
   slingTopSpeed: 28
-  slingTurnRate: 90
   slingCarryTime: 2.6
   slingCarrySpeed: 26
+  boostZoneSpeed: 55
+  boostZoneFalloff: 0.8
   empoweredReleaseSpeed: 26
   poleMaxAngle: 95
   poleReach: 6
+  poleHookArcShare: 0.5
   ropeRate: 6
   minRopeLength: 2
-  minSwingSpeedScale: 0.8
-  maxSwingSpeedScale: 1.5
+  swingThrottleSpeedScale: 1.2
   swingMetersPerSlot: 35
-  swingCarryFalloff: 3
+  swingCarryDecay: 0.8
   respawnBackoff: 4
   respawnHoldTime: 1
+  respawnPadReach: 50
 --- !u!143 &1925527728
 CharacterController:
   m_ObjectHideFlags: 0
@@ -41812,9 +41821,6 @@ MonoBehaviour:
   attackVisual: {fileID: 1038373642}
   audioSource: {fileID: 2105445613}
   finishZ: 496
-  endlessMode: 0
-  endlessCourse: {fileID: 0}
-  enemies: {fileID: 0}
   circuit: {fileID: 0}
   rules: {fileID: 11400000, guid: f34ba709e923c5340943b923a8c4c359, type: 2}
   enhancedPresentation: 0
@@ -41933,6 +41939,8 @@ MonoBehaviour:
   player: {fileID: 1925527727}
   grapple: {fileID: 1925527726}
   viewCamera: {fileID: 493584858}
+  assembler: {fileID: 0}
+  nightBackground: {fileID: 0}
 --- !u!4 &2105445615
 Transform:
   m_ObjectHideFlags: 0

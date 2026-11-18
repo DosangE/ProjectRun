@@ -138,8 +138,9 @@ namespace ProtoHarness.Editor.ChainRush
             var tilt = playerObject.AddComponent<RunnerTilt>();
             var model = ((GameObject)PrefabUtility.InstantiatePrefab(runnerModel, playerObject.transform)).transform;
             model.name = "Armored Runner";
-            Transform hand = model.Find("Torso Joint/Right Arm Joint/Chain Origin");
-            if (hand == null) throw new InvalidOperationException("Runner model prefab has no Torso Joint/Right Arm Joint/Chain Origin: " + RunnerModelPath);
+            RunnerVisual visual = model.GetComponentInChildren<RunnerVisual>(true);
+            if (visual == null || visual.ChainOrigin == null) throw new InvalidOperationException("Runner model prefab has no RunnerVisual with a chain origin: " + RunnerModelPath);
+            Transform hand = visual.ChainOrigin;
             var rope = new GameObject("Chain Line").AddComponent<LineRenderer>();
             rope.transform.SetParent(playerObject.transform, false);
             rope.sharedMaterial = mint;

@@ -13,7 +13,6 @@ namespace ProtoHarness.ChainRush.Flow.Lobby
             "ALT 떼기 / ↓   그래플 해제",
             "왼쪽 SHIFT 유지   코너 봉 스윙",
             "왼쪽 CTRL   부스터 (게이지 1칸)",
-            "SPACE   공격",
             "ESC   일시정지 (계속 · 재시작 · 로비)",
         };
 

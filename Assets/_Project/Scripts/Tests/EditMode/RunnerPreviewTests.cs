@@ -80,6 +80,24 @@ namespace ProtoHarness.Tests.EditMode
             }
         }
 
+        // The runner FBX carries every runner's faces and switches the other nine off: a renderer that is off is not drawn,
+        // so it must not push the camera back (2026-11-16: it made the runners a third smaller than they needed to be).
+        [Test]
+        public void New_ARendererThatIsOff_DoesNotPushTheCameraBack()
+        {
+            preview = new RunnerPreview(new[] { Look("Plain", Vector3.zero) }, 64, 96, Background);
+            float plain = CameraDistance();
+            preview.Release();
+
+            GameObject withSpare = Look("WithSpare", Vector3.zero);
+            GameObject spare = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            spare.transform.SetParent(withSpare.transform, false);
+            spare.transform.localScale = new Vector3(8f, 8f, 8f);
+            spare.GetComponent<Renderer>().enabled = false;
+            preview = new RunnerPreview(new[] { withSpare }, 64, 96, Background);
+            Assert.That(CameraDistance(), Is.EqualTo(plain).Within(1e-3f), "A renderer that is switched off is not measured.");
+        }
+
         [Test]
         public void New_RunnerWithoutALook_ShowsNothingForIt()
         {
@@ -132,6 +150,14 @@ namespace ProtoHarness.Tests.EditMode
             cube.transform.localPosition = offset;
             cube.transform.localScale = new Vector3(1f, 2f, 0.5f);
             return root;
+        }
+
+        // How far the preview camera stands from the turntable's axis.
+        private static float CameraDistance()
+        {
+            GameObject camera = GameObject.Find("Preview camera");
+            Assert.That(camera, Is.Not.Null);
+            return camera.transform.localPosition.magnitude;
         }
 
         // The world centre of the shown copy's renderers.

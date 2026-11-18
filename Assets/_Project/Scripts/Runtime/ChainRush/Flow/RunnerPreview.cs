@@ -1,4 +1,5 @@
 using System;
+using ProtoHarness.ChainRush.Visuals;
 using UnityEngine;
 
 namespace ProtoHarness.ChainRush.Flow
@@ -16,9 +17,11 @@ namespace ProtoHarness.ChainRush.Flow
         public const float StartYaw = -30f;
         private static readonly Vector3 StagePosition = new Vector3(0f, -1000f, 0f);
         private const float FieldOfView = 30f;
-        // Room around the largest look, and how far the camera looks down on it.
-        private const float Margin = 1.15f;
+        // Room around the tallest look (user 2026-11-16: "러너 크기를 좀 더 키워줘"), and how far the camera looks down on it.
+        private const float Margin = 1.1f;
         private const float Pitch = 8f;
+        // The pose a skinned look stands in: the first frame of its Idle clip (the runner controller's).
+        private const string IdleClip = "Runner_Idle";
 
         private readonly GameObject stage;
         private readonly Transform turntable;
@@ -41,13 +44,22 @@ namespace ProtoHarness.ChainRush.Flow
 
             // Each copy is centred on the turntable's axis, measured before any turn.
             models = new GameObject[looks.Length];
-            float radius = 0f;
+            float radius = 0f, halfHeight = 0f, ring = 0f;
             for (int i = 0; i < looks.Length; i++)
             {
                 if (looks[i] == null) continue;
                 GameObject model = UnityEngine.Object.Instantiate(looks[i], turntable, false);
                 model.name = looks[i].name;
                 model.SetActive(true);
+                try
+                {
+                    Stand(model);
+                }
+                catch (ArgumentException)
+                {
+                    Release();
+                    throw;
+                }
                 if (!TryMeasure(model, out Bounds bounds))
                 {
                     Release();
@@ -55,6 +67,8 @@ namespace ProtoHarness.ChainRush.Flow
                 }
                 model.transform.localPosition = turntable.InverseTransformVector(turntable.position - bounds.center);
                 radius = Mathf.Max(radius, bounds.extents.magnitude);
+                halfHeight = Mathf.Max(halfHeight, bounds.extents.y);
+                ring = Mathf.Max(ring, new Vector2(bounds.extents.x, bounds.extents.z).magnitude);
                 model.SetActive(false);
                 models[i] = model;
             }
@@ -68,10 +82,13 @@ namespace ProtoHarness.ChainRush.Flow
             camera.fieldOfView = FieldOfView;
             camera.targetTexture = texture;
             camera.enabled = false;
-            // Far enough that the largest look fits the narrower of the two angles.
-            float halfVertical = FieldOfView * 0.5f * Mathf.Deg2Rad;
-            float halfHorizontal = Mathf.Atan(Mathf.Tan(halfVertical) * width / height);
-            float distance = Mathf.Max(radius, 0.1f) * Margin / Mathf.Sin(Mathf.Min(halfVertical, halfHorizontal));
+            // Far enough that the tallest look fits the view's height and the widest turn (its ring on the turntable) its
+            // width, plus half that ring so the near side, which looks larger, is not cut. The old fit took the bounding
+            // sphere of every look, which left a runner a third of the view empty above and below.
+            float tanVertical = Mathf.Tan(FieldOfView * 0.5f * Mathf.Deg2Rad);
+            float tanHorizontal = tanVertical * width / height;
+            float fit = Mathf.Max(halfHeight / tanVertical, ring / tanHorizontal) * Margin;
+            float distance = Mathf.Max(fit + ring * 0.5f, 0.1f);
             camera.transform.localRotation = Quaternion.Euler(Pitch, 180f, 0f);
             camera.transform.localPosition = -(camera.transform.localRotation * Vector3.forward) * distance;
             camera.nearClipPlane = Mathf.Max(0.01f, distance - radius * 2f);
@@ -134,16 +151,57 @@ namespace ProtoHarness.ChainRush.Flow
             return runner;
         }
 
-        // The bounds of every renderer under model, false when it has none.
+        // A skinned model (RunnerVisual) stands in the first frame of its Idle clip and stays there: measuring and drawing it
+        // need a pose, not an animation, and the controller's own start is the rig's import pose. A model without a
+        // RunnerVisual is drawn as it is.
+        private static void Stand(GameObject model)
+        {
+            RunnerVisual visual = model.GetComponentInChildren<RunnerVisual>(true);
+            if (visual == null) return;
+            Animator animator = visual.Animator;
+            if (animator == null || animator.runtimeAnimatorController == null)
+                throw new ArgumentException($"RunnerPreview: the look '{model.name}' has no Animator with a controller to pose it.", nameof(model));
+            foreach (AnimationClip clip in animator.runtimeAnimatorController.animationClips)
+            {
+                if (clip.name != IdleClip) continue;
+                clip.SampleAnimation(animator.gameObject, 0f);
+                animator.enabled = false;
+                return;
+            }
+            throw new ArgumentException($"RunnerPreview: the look '{model.name}' has no {IdleClip} clip to pose it.", nameof(model));
+        }
+
+        // The bounds of what model draws, false when it draws nothing. A renderer that is switched off is not drawn (a
+        // runner's other faces), so it is not measured; a skinned one is measured on its posed vertices, because its own
+        // bounds cover every clip.
         private static bool TryMeasure(GameObject model, out Bounds bounds)
         {
             bounds = default;
             bool any = false;
-            foreach (Renderer renderer in model.GetComponentsInChildren<Renderer>())
+            Mesh baked = null;
+            try
             {
-                if (!any) bounds = renderer.bounds;
-                else bounds.Encapsulate(renderer.bounds);
-                any = true;
+                foreach (Renderer renderer in model.GetComponentsInChildren<Renderer>())
+                {
+                    if (!renderer.enabled) continue;
+                    Bounds part = renderer.bounds;
+                    if (renderer is SkinnedMeshRenderer skinned)
+                    {
+                        if (baked == null) baked = new Mesh();
+                        skinned.BakeMesh(baked, true);
+                        Vector3[] vertices = baked.vertices;
+                        if (vertices.Length == 0) continue;
+                        part = new Bounds(skinned.transform.TransformPoint(vertices[0]), Vector3.zero);
+                        for (int i = 1; i < vertices.Length; i++) part.Encapsulate(skinned.transform.TransformPoint(vertices[i]));
+                    }
+                    if (!any) bounds = part;
+                    else bounds.Encapsulate(part);
+                    any = true;
+                }
+            }
+            finally
+            {
+                DestroyNow(baked);
             }
             return any;
         }

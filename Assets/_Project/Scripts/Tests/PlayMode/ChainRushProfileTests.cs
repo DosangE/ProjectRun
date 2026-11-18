@@ -1,3 +1,4 @@
+using ProtoHarness.ChainRush.Bots;
 using System;
 using System.Collections;
 using NUnit.Framework;
@@ -76,7 +77,7 @@ namespace ProtoHarness.Tests.PlayMode
         }
 
         // Each runner wears a look (Art/Models/Runner*.prefab) that fits the runner model: RunnerLook takes it on a copy of
-        // the model, and the copy then shows the look's meshes.
+        // the model, and the copy then shows the look's closed face, the one skinned renderer that is on.
         [Test]
         public void Profiles_TheFiveRunners_EachHaveALookThatFitsTheRunnerModel()
         {
@@ -90,9 +91,15 @@ namespace ProtoHarness.Tests.PlayMode
                 GameObject copy = UnityEngine.Object.Instantiate(runnerModel);
                 try
                 {
-                    Assert.DoesNotThrow(() => RunnerLook.Apply(copy.transform, profile.Look), profile.name);
-                    Assert.That(copy.GetComponentInChildren<MeshFilter>(true).sharedMesh,
-                        Is.SameAs(profile.Look.GetComponentInChildren<MeshFilter>(true).sharedMesh), profile.name);
+                    RunnerVisual model = copy.GetComponentInChildren<RunnerVisual>(true);
+                    RunnerVisual look = profile.Look.GetComponentInChildren<RunnerVisual>(true);
+                    Assert.That(model, Is.Not.Null, "The runner model has no RunnerVisual.");
+                    Assert.That(look, Is.Not.Null, profile.name + "'s look has no RunnerVisual.");
+                    Assert.DoesNotThrow(() => RunnerLook.Apply(model, look, false), profile.name);
+                    Assert.That(model.ClosedFace.sharedMesh, Is.SameAs(look.ClosedFace.sharedMesh), profile.name);
+                    Assert.That(model.ClosedFace.sharedMaterials, Is.EqualTo(look.ClosedFace.sharedMaterials), profile.name);
+                    Assert.That(model.OpenFace.sharedMesh, Is.SameAs(look.OpenFace.sharedMesh), profile.name);
+                    Assert.That(model.ClosedFace.enabled && !model.OpenFace.enabled, Is.True, profile.name + ": the closed face shows.");
                 }
                 finally
                 {

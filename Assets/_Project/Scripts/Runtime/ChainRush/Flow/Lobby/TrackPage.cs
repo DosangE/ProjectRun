@@ -48,7 +48,7 @@ namespace ProtoHarness.ChainRush.Flow.Lobby
         public override int Count => labels.Length;
         public override string Label(int row) => labels[row];
         public override bool IsLocked(int row) => locks[row];
-        public override string LockedNotice => "새 트랙은 이후 마일스톤에서 열립니다.";
+        public override string LockedNotice => "새 트랙은 다음 업데이트에 열립니다.";
         public override string DescriptionTag => "TRACK";
         public override string Description(int row) => descriptions[row];
         public override string DescriptionFoot(int row) => records[row];

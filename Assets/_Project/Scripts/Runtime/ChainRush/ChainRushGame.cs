@@ -31,6 +31,9 @@ namespace ProtoHarness.ChainRush
         private IInputSource inputSource;
         private AudioClip[] cues;
         private float countdownLeft;
+        private enum TickStage { Input, Movement, Judgment }
+        private TickStage tickStage;
+        private TickInput pendingInput;
 
         public bool IsRunning => phase == Phase.Running;
         public bool IsPaused => phase == Phase.Paused;
@@ -43,6 +46,9 @@ namespace ProtoHarness.ChainRush
         // Whether Enter and R (and the HUD's buttons) may start a run. A network race starts runs itself and turns this off,
         // so the keyboard cannot restart a run the server is simulating.
         public bool ManualStart { get; set; } = true;
+        // Whether FixedUpdate advances the simulation. A race of several worlds (Race/RaceField) turns this off in every
+        // one of them and steps them itself, all on the same tick; a tick is the same tick either way.
+        public bool SelfStepping { get; set; } = true;
         public bool HasFailed => phase == Phase.Failed;
         public bool HasFinished => phase == Phase.Complete;
         public int Health => racer.Health;
@@ -136,6 +142,9 @@ namespace ProtoHarness.ChainRush
             inputSource = source;
         }
 
+        // The source StepTick() reads, as SetInputSource left it (the keyboard until then). Read-only, for checks.
+        public IInputSource InputSource => inputSource;
+
         // Replaces the course centerline (test roads now, hand-built circuits later). The finish line stays
         // at finishZ along it. A circuit race builds its own track, so it refuses a replacement.
         public void SetTrack(Centerline replacement)
@@ -175,18 +184,36 @@ namespace ProtoHarness.ChainRush
             if (AttackActive) attackVisual.localScale = Vector3.one * (1f + Ticks.ToSeconds(racer.AttackTicksLeft(tick)) * 4f);
         }
 
-        private void FixedUpdate() => StepTick(inputSource);
+        private void FixedUpdate()
+        {
+            if (SelfStepping) StepTick(inputSource);
+        }
 
-        // The only simulation entry point. One call is one tick, and the order below is the
+        // One tick on the game's own input source (SetInputSource), for whoever steps the game in FixedUpdate's place
+        // (SelfStepping off).
+        public void StepTick() => StepTick(inputSource);
+
+        // The complete-tick simulation entry point. One call is one tick, and the order below is the
         // contract: consumed input, runner, hazards, finish. FixedUpdate calls it
         // with the game's input source; a test or a rollback can call it directly, as often as it likes, with
         // another source (the phase must be Running, so the caller stops FixedUpdate with Time.timeScale = 0).
         public void StepTick(IInputSource source)
         {
             if (source == null) throw new System.ArgumentNullException(nameof(source));
+            RequireTickStage(TickStage.Input);
             if (!IsRunning) return;
-            RunTick(source);
-            TickCompleted?.Invoke(tick);
+            try
+            {
+                if (!InputTick(source)) return;
+                MoveTick();
+                JudgeTick();
+            }
+            finally
+            {
+                // An input source may refuse a tick (network fault). Preserve that exception without leaving the
+                // stage machine stuck: the original complete-tick entry point could be called again afterward.
+                tickStage = TickStage.Input;
+            }
         }
 
         // Raised at the end of every tick that ran, with that tick's number, whether it came from FixedUpdate or a direct
@@ -194,14 +221,45 @@ namespace ProtoHarness.ChainRush
         // taken while the input is being read (inside IInputSource.Consume) is not. The run may have ended during the tick.
         public event System.Action<int> TickCompleted;
 
-        private void RunTick(IInputSource source)
+        // The field performs each stage for every runner before beginning the next stage.
+        public bool InputTick() => InputTick(inputSource);
+
+        public bool InputTick(IInputSource source)
         {
+            RequireTickStage(TickStage.Input);
+            if (source == null) throw new System.ArgumentNullException(nameof(source));
+            if (!IsRunning) return false;
+            tickStage = TickStage.Movement;
             tick++;
             // The closed track looks for the runner near where it was, so a return leg is not mistaken for the start.
             if (circuit != null) circuit.PrepareTick();
-            TickInput input = source.Consume();
-            if (input.AttackPressed) Attack();
-            player.Step(input);
+            pendingInput = source.Consume();
+            if (pendingInput.AttackPressed) Attack();
+            return true;
+        }
+
+        public void MoveTick()
+        {
+            RequireTickStage(TickStage.Movement);
+            tickStage = TickStage.Judgment;
+            player.Step(pendingInput);
+        }
+
+        public void JudgeTick()
+        {
+            RequireTickStage(TickStage.Judgment);
+            JudgeRunTick();
+            tickStage = TickStage.Input;
+            TickCompleted?.Invoke(tick);
+        }
+
+        private void RequireTickStage(TickStage expected)
+        {
+            if (tickStage != expected) throw new System.InvalidOperationException("ChainRushGame: tick stages must run in input, movement, judgment order.");
+        }
+
+        private void JudgeRunTick()
+        {
             if (!IsRunning) return;
             Vector3 position = player.transform.position;
             for (int i = 0; i < targets.Length; i++)
@@ -266,6 +324,7 @@ namespace ProtoHarness.ChainRush
 
         private void ResetRun()
         {
+            tickStage = TickStage.Input;
             phase = Phase.Ready;
             if (circuit != null) circuit.ResetRace();
             if (enhancedPresentation) { presentationAudio.ResetAudio(); presentationAnimation.ResetPose(); }

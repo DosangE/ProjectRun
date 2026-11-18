@@ -13,9 +13,12 @@ namespace ProtoHarness.ChainRush.Visuals
         [SerializeField] private Transform body;
         private float swingBlend;
         private float insideSign = 1f;
-        // The body's renderers that were showing when it woke, which the respawn blink turns off and on (RespawnLook).
+        // The body's renderers that were showing at Start (after every Awake, so after RunnerLook picked the face), which
+        // the respawn blink turns off and on (RespawnLook). The model's faces are not among them: the blink hides the
+        // selected face by itself (RunnerVisual.SetFaceShown), so a face hidden for the look never comes back on.
         // Renderers made later (the chain's mesh) or hidden by their owner then are never touched.
         private Renderer[] blinking;
+        private RunnerVisual visual;
         private bool blinkHidden;
         private StateEdge respawn;
 
@@ -32,10 +35,19 @@ namespace ProtoHarness.ChainRush.Visuals
                 enabled = false;
                 return;
             }
+        }
+
+        // Start, not Awake: RaceAssembler dresses the model in its look in its Awake, and which renderers show depends on it.
+        private void Start()
+        {
+            visual = body.GetComponentInChildren<RunnerVisual>(true);
             Renderer[] all = body.GetComponentsInChildren<Renderer>(true);
             int showing = 0;
             for (int i = 0; i < all.Length; i++)
-                if (all[i].enabled) all[showing++] = all[i];
+            {
+                bool face = visual != null && (all[i] == visual.ClosedFace || all[i] == visual.OpenFace);
+                if (all[i].enabled && !face) all[showing++] = all[i];
+            }
             blinking = new Renderer[showing];
             System.Array.Copy(all, blinking, showing);
         }
@@ -66,6 +78,7 @@ namespace ProtoHarness.ChainRush.Visuals
             if (hidden == blinkHidden) return;
             blinkHidden = hidden;
             for (int i = 0; i < blinking.Length; i++) blinking[i].enabled = !hidden;
+            if (visual != null) visual.SetFaceShown(!hidden);
         }
 
         public static Quaternion Evaluate(Vector3 velocity, float steer)

@@ -1,3 +1,4 @@
+using ProtoHarness.ChainRush.Bots;
 using System;
 using System.Collections;
 using System.IO;
@@ -118,6 +119,10 @@ namespace ProtoHarness.Tests.PlayMode
             yield return Load(LobbyPath, scene => menu = Find<LobbyMenu>(scene));
             Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Main));
             menu.Confirm();
+            // Time attack or bots first (user 2026-11-13); the page opens on time attack.
+            Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Mode));
+            Assert.That(menu.Cursor, Is.EqualTo(ProtoHarness.ChainRush.Flow.Lobby.SingleModePage.TimeAttackRow));
+            menu.Confirm();
             Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Speed));
             Assert.That(menu.Cursor, Is.EqualTo(1), "The speed page opens on Fast.");
             menu.Confirm();
@@ -148,6 +153,7 @@ namespace ProtoHarness.Tests.PlayMode
             menu.Confirm();
             menu.Confirm();
             menu.Confirm();
+            menu.Confirm();
             Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Runner));
             Assert.That(preview.Rendering, Is.True);
             Assert.That(preview.Shown, Is.EqualTo(0));
@@ -173,6 +179,7 @@ namespace ProtoHarness.Tests.PlayMode
         {
             LobbyMenu menu = null;
             yield return Load(LobbyPath, scene => menu = Find<LobbyMenu>(scene));
+            menu.Confirm();
             menu.Confirm();
             menu.Confirm();
             menu.Confirm();
@@ -213,6 +220,7 @@ namespace ProtoHarness.Tests.PlayMode
             LobbyMenu menu = null;
             yield return Load(LobbyPath, scene => menu = Find<LobbyMenu>(scene));
             menu.Confirm();
+            menu.Confirm();
             Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Speed));
             Assert.That(menu.BuildSetup().Speed, Is.EqualTo(SpeedClass.Fast), "Fast until another is chosen.");
             menu.Move(-1);
@@ -236,6 +244,7 @@ namespace ProtoHarness.Tests.PlayMode
         {
             LobbyMenu menu = null;
             yield return Load(LobbyPath, scene => menu = Find<LobbyMenu>(scene));
+            menu.Confirm();
             menu.Confirm();
             menu.Confirm();
             Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Track));
@@ -275,7 +284,7 @@ namespace ProtoHarness.Tests.PlayMode
                 menu.Highlight(0);
                 menu.Confirm();
                 Assert.That(heard, Is.EqualTo(new[] { UiSound.Cue.Move, UiSound.Cue.Confirm }));
-                Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Speed));
+                Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Mode));
                 heard.Clear();
                 menu.Back();
                 Assert.That(heard, Is.EqualTo(new[] { UiSound.Cue.Back }));
@@ -293,22 +302,25 @@ namespace ProtoHarness.Tests.PlayMode
         {
             LobbyMenu menu = null;
             yield return Load(LobbyPath, scene => menu = Find<LobbyMenu>(scene));
-            foreach (LobbyMenu.Page expected in new[] { LobbyMenu.Page.Main, LobbyMenu.Page.Speed, LobbyMenu.Page.Track })
+            // The mode page (time attack or bots, user 2026-11-13) has two entries; the others are checked on their first three.
+            foreach (LobbyMenu.Page expected in new[] { LobbyMenu.Page.Main, LobbyMenu.Page.Mode, LobbyMenu.Page.Speed, LobbyMenu.Page.Track })
             {
                 Assert.That(menu.CurrentPage, Is.EqualTo(expected));
                 var seen = new System.Collections.Generic.HashSet<string>();
-                for (int row = 0; row < 3; row++)
+                int rows = expected == LobbyMenu.Page.Mode ? 2 : 3;
+                for (int row = 0; row < rows; row++)
                 {
                     menu.Highlight(row);
                     Assert.That(menu.Description, Is.Not.Empty, $"{expected} row {row}");
                     Assert.That(seen.Add(menu.Description), Is.True, $"{expected} row {row} repeats another row's description.");
                 }
-                // Main: single race (0); speed: fast (1); track: the stadium (0).
+                // Main: single race (0); mode: time attack (0); speed: fast (1); track: the stadium (0).
                 menu.Highlight(expected == LobbyMenu.Page.Speed ? 1 : 0);
                 menu.Confirm();
             }
             Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Runner));
             Assert.That(menu.Description, Is.Empty, "The runner page shows its profile, not a description.");
+            menu.Back();
             menu.Back();
             menu.Back();
             menu.Back();
@@ -325,8 +337,12 @@ namespace ProtoHarness.Tests.PlayMode
             yield return Load(LobbyPath, scene => menu = Find<LobbyMenu>(scene));
             menu.Confirm();
             menu.Confirm();
+            menu.Confirm();
             menu.Back();
             Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Speed));
+            menu.Back();
+            Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Mode));
+            Assert.That(menu.Cursor, Is.EqualTo(ProtoHarness.ChainRush.Flow.Lobby.SingleModePage.TimeAttackRow), "Back on the mode the race was set up in.");
             menu.Back();
             Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Main));
             menu.Move(ProtoHarness.ChainRush.Flow.Lobby.MainPage.SettingsRow);
@@ -552,7 +568,7 @@ namespace ProtoHarness.Tests.PlayMode
         }
 
         // The chosen runner's look is what the race shows (presentation only, RunnerLook): BETA from the lobby puts BETA's
-        // look on the runner model, part by part in order.
+        // two faces on the runner model and shows the closed one.
         [UnityTest]
         public IEnumerator Race_FromTheLobby_WearsTheChosenRunnersLook()
         {
@@ -563,16 +579,18 @@ namespace ProtoHarness.Tests.PlayMode
             yield return Load(RacePath, scene => assembler = Find<RaceAssembler>(scene));
             Assert.That(assembler.IsLaunched, Is.True);
             Transform body = Find<RunnerTilt>(assembler.gameObject.scene).Body;
-            MeshFilter[] worn = body.GetComponentsInChildren<MeshFilter>(true);
-            MeshFilter[] look = beta.Look.GetComponentsInChildren<MeshFilter>(true);
-            Assert.That(worn.Length, Is.EqualTo(look.Length));
-            Assert.That(worn.Length, Is.GreaterThan(0));
-            for (int i = 0; i < worn.Length; i++)
-            {
-                Assert.That(worn[i].sharedMesh, Is.SameAs(look[i].sharedMesh), worn[i].name);
-                Assert.That(worn[i].GetComponent<MeshRenderer>().sharedMaterials,
-                    Is.EqualTo(look[i].GetComponent<MeshRenderer>().sharedMaterials), worn[i].name);
-            }
+            RunnerVisual worn = body.GetComponentInChildren<RunnerVisual>(true);
+            RunnerVisual look = beta.Look.GetComponentInChildren<RunnerVisual>(true);
+            Assert.That(worn, Is.Not.Null, "The runner model has no RunnerVisual.");
+            Assert.That(look, Is.Not.Null, "BETA's look has no RunnerVisual.");
+            Assert.That(worn.ClosedFace.sharedMesh, Is.SameAs(look.ClosedFace.sharedMesh));
+            Assert.That(worn.ClosedFace.sharedMaterials, Is.EqualTo(look.ClosedFace.sharedMaterials));
+            Assert.That(worn.OpenFace.sharedMesh, Is.SameAs(look.OpenFace.sharedMesh));
+            Assert.That(worn.OpenFace.sharedMaterials, Is.EqualTo(look.OpenFace.sharedMaterials));
+            var shown = new System.Collections.Generic.List<SkinnedMeshRenderer>();
+            foreach (SkinnedMeshRenderer face in body.GetComponentsInChildren<SkinnedMeshRenderer>(true))
+                if (face.enabled) shown.Add(face);
+            Assert.That(shown, Is.EqualTo(new[] { worn.ClosedFace }), "Exactly the closed face shows.");
         }
 
         [UnityTest]
@@ -633,6 +651,7 @@ namespace ProtoHarness.Tests.PlayMode
             store.Submit(Stadium().name, SpeedClass.Fast, 3970, "BETA");
             menu.Confirm();
             menu.Confirm();
+            menu.Confirm();
             Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Track));
             Assert.That(menu.TrackRecordText(0), Is.EqualTo("최고 기록 (빠름)  01:19.4  ·  BETA"), "Read again as the track page opens.");
             store.Clear(Stadium().name, SpeedClass.Fast);
@@ -651,6 +670,7 @@ namespace ProtoHarness.Tests.PlayMode
             menu.Records = store;
             try
             {
+                menu.Confirm();
                 menu.Confirm();
                 menu.Highlight(0);
                 menu.Confirm();
@@ -791,6 +811,61 @@ namespace ProtoHarness.Tests.PlayMode
             }
         }
 
+        // Runner art 3·4 (docs/PROPOSAL_RUNNER_UNITY.md "복제본 처리"): the ghost is a still copy of the runner's skinned
+        // model that shows the same face the runner wears, open or closed, and no other.
+        [UnityTest, Timeout(60000)]
+        public IEnumerator Race_TheBestsGhost_HoldsItsCopiedPoseAndWearsTheRunnersFace()
+        {
+            var trace = new GhostTrace();
+            for (int i = 0; i < 10; i++) trace.Add(new Vector3(i * 0.5f, 1f, 3f), 0f);
+            ghosts.Save(Stadium().name, SpeedClass.Fast, trace);
+            RaceLaunch.Request(new RaceSetup(Stadium(), "STADIUM", "", RaceMode.Single, SpeedClass.Fast, runner));
+            RaceAssembler assembler = null;
+            yield return Load(RacePath, scene => assembler = Find<RaceAssembler>(scene));
+            assembler.Records = TestRecords();
+            assembler.Ghosts = ghosts;
+            yield return null;
+            Assert.That(assembler.HasGhost, Is.True);
+            ChainRushGame game = Find<ChainRushGame>(assembler.gameObject.scene);
+            Transform model = game.Player.GetComponent<RunnerTilt>().Body;
+            RunnerVisual worn = model.GetComponentInChildren<RunnerVisual>(true);
+            Assert.That(worn, Is.Not.Null);
+            Assert.That(worn.OpenFaceSelected, Is.False, "precondition: the scene's runner wears the closed face.");
+            AssertGhostCopies(assembler.Ghost, model);
+
+            worn.Select(true);
+            var root = new GameObject("Open-face ghost (test)");
+            try
+            {
+                GhostRunner open = root.AddComponent<GhostRunner>();
+                open.Initialize(game, trace, model);
+                yield return null;
+                AssertGhostCopies(open, model);
+                RunnerVisual copied = open.GetComponentInChildren<RunnerVisual>(true);
+                Assert.That(copied.OpenFace.enabled && !copied.ClosedFace.enabled, Is.True, "The ghost wears the open face the runner wears.");
+            }
+            finally
+            {
+                worn.Select(false);
+                UnityEngine.Object.Destroy(root);
+            }
+        }
+
+        // No Animator of the copy runs, and each skinned renderer of the copy shows exactly when the runner's does.
+        private static void AssertGhostCopies(GhostRunner ghost, Transform model)
+        {
+            Animator[] animators = ghost.GetComponentsInChildren<Animator>(true);
+            Assert.That(animators, Is.Not.Empty, "The ghost copies the runner's skinned model.");
+            foreach (Animator animator in animators) Assert.That(animator.enabled, Is.False, "The ghost's pose stays as copied: " + animator.name);
+            SkinnedMeshRenderer[] runner = model.GetComponentsInChildren<SkinnedMeshRenderer>(true);
+            SkinnedMeshRenderer[] copy = ghost.GetComponentsInChildren<SkinnedMeshRenderer>(true);
+            Assert.That(copy.Length, Is.EqualTo(runner.Length));
+            for (int i = 0; i < runner.Length; i++)
+                Assert.That(copy[i].enabled, Is.EqualTo(runner[i].enabled), "renderer " + runner[i].name);
+            RunnerVisual copied = ghost.GetComponentInChildren<RunnerVisual>(true);
+            Assert.That(copied.OpenFace.enabled != copied.ClosedFace.enabled, Is.True, "One face shows, never both or none.");
+        }
+
         [UnityTest, Timeout(60000)]
         public IEnumerator Race_ABrokenGhostFile_RacesWithoutAGhostAndSaysSo()
         {
@@ -817,6 +892,7 @@ namespace ProtoHarness.Tests.PlayMode
         {
             LobbyMenu menu = null;
             yield return Load(LobbyPath, scene => menu = Find<LobbyMenu>(scene));
+            menu.Confirm();
             menu.Confirm();
             menu.Confirm();
             int index = title == "STADIUM" ? 0 : title == "SKYWAY LOOP" ? 1 : title == "FINGER LANES" ? 2 : title == "PALM COAST" ? 3 : 4;

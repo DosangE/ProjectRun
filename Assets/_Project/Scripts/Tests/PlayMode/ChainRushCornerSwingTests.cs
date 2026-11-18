@@ -1,3 +1,4 @@
+using ProtoHarness.ChainRush.Bots;
 using System.Collections;
 using System.Collections.Generic;
 using NUnit.Framework;
@@ -399,6 +400,71 @@ namespace ProtoHarness.Tests.PlayMode
             Assert.That(player.IsSwinging, Is.True, "Letting go of the throttle does not end the swing.");
             Assert.That(game.Racer.SwingHookSpeed, Is.EqualTo(top).Within(1e-4f), "Let go, the hook's speed stays.");
             AssertSwingSpeed(game.Racer.SwingHookSpeed, "let go");
+        }
+
+        // A swing faster than the throttle's 1.2 times the run speed with no booster running — a booster that ended mid-swing, a
+        // pad's speed or a fast entry — keeps none of the extra (user 2026-11-16, "부스트 상태가 아닌 스윙 속도까지 줄어야 한다"):
+        // it wears off by CarryDecay of itself a second, as a let-go swing's carry or a pad's does on the ground. It used to stay
+        // for as long as the key was held. The bench's booster tops out near the throttle's speed, so the hook's speed is set
+        // as a booster on a circuit leaves it (32 m/s against 24 there), the way the contact tests set racer state.
+        [UnityTest]
+        public IEnumerator Swing_FasterThanTheThrottleWithoutABooster_TheExtraWearsOffTowardIt()
+        {
+            Centerline line = CurveRoad();
+            var bot = new TrackFollower(line, player);
+            yield return StartOn(line, bot, OpenHalfWidth, false);
+            yield return RunTo(line, HookS);
+            yield return Hook(bot, 0f);
+            Assert.That(player.IsSwinging, Is.True);
+            Assert.That(game.Racer.SlingTicks, Is.EqualTo(0), "precondition: no booster runs.");
+            float top = player.RunSpeed * 1.2f;
+            float from = top + 8f;
+            game.Racer.SwingHookSpeed = from;
+            const int ticks = 25;
+            for (int i = 0; i < ticks; i++)
+            {
+                yield return new WaitForFixedUpdate();
+                Assert.That(player.IsSwinging, Is.True, "The swing goes on without a booster.");
+                AssertSwingSpeed(game.Racer.SwingHookSpeed, "fast, unboosted for " + (i + 1) + " ticks");
+            }
+            float expected = top + (from - top) * Mathf.Pow(1f - CarryDecay * Ticks.Seconds, ticks);
+            Debug.Log("ChainRush pole swing without a booster: hook speed " + from.ToString("0.00") + " -> " + game.Racer.SwingHookSpeed.ToString("0.00")
+                + " m/s in " + (ticks * Ticks.Seconds).ToString("0.00") + " s (throttle speed " + top.ToString("0.00") + ").");
+            Assert.That(game.Racer.SwingHookSpeed, Is.EqualTo(expected).Within(1e-2f), "The extra wears off by CarryDecay of itself a second.");
+            Assert.That(game.Racer.SwingHookSpeed, Is.GreaterThan(top), "It eases toward the throttle's speed, not below it.");
+        }
+
+        // A booster on a swing already faster than the booster (a pad's speed, 55 m/s on a circuit) does not hold that speed
+        // either (user 2026-11-16, "부스터 사용중이라면 부스터+스윙 최대속도까지 감속"): the part above the booster's own speed
+        // wears off by CarryDecay of itself a second, as without one it wears off toward the throttle's.
+        [UnityTest]
+        public IEnumerator Swing_BoosterOnASwingFasterThanIt_TheExtraWearsOffTowardTheBoostersSpeed()
+        {
+            Centerline line = CurveRoad();
+            var bot = new TrackFollower(line, player);
+            yield return StartOn(line, bot, OpenHalfWidth, false);
+            yield return RunTo(line, HookS);
+            yield return Hook(bot, 0f);
+            Assert.That(player.IsSwinging, Is.True);
+            float boost = player.SlingTopSpeed;
+            float from = boost + 10f;
+            game.Racer.SwingHookSpeed = from;
+            game.Racer.AddGauge(1f);
+            bot.ChainAction = true;
+            const int ticks = 10; // Inside the booster's 0.4 s pull, so the booster's speed is its pull's top speed throughout.
+            for (int i = 0; i < ticks; i++)
+            {
+                yield return new WaitForFixedUpdate();
+                bot.ChainAction = false; // The press fired the booster on the first tick; one booster only.
+                Assert.That(player.IsSwinging, Is.True, "A booster does not end the swing.");
+                Assert.That(game.Racer.SlingTicks, Is.GreaterThan(0), "precondition: the booster runs.");
+                AssertSwingSpeed(game.Racer.SwingHookSpeed, "boosted above the booster for " + (i + 1) + " ticks");
+            }
+            float expected = boost + (from - boost) * Mathf.Pow(1f - CarryDecay * Ticks.Seconds, ticks);
+            Debug.Log("ChainRush pole swing faster than its booster: hook speed " + from.ToString("0.00") + " -> " + game.Racer.SwingHookSpeed.ToString("0.00")
+                + " m/s in " + (ticks * Ticks.Seconds).ToString("0.00") + " s (booster speed " + boost.ToString("0.00") + ").");
+            Assert.That(game.Racer.SwingHookSpeed, Is.EqualTo(expected).Within(1e-2f), "The extra above the booster wears off by CarryDecay of itself a second.");
+            Assert.That(game.Racer.SwingHookSpeed, Is.GreaterThan(boost), "It eases toward the booster's speed, not below it.");
         }
 
         // Held past the arc the runner keeps circling, crosses the straight after it and meets the inside guard there

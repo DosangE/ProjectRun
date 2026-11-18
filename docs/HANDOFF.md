@@ -1,244 +1,96 @@
 # 다음 작업 지시서 (인계)
 
-> 작성 2026-10-05, 갱신 2026-11-09 (1절 맨 위: 효과음 끝, 녹음 실패 경로 수정, 테스트 범위 규칙, codex-unity 서버 이름, Blender 아트 에이전트, `fix/stadium-flicker` 삭제, 남은 M6 마감), 2026-11-05 (1절 맨 위: M6 범위 확정, 태그 M6 = v0.6 · M5 = v0.7, 튜토리얼 추후 목표), 2026-11-04 (1절: 벽·부스터 방향과 조향 감속 병합, 다음 후보), 2026-11-03 (1절: STADIUM 병합, 사용자 답, 다음 — 벽·부스터 방향), 2026-10-30 저녁 (1절 맨 위: 이날 `dev` 에 들어간 것, 테스트 규칙 개정, 다음 후보 — 다른 트랙 장식), 2026-10-30 (1절: 멀티 개발 순서 MP1~MP5·진행 순서 M4 → M6 → M5 → M7, M4 정정, 다음은 M6 새 트랙), 2026-10-28 (1절: 장식·스윙 한도·S자 굽이 병합, 플레이 확인 모음, 다음은 M3 범위 결정), 2026-10-25 (1절: M3 FINGER LANES, 다음은 지름길), 2026-10-25 (1절: M3 속도 단계 코드 끝, 플레이 확인 남음), 2026-10-25 (1절: RF2 `RaceCue` 끝, 리팩토링 RF6 만 보류), 2026-10-25 (1절: 무한 모드·적 삭제, 다음은 RF3 → 객체 분리 RF3b → RF4 → LobbyMenu 조사), 2026-10-23 (1절: M2 끝·main v0.3, 속도 단계 M3 으로, HUD 트랙 이름 버그), 2026-10-22 (1절: 리팩토링 RF1 병합, 다음 작업 목록 정리), 2026-10-20 (1절: 러너 선택창 프리뷰·입장/이전 버튼·일시정지 메뉴 병합), 2026-10-20 (1절: M2-c 설정·러너 디자인 5종 병합, 다음은 러너 선택창 프리뷰), 2026-10-19 (1절 지금 상태: M1 끝·main v0.2, 로드맵 재배치로 다음은 M2 게임의 뼈대), 2026-10-18 (1절 지금 상태: M1 싱글 서킷, R4b·M1-T 앞당김 1·테스트 보류·R4c 병합과 푸시, 다음 후보 목록), 2026-10-18 (1절 지금 상태: M1 싱글 서킷, R4·R5 병합, 다음 R4b 봉 스윙 v2), 2026-10-14 (테스트 3단 규칙·선택 도구 / 2026-10-13: P3 스파이크·C1a 격리 월드·C1b 2인 네트워크 레이스·하네스 훅·C1c-1 런 종료 알림·C1c-1b·예측기 구멍 fix·C1c-2a 순위·C1c-2b 순위 표시·네트워크 레이스 A 기준 fix·C1c-3 진행 중 순위·다른 입력의 두 레이서·같은 시각 출발). 이 문서는 **다음 세션이 이어받을 일**만 적는다. 규칙은 `CLAUDE.md` 와 `docs/RULES/` 가 원본이고 여기서는 § 번호로만 가리킨다. 설계는 `docs/COURSE.md`, 결정 이력은 `docs/DECISIONS.md` 가 원본이다.
+> **다음 세션이 이어받을 일만 적는다.** 규칙은 `CLAUDE.md` 와 `docs/RULES/` 가 원본이고 여기서는 § 번호로만 가리킨다. 결정 이력은 `docs/DECISIONS.md`(이번 달)와 `docs/archive/DECISIONS-<YYYY-MM>.md`(지난 달), 설계는 `docs/DESIGN.md`, 구조는 `docs/ARCHITECTURE.md` 가 원본이다.
 > 이 문서는 구현 승인이 아니다. 다음 작업도 §3-2 합의 요청서부터 시작한다.
-> 작업을 넘길 때마다 이 문서를 갱신한다. 끝난 항목은 지우고 DECISIONS 로 옮겨진 것을 확인한다.
+> 작업을 넘길 때마다 고친다. 고칠 때 볼 것(끝난 항목 지우기 등 ⓐ~ⓓ)과 병합 메시지의 `HANDOFF:` 줄은 `CLAUDE.md` §9-2 가 원본이다. 날짜별 기록을 쌓지 않는다.
+> 2026-11-12 문서 다이어트로 다시 썼다. 그 전 판(2026-10-05 ~ 2026-11-12, 283줄)은 `docs/archive/HANDOFF-2026-11-12.md` 에 그대로 있다.
 
-## 1. 지금 상태 (2026-11-09)
+## 1. 지금 상태 (2026-11-18)
 
-### 2026-11-09 — 다음 세션은 여기부터
+- **마일스톤**: **M5 (v0.7) "같이 달리는 맛" 끝 — `dev` 를 `main` 에 병합하고 태그 `v0.7`** (2026-11-18, DECISIONS "main v0.7", 사용자 "확인했다 병합 태그 푸시 모두 진행"). 병합 커밋은 git 으로 구한다(`git log --merges -1 main`). 다음 태그는 **v0.8 = M7 멀티 재개**(DECISIONS 2026-11-18 "태그: M7(멀티 재개) = v0.8") — 2026-11-12 "방향 재설정" 은 멀티를 v1.0 밖으로 두었으니, v1.0 범위를 다시 정한 것인지는 M7 을 열 때 묻는다. 무엇을 먼저 할지는 2절에서 사용자가 고른다. 순서·완료 조건은 `docs/DESIGN.md` §5-1.
+- **MP2 ④ 봇 난이도 (2026-11-16 `dev` 병합·푸시, 사용자 "병합 푸시 ㄱㄱ")** — `feature/mp2-bot-difficulty`. 난이도 3단계·루프 22회차·스윙 중 부스트 감속·봇 재시도 0.5 s·리뷰 대응. 병합 커밋은 git 으로 구한다(`git log --merges -1 dev`). 상태·결과는 DECISIONS 2026-11-15 "MP2 ④ 봇 난이도", 2026-11-16 "스윙 중 부스트가 끝나면 감속", 회차 기록은 `docs/BOT_TUNING_LOG.tsv`. `ProjectSettings/ProjectSettings.asset` 수정은 에디터 버전 차이(커밋 안 함).
+- **MP2 단계 A·B** (DECISIONS 2026-11-13 "MP2 단계 A", 2026-11-14 "MP2 단계 B", 요청서 `docs/PROPOSAL_MP2_BOT_RACE.md`): 둘 다 `dev` 에 병합하고 origin 에 푸시했다(A `9a43927`, B `325b5c9`). A 사용자 플레이 확인 "다 잘 나왔다", B "플레이 확인했다. 접촉 충돌 잘 되었어."
+- **Codex 샌드박스 계약·무활동 알림** (DECISIONS 2026-11-14 "Codex 샌드박스 계약", "Codex 무활동 알림"): 둘 다 `dev` 에 있다. Codex `-Write` 는 `tools/codex-unity.ps1` 로만 부르고, Unity MCP 승인은 `-Unity` 를 줄 때만 열린다. 기다릴 때는 `tools/codex-wait.ps1` 을 함께 띄운다(§7-5, 4절 "Codex").
+- **건물·벽 부품 원본** (`dev` `1541a24`, 2026-11-14 병합): 같은 작업 트리의 아트 세션이 만든 `art-src/BuildingKit/`(건물 5종, 작은 집~시계탑)·`art-src/FacadeKit/`(창·문·차양·덧문, `docs/ART_REQUEST_PROPS.md` K5 의 부품)을 사용자 지시("아트 리소스 작업한것도 브랜치 파서 푸쉬 병합해줘")로 병합했다. **요청서·DECISIONS 기록이 없고 Unity 반영도 안 했다** — 아트 세션 몫으로 남았다. BuildingKit 은 요청서의 킷 7종(K1~K7)에 없는 킷이다.
+- **v1.0 = PC 싱글 + 봇전(M5 까지), 하네스 실험이 공동 주목적** (DECISIONS 2026-11-12 "방향 재설정"). 멀티(M7)·모바일·아이템전은 v1.0 밖. UI 는 IMGUI 유지, `Runtime/Net/` 은 동결(컴파일만 유지).
+- **MP1 끝** (DECISIONS 2026-11-12 "MP1 구조", "MP1"): 상대마다 서킷 씬 복사본을 격리 로드하고 `Race/RaceField` 가 같은 틱으로 돌린다. 상대 3명을 같이 돌린 플레이어 런이 혼자 런과 비트 일치(서킷 지문 `0xEF92FB76BFD1D767`). `dev` `8ffe3c6` 에 병합(기능 브랜치 `feature/mp1-race-field` `68ded91`), 병합 전 리뷰 지적 중 MP2 로 넘긴 것은 DECISIONS "MP1" 의 "병합 전 리뷰" 줄. 로비는 아직 상대를 주지 않는다 — 플레이로 확인할 것은 MP2 부터.
+- **브랜치**: origin 의 브랜치 현황은 여기 적지 않고 git 으로 구한다(`CLAUDE.md` §9-2 ⓓ) — `git fetch --prune` 뒤 `git branch -r --merged origin/dev`(병합됨)·`git branch -r --no-merged origin/dev`(안 됨). 러너 아트(`art-src/RunnerKit/`, `art-src/Runner/` 5종·①② 두 판·헬멧·OMEGA 빨강 바이저, 요청서 `docs/ART_REQUEST_RUNNER.md`)는 `dev` 에 있다. 병합하지 않고 남겨 둔 origin 브랜치 `docs/mp2-contact-brief` 는 MP2 단계 B Codex 지시서 `docs/CODEX_MP2_CONTACT.md` 의 실행 전 사본 하나다. 스파이크 `spike/mp1-isolated-worlds` (`57c54f4`, 복사본 1·4·8개 비용 측정 `ChainRushWorldCostTests`)는 C:/Users/User/Desktop/PCUBE PC 의 로컬에만 있고 `dev` 에 병합하지 않는다 — 프레임을 다시 잴 때·8인으로 늘릴 때 쓴다.
+- **두 환경이 같은 작업을 한 일 (2026-11-14)**: D:/PCUBE 세션이 HANDOFF 2절 1번(MP2)을 처음부터 다시 구현했다 — 다른 환경의 단계 A 가 아직 푸시되지 않았었다. 그 작업은 `git stash` 로 D:/PCUBE 에 보관했다(`stash@{0}` "MP2a 중복 구현", 쓸 일이 없으면 지운다). 남길 값은 아래 2절 1번의 지름길 봇 랩타임뿐이다. 큰 구현을 시작하기 전에 다른 환경에 푸시하지 않은 같은 작업이 있는지 사용자에게 묻는다.
+- **플레이 확인 (2026-11-17 사용자 "플레이는 다 확인했다. 다른 곳에 작업중인 것도 없다")**: 그때 대기 중이던 것 — 로비 새 초상·키운 프리뷰, 스윙 중 부스트 감속, K3 잎, SUMMIT 지름길 표지판 화살표, 튜토리얼 그림 — 을 확인했다는 말이다. 표지판 화살표가 어느 쪽이었는지와 튜토리얼 그림 두 문제(2번 회전 그림의 호가 러너에서 시작하지 않음, 이동 스테이지에도 봉 표시)를 고칠지는 답에 없다 — 해당 작업을 할 때 묻는다. 러너끼리 부딪칠 때 움찔(봇전 4명)과 열린 얼굴 고스트도 2026-11-17 "확인했다"(DECISIONS 2026-11-17 "러너 캐릭터 Unity 반영 3·4단계"). v0.7 마일스톤 때 보기로 한 것(D8 유령, MP2 ④ 감속 재확인)은 2026-11-18 확인했다(DECISIONS "main v0.7").
+- **2026-10 에 답을 받지 못한 플레이 확인** (그 뒤 조작이 여러 번 바뀌어 다시 물을지는 사용자 몫): SKYWAY 2랩·고가 직선 슬라럼(봉 간격 40 m·걸리는 거리 16 m·한 번에 ⅓칸), 코너 중간 Shift·후진 중 봉 걸림, ↓ 후진 6 m/s·스윙 중 ↑, 그래플 거는 구간(좁으면 `GrappleController.minHangHeight` 1.05 를 낮춘다), 다른 러너로 매우빠름·STADIUM 에서 고스트가 보이는지.
 
-- **M6 사운드 구분 끝 (`feature/m6-sound-cues`, `dev` `4929f73` 병합·푸시, DECISIONS 2026-11-07 "효과음")**: 부스터 "카트 터보"·부스트존 "패스바이" 는 시청 페이지에서 사용자가 고른 합성음, 봉 걸림·그래플·스윙 루프는 Freesound CC0 녹음(`Assets/_Project/Audio/Chain_*.mp3`, 출처는 그 항목). 사용자 "확인했다 커밋 푸쉬 진행", "튜토리얼도 확인했다병합도 해"(튜토리얼 목표 달성음 1.2초 화음 포함). 녹음은 들은 그대로 128 kbps 미리듣기 MP3 다 — 음질이 문제되면 원본 WAV(Freesound 로그인)로 바꾸고 씬 참조를 다시 연결한다.
-- **녹음 실패 경로 (`fix/audio-recording-failures`, `dev` `59de06d` 병합·푸시, DECISIONS 2026-11-09 "녹음을 못 쓰면")**: 녹음이 비었거나·가져오기 설정이 틀렸거나·짧거나·(스윙 구간이) 무음이면 필드 이름과 이유를 남기고 끈다, 꺼진 뒤 호출은 한 번 알리고 무시한다. 남긴 리뷰 제안(그 항목): `loadType` 메시지 중복, `Update` 의 `initialized` 가드, `UnloadAudioData`(스윙 원본 약 5 MB), WebGL 의 `GetData`(미확인).
-- **테스트 범위 규칙 (`docs/test-scope-since-last-pass`, `dev` 병합·푸시, VERIFICATION §4-4, DECISIONS 2026-11-09 "테스트 범위: 마지막 통과 이후")**: 테스트를 걸기 전에 "마지막 통과 실행 → 그 뒤 바뀐 `Assets/` 파일 → 읽는 테스트" 한 줄을 먼저 쓴다. 바뀐 것이 없으면 돌리지 않는다. 사용자 "반복해서 범위를 과하게 설정하는 것 방지해보자 제발".
-- **`tools/codex-unity.ps1` (`fix/codex-unity-server-name`, `dev` `a4fb3eb` 병합·푸시, DECISIONS 2026-11-07 "codex-unity")**: 서버를 이름(`unity_mcp`/`unity-mcp`, PC 마다 다름) 대신 relay 를 실행하는 서버로 찾는다. 출력은 파이프로 묶지 말고 파일로 받는다(브로커가 파이프를 물려받아 실패가 안 보인다).
-- **Blender 아트 에이전트 (다른 세션, `docs/blender-art-agent`, `dev` `60b5c2c`, DECISIONS 2026-11-09 "Blender 아트 에이전트")**: `blender-artist` 는 `art-src/` 까지만 쓴다. 첫 모델 요청서·FBX 축/스케일·Unity 임포트·`select-tests` 판정표는 그 항목 "남은 것" 에서 따로 합의한다.
-- **`fix/stadium-flicker` 삭제**: 사용자 "더이상 안깜빡인다 삭제 ㄱ". `dev` 의 LED 수정(2026-11-06 "플레이 피드백")으로 충분했다. 허들·축구장 라인 수정(`38f418a`)은 버렸다 — reflog 에만 남는다.
-- **같은 작업 트리를 다른 세션이 쓸 수 있다**: 2026-11-09 리뷰 도중 아트 세션이 `docs/blender-art-agent` 를 체크아웃했고 Unity 에디터도 닫혔다. 브랜치를 바꾸기 전에 `git branch --show-current`·`git status` 로 다른 세션의 커밋 안 한 파일이 없는지 본다.
-- **`dev` 병합**: 훅은 `dev`/`main` 에서의 `git commit` 만 막는다. `git switch dev` 뒤 `git merge --no-ff <브랜치> -F <메시지 파일>` 은 막지 않는다(2026-11-09 `f740b46`). 충돌이 나면 `git commit` 으로 마무리할 수 없으니, 기능 브랜치에 `dev` 를 먼저 병합해 거기서 풀고 나서 병합한다.
-- **테스트 실행 기록 (`docs/test-run-records`, `dev` `ffbbe63` 병합·푸시, DECISIONS 2026-11-09 "테스트 실행 기록")**: 테스트가 끝나면 `& .\tools\test-runs.ps1 -Record -Xml <XML> -Filter "<필터>" -StartedAt <시작 직전 시각>`, 다시 돌릴 범위는 `-Last -Passed` 로 본다(VERIFICATION §4-4). v0.6 마일스톤 실행 6건으로 실제 Unity 실행 직후 기록을 처음 확인했다(DECISIONS "main v0.6"). 후속 후보: `TestCallbacks` 가 실행마다 다른 XML 경로에 쓰기(`Assets/`, 합의 필요).
-- **기획 에이전트 (`docs/gameplay-designer-agent`, DECISIONS 2026-11-09 "기획 에이전트")**: `gameplay-designer` 는 읽기 전용(Read·Grep·Glob), 플레이 피드백 → 가설·변경안·플레이테스트 설계·요청서 초안. 첫 적용이 `docs/PLAYTEST_SUMMIT_DROP.md` 다. 플레이 결과로 후보를 좁힐 때 이 에이전트를 보낼지는 사용자가 정한다(§7-3).
-- **Blender 시험 제작 (`feature/art-shortcut-sign`, DECISIONS 2026-11-09 "Blender 시험 제작")**: 지름길 표지판 FBX(`Assets/_Project/Art/Models/ShortcutSign.fbx`, 원본 `art-src/ShortcutSign/`)를 Unity 에서 확인했다. FBX 는 `use_selection=True, apply_scale_options='FBX_SCALE_ALL', bake_space_transform=True` 로 내보내야 루트가 회전 0·스케일 1 이다. Blender 앞면(−Y) → Unity +Z. 트랙에는 아직 배치하지 않았다.
-- **SUMMIT DROP 플레이 확인 끝**: 사용자 "플레이 결과 괜찮았다"(2026-11-09). 표지판 화살표가 실제로 어느 쪽이었는지는 답을 받지 못했다.
-- **M6 마감 (`feature/m6-release-prep`, DECISIONS 2026-11-09 "main v0.6")**: 완료 조건 확인(소리·SUMMIT DROP·빌드 "확인했다. 괜찮다")과 마일스톤 조건 ③(`a30b540`: EditMode 394·게이트 299 ×2·Device 3, 모두 통과, 지문 `0xEF92FB76BFD1D767`)이 끝났다. 1차 게이트에서 드러난 R30 테스트(2026-11-04 사양 변경 때 빠진 쌍둥이 테스트)를 고쳤다. 남은 것은 `dev → main` `--no-ff` 와 태그 `v0.6`, 푸시 — 사용자 지시 때.
-- **다음 (M6 뒤)**: 진행 순서는 M5(v0.7) — `DESIGN.md` §5-1. 그 전에 정리할 후보: 표지판 화살표 방향(답 없음), 병합된 브랜치 정리, `unity-explorer`·`unity-reviewer` 의 Bash, select-tests 하한 규칙과 실제 실행 범위, FBX 복사 → 임포트 → 확인 → 렌더 도구, 튜토리얼 후속 ①~⑦, 녹음 리뷰 제안 4건.
-- **stash 는 없다**: 사용자 "스태쉬 남아있다면 제거"(2026-11-09). `sound round 1`(첫 효과음 시도, `96919af`)과 GitHub Desktop 의 `feature/circuit-fall-respawn`(제안서 3개는 이미 `dev` 에 있었다, `993b952`)을 지웠다. `docs/NEXT_REQUESTS.md` "M6 효과음 2차" Codex 지시서는 쓸 일이 끝났다.
+## 2. 다음 작업 (각각 §3-2 요청서부터, 사용자가 고른다)
 
-### 2026-11-06
+0. **v0.7 끝 (2026-11-18, DECISIONS "main v0.7")** — 다음 마일스톤은 정하지 않았다. v0.8 = M7 멀티(8번)를 열지, 싱글 다듬기(2~6번)를 먼저 할지 사용자가 고른다. `docs/DESIGN.md` §5-1 표에는 M5 뒤 싱글 마일스톤이 없다 — M6 에서 뺀 헤어핀·그래플 트랙과 종합 맵은 "M5 뒤, 마일스톤 미정"(같은 문서 "M6 에서 뺀 것"). MP3 는 재생만 끝났고 여러 레이서 롤백은 M7 이다(DECISIONS 2026-11-18 "MP3 범위").
 
-- **튜토리얼 (`feature/tutorial-stages`, `dev` 병합, 푸시는 지시 때, DECISIONS "튜토리얼")**: 메인 메뉴의 튜토리얼 줄, 스테이지 6개, 그림이 있는 설명 팝업, 원형 미션 맵(평행 격자, 바닥 어디서나 스윙), 완료 팝업. 사용자가 고저차 트랙보다 먼저 하기로 했고 마일스톤 밖이다. 사용자 "ㅇㅋ 괜찮의 커밋 병합 진행".
-- **튜토리얼 후속 (병합 전 `unity-reviewer` 제안, 막히는 경로 없음, 코드 변경은 테스트를 다시 돌려야 해 남겼다)**: ① 6번에서 첫 목표 동안 스윙으로 게이지를 채우고 놓으면 Release 목표에 끝낼 스윙이 없다(다시 걸었다 놓으면 풀린다, `TutorialCourse.cs:177-179`) ② 줄 5 m 감기는 봉 8 m 안에서 건 줄로는 안 된다(`:161`) ③ `TryDress` 실패 때 고리가 해제되지 않는다(`RaceAssembler.cs:113,129`, `setup.Mode` 로 판단) ④ 주석이 코드와 다르다(`TutorialDirector.cs:8-9`, `ChainRushHud.cs:147`) ⑤ `ChainRushHud.cs:595` 숫자가 상수를 베꼈다 ⑥ `GoalColor`·`BeaconColor` 중복, `Part`·`VisualPart` 중복 ⑦ 튜토리얼 테스트 이름이 2단(§1-3). 그림 쪽 사용자 판단 대기: 2번 회전 그림의 호가 러너에서 시작하지 않음, 이동 스테이지에도 봉 표시가 떠 있음.
-- **다음 작업 방식 (사용자 2026-11-06)**: "다음 작업 codex, mcp로 하겟다". 구현·검증은 Codex 가 Unity MCP 로 하고 Claude 는 리뷰한다. 무슨 작업인지는 사용자가 다음 세션에서 말한다. 실행은 `tools/codex-unity.ps1 -PromptFile <파일> -Write`(`docs/RULES/SUBAGENTS.md` §7-5).
-- **Codex 의 Unity MCP**: 사용자가 그 작업에서 허락할 때만 연다(§7-5). "codex로 구현" 만으로는 허락이 아니다.
-- **`dev` 에 병합·푸시 (`feature/m6-swing-effects`)**: 봉 체인 18 m, 봉 스윙 이펙트(불꽃·줄 끊김), 상태별 꼬리, 흰 바람 선. DECISIONS 2026-11-06 두 항목. M6 "봉 스윙 이펙트" 는 끝났다. 시야와 플레이어 빌드는 M6 마감 때 다시 본다.
-- **고저차 트랙 `SUMMIT DROP` (`feature/m6-open-course`, DECISIONS 2026-11-06 "열린 코스와 1랩 다운힐")**: 열린 코스 구조, 1랩 다운힐 트랙, 숲과 바위 산악 장식. `dev` 병합, 푸시는 지시 때. 사용자 플레이 확인 대기(코스 리듬, 틈 점프·지름길 난이도, 벽 색과 큰 바위 모양). 리뷰 후속은 그 DECISIONS 항목.
-- **속도 km/h·카운트다운 연출 (`feature/hud-kmh-countdown`, `dev` 병합, 푸시는 지시 때, DECISIONS 2026-11-06 "속도 표시는 km/h")**: 표시만 km/h 로 바꿨고 시뮬은 m/s 다. 3·2·1·GO! 는 Bahnschrift 로 큰 글자가 줄어들며 나온다. 선택 테스트 13건 통과.
-- **플레이 피드백 (`fix/playtest-visuals`, `dev` 병합·푸시, DECISIONS 2026-11-06 "플레이 피드백", "IMGUI 글자")**: 흰 글자 버그, 카운트다운 탁한 색, 스타디움 LED 깜빡임, SUMMIT DROP 도로 위 봉 3개 삭제, 뜬 봉 4개 아래 바위 기둥. 사용자 "확인했다". 지형에 묻힌 봉 6·10·11·12 번은 게이지 때문에 그대로 둔다(DECISIONS "묻힌 코너 봉"). ~~후속: 다른 PC 의 `fix/stadium-flicker` 와 겹치는지 확인.~~ → 2026-11-09 겹치는 LED 부분은 `dev` 쪽이 맞았고 브랜치는 지웠다(위).
-- **남은 M6 필수**: ~~사운드 구분(1차 코드 `feature/m6-sound-cues`·`fix/stadium-flicker`·stash 는 다른 PC 에 있다, 이 PC·origin 에 없음을 2026-11-06 확인)~~ → 2026-11-09 끝(위). 1차 코드와 stash 는 이 PC 에 있었다. 고저차 트랙은 `SUMMIT DROP` 으로 코드·장식까지 끝났고 사용자 플레이 확인이 남았다.
-- **같은 날 `dev` 에 병합·푸시**: `fix/exterior-save-order`(장식 빌더가 검사를 통과한 뒤에만 메시를 저장한다 — 장식 빌더 후속 ①), `docs/runner-model-temporary`(캐릭터 모형은 임시용). 앞의 것은 STADIUM·SKYWAY 재빌드와 강제 실패로 확인했고(실패한 빌드가 메시를 다시 쓴 수 21 → 0), FINGER·PALM COAST 재빌드와 메시 에셋을 처음 만드는 경로는 돌리지 않았다.
-- **장식 재빌드**: 2026-11-06 STADIUM·SKYWAY 재빌드에서 프리팹 로컬 fileID 가 새로 나와 큰 diff 가 생기고(ID 를 지우면 내용은 같다), `TrackLook` 에 `music`·`ambience` 빈 줄이 붙었다. 내용이 같으면 커밋하지 않는다.
+1. **MP2 — 남은 것까지 `dev` 병합 끝** (`feature/mp2-remaining`, DECISIONS 2026-11-17 "MP2 남은 것", 요청서 `docs/PROPOSAL_MP2_REMAINING.md`): 8인 보류(사용자 "현상유지인 4인"), D8 은 복귀 대기(깜빡임) 중인 러너가 러너 접촉에서 빠진다(벽은 그대로 막힌다, `RaceField.ResolveContact`), 드로 배치 측정 끝. 접촉 테스트는 러너를 세울 때 대기 대신 `Contact()`(접촉 패스만)를 쓴다 — 새 접촉 테스트도 그렇게 쓴다. 사용자 플레이 확인은 v0.7 마일스톤 때 받았다(DECISIONS 2026-11-18 "main v0.7"). 원래 요청서 `docs/PROPOSAL_MP2_BOT_RACE.md`, B 리뷰에서 두고 온 제안은 DECISIONS 2026-11-14 "MP2 단계 B" 의 "두는 것" 줄.
+   - **④ 봇 난이도 + 자동 개선 루프 — `dev` 병합 끝** (1절, DECISIONS 2026-11-15 "MP2 ④ 봇 난이도", 2026-11-16 "스윙 중 부스트가 끝나면 감속"). 고스트 비교 → 회차 20·21 폐기 → 회차 22 `HoldThroughCorner` 채택(Hard SUMMIT 68.96 s, 사람 64.94 s, Normal 과 9~22% 차이). 사용자 플레이 "난이도는 그렇게 큰 부담이 없어보인다" → 프리셋 그대로. 플레이 피드백으로 스윙 중 부스트 감속(부스터 없음 → 24, 부스터 중 → 32 까지)·봇 재시도 0.5 s 를 넣었고, 리뷰(Codex·`unity-reviewer`) 대응과 `ShortcutBot` 테스트 폴더 복귀까지 끝(같은 항목 "병합 전 리뷰").
+     - 부스트존 → 스윙 → 부스터 감속 체감은 v0.7 마일스톤 때 확인했다(DECISIONS 2026-11-18 "main v0.7").
+     - 두고 온 것(리뷰 제안, 같은 항목 "두는 것"): 지름길 두 번째 스윙 조건 상한(`RaceBot.cs`), `RaceField` 의 `RaceBot` 구체 타입 의존, `BotTuning.For`, 기술 플래그 리플렉션 검사 등. Normal PALM 이 감속 규칙 뒤 빨라진 원인 미확인.
+     - 다시 잴 때는 `BotLapBenchTests.Trace_SummitDropVsGhost(Hard)`·`Trace_Solo(<트랙>,<난이도>)` + scratchpad 분석(경로 대응은 S 가 아니라 3D 위치로).
+     - 루프 방법(이번에 쓴 것): 회차마다 `BotTuning.cs` 프리셋 한 줄 수정 → `AssetDatabase.Refresh` → `Editor.log` 의 새 `Tundra build` 줄 → `TestRunnerApi` 로 `BotLapBenchTests.Solo_FiveTracks(<난이도>)`·`Race_FourSeedsTwoTracks(<난이도>)`(testNames 전체 이름 — `[Explicit]`) + `RaceBotTests` + 지문 테스트 → `Path.GetTempPath()/ChainRush-BotBench.tsv` 로 판정 → `docs/BOT_TUNING_LOG.tsv` 한 줄. 판정 보조 스크립트는 이전 세션 scratchpad 에만 있었다(`bt.py`, 지워질 수 있음 — 규칙은 DECISIONS 와 위 줄이 원본). Codex 로 돌리면 `Editor.log` 를 못 읽으니 컴파일은 `EditorUtility.scriptCompilationFailed` + Console 로(지시서 `bd3` 방식). **매 테스트 실행을 `test-runs.ps1 -Record` 로 남긴다**, 루프 중에도 EditMode 를 돌린다(2026-11-15 빠뜨려 `BotTuningTests` 실패를 늦게 봤다).
+2. **러너 캐릭터 Unity 반영 — 3·4단계** (1·2단계는 `dev` 병합 끝, DECISIONS 2026-11-16 "러너 캐릭터 Unity 반영 1·2단계", 요청서 `docs/PROPOSAL_RUNNER_UNITY.md` 2절 7항목 + 8·9 는 사용자 승인 2026-11-16 "전부 추천대로"): ② 발바닥 수평 FBX·Animator·`RunnerLook.Apply(RunnerVisual, RunnerVisual, bool)`·프리팹 6개 재구성(에디터 메뉴 `Build Runner Visuals`, 다시 돌려도 같다)·로비 초상(`Rebuild Runner Lobby Portraits` → `T_RunnerNightAtlas.png`)·프리뷰 확대까지 끝났고 사용자 플레이 확인 "괜찮네". **3·4단계 코드 부분은 `feature/runner-unity-bump` 로 `dev` 병합 끝** (DECISIONS 2026-11-17 "러너 캐릭터 Unity 반영 3·4단계", 사용자 플레이 "확인했다"): 러너 간 접촉 Bump(`RaceField.ContactSequence` — 접촉이 시작된 틱에만 +1, `RunnerAnimation.BindField`), 고스트 Animator 정지·얼굴 복사(열린 얼굴이 닫힌 얼굴로 나오던 버그 수정), `select-tests.ps1` 러너 에셋 줄. 병합 전 리뷰(Codex·`unity-reviewer`)는 돌리지 않았다 — 원하면 `dev` 의 그 병합을 대상으로 돌린다. ⑥ 옛 모형 에셋 28개는 지웠고(DECISIONS 2026-11-17 "옛 러너 모형 에셋 28개 삭제"), ⑤ 드로 배치 측정은 2절 1번 요청서의 ④ 로 옮겼다. **확인 못 한 것**: 로비 러너 선택 화면에서 새 초상과 키운 프리뷰가 어떻게 보이는지(파일 픽셀만 측정, 윤곽이 계단질 수 있다 — 거슬리면 빌더 상수로 조정), URP 바이저 광택(Smoothness 0.88·Metallic 0.35 시작값, Coat 미반영), 키 사이 보간의 접지·발 미끄럼·OMEGA 어깨 관통, Animator 평가 → 줄 갱신 프레임 순서 실측, 왼쪽 봉에서 오른쪽 원본 포즈·`PoleSwingEdge` 비교, 열린 얼굴(`RaceAssembler.openFace` 직렬화 값, 로비 선택 UI 는 없다). 씬을 에디터가 저장하면서 TestBench 의 오래된 직렬화 값 28줄이 정리됐다(동작 같음).
+3. **아트 후속**:
+   - **K1 RoadsideKit 3·4차 — `dev` 병합 끝** (DECISIONS 2026-11-16 "K1 RoadsideKit 3·4차: PALM COAST·SUMMIT DROP 코너 화살표판"): 코너 화살표판 네 트랙이 모두 킷 메시다(FINGER·SKYWAY·PALM·SUMMIT). 남은 것은 SUMMIT 지름길 표지판 `Beam("Arrow")` 의 킷 교체(별도 작업, 1절 "대기 중인 플레이 확인" 의 화살표 방향 확인과 같이 본다). PALM 렌더러 5,319.
+   - **K5 FacadeKit·BuildingKit**: 보류였는데 원본이 먼저 생겼다(1절). 쓰려면 먼저 사용자가 정한다 — 어느 트랙의 어떤 건물을 바꿀지, BuildingKit 을 요청서에 킷으로 넣을지. 그 뒤 요청서·DECISIONS 기록 → 4절 "장식 킷" 흐름.
+   - K2·K7·K6 은 보류.
+4. **측정**: 트랙별 프레임·드로콜(PALM 렌더러 5,319, DECISIONS 2026-11-16 "K1 RoadsideKit 3·4차"; STADIUM 정점 약 98만, 재지 않음), MP1 복사본 프레임(에디터가 포커스 밖이라 판정 못 함 — Unity 창을 앞에 두고), 플레이어 빌드.
+5. **서킷에서 쓰지 않는 코드 정리**: 공격 입력·체력·`CourseTarget`·`RunRules` 의 공격 값·`Enemy` 테스트 — 아이템전이 v1.0 밖이라 쓸 곳이 없다(삭제는 합의 대상). 키 안내의 `SPACE 공격` 은 화면에서 지웠지만 입력은 아직 스페이스를 읽는다(DECISIONS 2026-11-18 "화면 텍스트 정리").
+6. **작은 후속 (`fix/` 로 묶는다, 테스트 필요)**
+   - 튜토리얼 리뷰 후속 ①~⑦ (2026-11-06 `unity-reviewer`): ① 6번 스테이지에서 첫 목표 동안 스윙으로 게이지를 채우고 놓으면 Release 목표에 끝낼 스윙이 없다(다시 걸었다 놓으면 풀린다, `TutorialCourse.cs:177-179`) ② 줄 5 m 감기는 봉 8 m 안에서 건 줄로는 안 된다(`:161`) ③ `TryDress` 실패 때 고리가 해제되지 않는다(`RaceAssembler` 의 `TryDress` 호출, `setup.Mode` 로 판단) ④ 주석이 코드와 다르다(`TutorialDirector.cs:8-9`, `ChainRushHud.cs:147`) ⑤ `ChainRushHud.cs:595` 숫자가 상수를 베꼈다 ⑥ `GoalColor`·`BeaconColor` 중복, `Part`·`VisualPart` 중복 ⑦ 튜토리얼 테스트 이름이 2단(§1-3). 줄 번호는 2026-11-06 기준.
+   - 녹음 리뷰 제안 4건 (DECISIONS 2026-11-09 "녹음을 못 쓰면"): `loadType` 메시지 중복, `Update` 의 `initialized` 가드, `UnloadAudioData`(스윙 원본 약 5 MB), WebGL 의 `GetData`(미확인).
+   - `tools/select-tests.ps1` 기본 범위가 C:/Users/User/Desktop/PCUBE PC 에서 `packages-lock.json` 의 CRLF 경고(stderr)로 멈춘다(`$ErrorActionPreference = 'Stop'`, `Invoke-GitLines`). 지금은 `$env:GIT_CONFIG_PARAMETERS = "'core.safecrlf=false'"` 로 돌린다(DECISIONS 2026-11-17 "러너 캐릭터 Unity 반영 3·4단계" 의 "확인 못 한 것" ③).
+   - `TestCallbacks` 가 실행마다 다른 XML 경로에 쓰기(지금은 한 파일을 덮어쓴다, `ChainRushSceneBuilder.cs` 의 `TestCallbacks`).
+   - FBX 복사 → 임포트 → 확인 → 렌더 도구, 지름길 표지판(`ShortcutSign.fbx`) 트랙 배치.
+   - 출발 전 화면(씬을 직접 열 때만, `ChainRushHud.DrawReady`): 위쪽 문구를 지워 상단이 비고, 옛 직선 코스 안내(`496m`, `약 50초 · 체력 3칸`)가 남았다(DECISIONS 2026-11-18 "화면 텍스트 정리" 의 "두는 것"). 남은 채움 설명 문장(난이도·속도·메인 메뉴)은 사용자 "얼추 유지".
+7. **하네스·규칙 후보 (`.claude/`·`tools/` 변경, 따로 합의)**:
+   - Codex 샌드박스 계약에서 확인 못 한 것(DECISIONS 2026-11-14): 10 뒤의 `-ResumeLast` 이어 가기, 실제 사용량 소진 때의 출력. 다음 Codex 쓰기 작업에서 처음 겪을 때 결과를 그 항목에 덧붙인다. 12 뒤(`docs/codex-blender`)와 11 뒤 이어 가기·`-Unity` 실제 실행(MP2 단계 B, `docs/readonly-agents` 가 덧붙임)은 확인해 그 항목에 덧붙였다.
+   - 무활동 알림에서 확인 못 한 것(DECISIONS 2026-11-14 "Codex 무활동 알림"): 실제 Codex 실행이 10분 넘게 조용했을 때의 3, 자정을 넘는 실행.
+   - Codex 직접 사용 때 `codex -c mcp_servers.blender.enabled=true`(§7-5, DECISIONS 2026-11-14 "Codex 직접 사용 때 Blender MCP"): 대화형 세션에서 Blender 도구가 실제로 불리는지 미확인. 사용자가 처음 써 본 결과를 그 항목에 적는다.
+   - D:/PCUBE PC 의 Codex 설정에 Unity relay 서버가 둘이라 `-Unity` 가 실패하던 일(DECISIONS 2026-11-14 "Codex 의 Blender MCP" 발견): 그 뒤 MP2 단계 B 가 그 PC 에서 `-Write -Unity` 로 돌았다(DECISIONS "MP2 단계 B" 의 "진행"). 설정을 어떻게 고쳤는지는 기록이 없다 — 다시 "found 2" 가 나오면 사용자에게 묻는다.
+   - 리뷰어 diff 파일 전달에서 확인 못 한 것(DECISIONS 2026-11-15 "읽기 전용 에이전트의 Bash"): 작업 트리 = HEAD 인 실제 "그 밖" 병합 리뷰. 다음 `Assets/` 병합에서 파견문에 diff 파일 경로·base·HEAD 를 적고(SUBAGENTS §7-1) 결과를 그 항목에 덧붙인다.
+   - 그 밖의 후보: `select-tests` 하한 규칙과 실제 실행 범위, SessionStart `resume` 트리거 미확인, 서브에이전트 안의 훅은 Bash deny 만 확인됨, 파견 0~1건인 에이전트 3종(`unity-explorer`·`unity-architect`·`unity-verifier`, DECISIONS 2026-11-13 "하네스 비용 기준선").
+   - **게이트의 패키지 경고** (DECISIONS 2026-11-18 "main v0.7" 의 1회차): MCP 패키지 `com.unity.ai.assistant` 가 도메인 리로드 약 30초 뒤 `Account API did not become accessible within 30 seconds…` 경고를 남기고, 그때 `LogAssert.NoUnexpectedReceived()` 를 부르는 테스트(`ChainRushBotRaceTests` TearDown 등)가 돌면 실패한다. 포커스·로그인은 원인이 아니었고 `CloudProjectSettings.organizationId` 가 비어 있다 — 어느 접근 조건이 거짓인지 미확인. 고칠 길(테스트 로그 검사에서 이 패키지 경고만 빼기, Unity 계정·조직 연결)은 각각 합의 대상(테스트 변경 §0, 설정). 다시 실패하면 같은 원문인지 보고 이 줄에 덧붙인다.
+   - **재측정** (사용자 2026-11-13 "다 네 추천대로 ㄱㄱ"): **2026-11-27 이후, 그리고 2026-11-13 이후 시작한 세션이 10개 이상일 때** `python -I tools/harness-cost.py --since 2026-11-13` 으로 돌려 DECISIONS "하네스 비용 기준선" 의 표와 비교하고, 결과를 같은 항목에 덧붙인다.
+     - 비교할 것: 요청당 컨텍스트 중앙값, 20만 넘는 요청의 입력 몫, 조회 분류. 세션마다 작업 종류(코드·아트·문서)를 붙여 같은 종류끼리 본다.
+     - B모드 부작용: 인덱스를 내린 뒤 `.cs` Read 가 늘었는지 본다(기준선 385).
+     - **먼저 할 것 (도구 변경, §3-2 합의)**: 지금 도구는 세션 경계 규칙(`CLAUDE.md` §8)이 지켜졌는지 세지 않는다 — 보고에 `새 세션 권장:` 이 붙은 횟수와, 그 뒤 실제로 새 세션이 시작됐는지를 지표로 넣는다.
+8. **M7 (v1.0 밖, 다시 열 때 볼 것)**: R2 브랜치의 예측기 고장 기록, P3 C1 마무리 측정(3인 이상·100 ms 체감·패킷 유실·모바일/IL2CPP), 롤백 재실행 중 효과음(`docs/NEXT_REQUESTS.md` RF2 결정 2-1), `NetEndReplay` 테스트 탐색 다시 짜기(`CLAUDE.md` §9-2), C1c 의 따라잡기 S+L 상한 시험. MP1 이 격리 월드라 서버를 공유 월드로 다시 짤 필요는 없어졌다.
 
-### 2026-11-05
+## 3. 사용자에게서 아직 받지 못한 것
 
-- **소리 (DECISIONS 2026-11-05 "트랙별 소리")**: FINGER LANES 음악·환경음만 `dev` 에 들어갔다. STADIUM·SKYWAY·PALM COAST 소리는 사용자가 "별로다" — 다시 만든다.
-- ~~**효과음은 `feature/m6-sound-cues` 에서 계속**:~~ → 2026-11-09 끝(위, DECISIONS 2026-11-07): 부스터는 제트 소리(지지직 금지), 부스트존은 속도감 있는 하이톤, 스윙은 체인·금속(또르르륵 금지). 참고 측정은 같은 DECISIONS 항목. Codex 지시서는 `docs/NEXT_REQUESTS.md` "M6 효과음 2차" 에 있고 **대기 중이다**(사용자가 보내라고 할 때까지 보내지 않는다).
-- ~~**`fix/stadium-flicker` (`38f418a`) 는 플레이 확인 대기**: 병합·푸시 안 했다.~~ → 2026-11-09 지웠다(위).
-- 첫 소리 시도의 코드와 세 트랙 WAV 는 stash `sound round 1` 에 있다(로컬).
+플레이 확인 대기는 1절 끝에 있다(`gameplay-designer` 가 1절을 읽는다).
 
-- **M6 범위 확정 (DECISIONS 2026-11-05 "M6 범위", `DESIGN.md` §5-1)**: 사운드 구분, 봉 스윙 이펙트, 고저차 트랙 1개. 완료 조건은 표의 M6 칸(플레이어 빌드 1회 포함). 태그는 M6 = v0.6, M5 = v0.7.
-- **튜토리얼**: 추후 목표, 마일스톤 미정(`DESIGN.md` §10-3).
-- **받은 답**: 벽 스침·벽 후진 "플레이확인했다". `pole 0` 에러는 "모른다" — 다시 나오면 본다(아래 11-04 줄). `fix/title-version` 은 로컬에서 지웠다.
-- **다음 후보 (사용자에게 묻는다, 각각 §3-2 요청서부터)**: ① 사운드 구분 ② 봉 스윙 이펙트 ③ 고저차 트랙(장식 전에 장식 빌더 후속 ① 권장) ④ 선택: 장식 빌더 후속, PALM COAST 구간별 바닥, `turnSpeedLossScale` 제거(씬 값 저장이 먼저, 사용자 몫). 셋이 끝나면 M6 마감(③ 조건 + 빌드 확인). 그때 `TitleScreen.Version` 을 0.6 으로 올린다.
+- **다시 만들 것**: STADIUM·SKYWAY·PALM COAST 트랙 소리(2026-11-05 사용자 "별로다", FINGER LANES 만 들어갔다). PALM COAST 구간별 바닥 2단계(마을 돌길, 다리 콘크리트)는 후보. 쇠사슬 효과음 3개는 들은 그대로 128 kbps 미리듣기 MP3 다 — 음질이 문제되면 원본 WAV(Freesound 로그인)로 바꾸고 씬 참조를 다시 연결한다(DECISIONS 2026-11-07 "효과음"). SUMMIT DROP 리뷰 후속은 DECISIONS 2026-11-06 "열린 코스와 1랩 다운힐".
+- **씬 값 저장 (사용자 몫, 에디터에서)**: `ChainRushCircuit`·`ChainRushTestBench` 의 `turnSpeedLoss` 를 0.1 로 저장하면 `RunnerMotor.turnSpeedLossScale` 을 지울 수 있다(지금 인스펙터 0.2 × 배율 0.5). 두 씬의 `slingTurnRate: 90` 줄은 다음 저장 때 사라진다.
+- **보류된 설계 결정**: 헤딩 범위 제한(계속 꺾으면 뒤로도 돈다 — 막을지 미정, DECISIONS T2a).
+- **한 번 본 에러 (원인 미확인)**: `TrackDefinition: pole 0: the offset -20 must be within the road (6.0 m there).` (2026-11-04 14:18:29, Codex 수정 직후 1건, 재컴파일에서 다시 안 나옴). 다시 나오면 본다.
+- **지울 브랜치**: 2026-11-15 사용자 "작업 끝난 브랜치 삭제" 로 C:/Users/User/Desktop/PCUBE PC 의 로컬과 origin 에서 `dev` 에 병합된 브랜치를 지웠다. D:/PCUBE PC 의 로컬 브랜치는 그 PC 에서 `git fetch --prune` 뒤 `git branch --merged dev` 로 구해 같은 방식으로 지운다(지울지는 사용자가 정한다). `spike/mp1-isolated-worlds`·`docs/mp2-contact-brief` 는 남긴다(1절).
 
-### 2026-11-04
+## 4. 작업 흐름 메모 (지켜 온 방식)
 
-- **`dev` 에 병합 (`feature/m6-wall-boost-heading`, 푸시는 지시 때)**: DECISIONS 2026-11-04 "벽·부스터가 방향을 트랙 쪽으로 강제하지 않는다". 사용자 플레이로 다듬었다.
-  - 벽은 방향을 돌리지 않는다. 속도는 벽과의 각도로만 정해진다(수직이면 0, 더 꺾을수록 빠르게). 이동 전에 벽을 찾는다(`RunnerMotor.TryFindGuardAhead`), 벽에 붙은 틱은 최소 회전 60°/s(`guardTurnRate`).
-  - 부스터는 방향을 돌리지 않고 바라보는 쪽으로 민다. 부스터 중 회전 반경 2배(`boostTurnRadiusScale`).
-  - 조향 감속: 끝까지 꺾으면 10%(일반·부스터 공통, `turnSpeedLossScale` 0.5), 바닥까지 내려가는 속도 1/9(`turnFalloffScale`). 서킷 부스터는 3 s 안에 바닥까지 못 내려간다(계산, 재지 않음).
-  - 서킷 지문 새 기준 `0xEF92FB76BFD1D767`. 봇 런 가드 기준은 보통 속도에만 남겼다(빠름도 벽 스침 허용, 사용자 "ㅇㅇ").
-  - 벽을 밀며 달리는 틱은 `guardScrapeDecel` 을 걸지 않는다 — 리뷰 수정 뒤 얕은 각도 벽 스침, 벽에 붙어 후진은 2026-11-05 사용자 "플레이확인했다".
-- **씬에 남은 것**: 인스펙터의 `turnSpeedLoss` 는 0.2 로 보이지만 실제 0.1 이다(배율 0.5). `ChainRushCircuit`·`ChainRushTestBench` 씬 값을 에디터에서 0.1 로 저장하면 `turnSpeedLossScale` 을 지울 수 있다. 두 씬의 `slingTurnRate: 90` 줄은 다음 에디터 저장 때 사라진다. 사용자 몫.
-- **한 번 본 에러 (원인 미확인)**: Codex 수정 직후 Console `TrackDefinition: pole 0: the offset -20 must be within the road (6.0 m there).` 1건(2026-11-04 14:18:29). 재컴파일에서 다시 나오지 않았고 `Circuit_Skyway` `TryValidate` 는 `True` 다.
-- ~~**다음 후보**: ① M6 남은 범위 정하기 ② 장식 빌더 후속 ③ PALM COAST 구간별 바닥 ④ M6 마감~~ → 2026-11-05 범위를 정했다(위).
+- **장식 킷 (blender → Unity)**: `blender-artist` 가 `art-src/<Kit>/` 에 `.blend`·FBX(폴더는 메인이 먼저 만든다 — `save_as_mainfile` 은 폴더를 만들지 않는다) → `unity-implementer` 가 `Assets/_Project/Art/Models/` 로 복사·코드 수정 → 메인이 Unity MCP 로 임포트 확인·재빌드 메뉴·전후 렌더·그 프리팹을 읽는 테스트 → 사용자 플레이 → 커밋 → Codex + `unity-reviewer` → 병합. `ExteriorKit.KitMesh(kit, name)` 는 슬롯 하나·원점 가운데를 검사한다. FBX 는 `use_selection=True, apply_scale_options='FBX_SCALE_ALL', bake_space_transform=True` 로 내보낸다(Blender 앞면 −Y → Unity +Z, DECISIONS 2026-11-09 "Blender 시험 제작").
+- **킷에서 배운 것**: 크게 늘려 멀리 두는 소품은 모양을 바꿔도 달리며 안 보인다 — 효과는 길가 소품·실루엣에서. 수백 번 찍히는 오브젝트는 Unity 정점(플랫이면 삼각형 × 3)으로 비용을 세고, 가려지는 디테일에 쓰지 않는다. FINGER·PALM 은 장식을 병합하지 않는다(나무마다 렌더러) — 정점과 렌더러 수를 함께 본다. SUMMIT 은 머티리얼별 한 메시로 병합한다. 비탈에 놓는 넓은 소품은 밑동 맞추기(`SummitDropEnvironmentBuilder.Rock`). 렌더할 소품 자리는 병합 메시 정점에서 찾는다.
+- **장식 재빌드**: 프리팹 로컬 fileID 가 새로 나와 큰 diff 가 생기고 `TrackLook` 에 `music`·`ambience` 빈 줄이 붙는다 — 내용이 같으면 커밋하지 않는다. 재빌드 뒤 렌더가 이상하면(데이터는 정상) 에디터부터 다시 켠다.
+- **Codex**: 구현·검증을 Codex 에 맡기면 `tools/codex-unity.ps1 -PromptFile <파일> -Write -RunId <새 이름>`(Unity 허락이 있으면 `-Unity`, §7-5). 스크립트를 `run_in_background` 로 띄우고 `tools/codex-wait.ps1 -Result <지시서>.<RunId>.result.json` 을 따로 띄워 기다린다(무활동 10분이면 3 — 보고 첫 줄 `Codex 멈춤:`, 리뷰는 stderr 를 `-Watch`). 종료 코드별로 할 일은 §7-5 표에 있다. Codex 의 Unity MCP 는 사용자가 그 작업에서 허락할 때만 연다("codex로 구현" 만으로는 허락이 아니다). 서버는 이름이 아니라 relay 를 실행하는 서버로 찾는다(PC 마다 `unity_mcp`/`unity-mcp`).
+- **트랙 장식을 새로 만들 때 (2026-10-30 PALM COAST 방식)**: 레퍼런스 영상을 scratchpad 에 받아(yt-dlp `--js-runtimes node`) 1 s 접촉 시트로 색·소재를 읽고 → `TrackLook`(도로·벽·차선 표시) + `XxxEnvironmentBuilder`(`PalmCoastEnvironmentBuilder` 형식, 공통은 `ExteriorKit`·`ExteriorAssets`) → 발광 없는 차분한 색, `Hash` 로 자리마다 다르게. 도로 침범 검사는 축 정렬 경계라 대각선 도로에서 회전한 물체는 반경의 1.5배 밖에 둔다. 새 트랙은 빌더의 `BuildLook` 에 `ExteriorAssets.BuildSky` 를 넘긴다. 사용자 몫: 장식 씬 저장, 빌드 씬 목록(`ProjectSettings` 만 담은 브랜치), 로비 항목 저장. 기존 게임 트랙의 배치는 옮기지 않는다(DECISIONS 2026-11-12 "방향 재설정").
+- **마일스톤 태그**: 태그마다 `TitleScreen.Version` 을 같이 올린다(DECISIONS 2026-10-29 "M3 범위 조정"). v0.7(2026-11-18)로 `main` 의 README 도 `dev` 판이 됐다. 다음은 v0.8(M7). README 는 "현재 버전" 줄·"v0.x에서 바뀐 것"·버전표를 고치고, 화면은 v0.7 방식(DECISIONS "main v0.7" 의 README 화면 줄)으로 다시 찍는다.
+- **`dev` 병합**: 훅은 `dev`/`main` 에서의 `git commit` 만 막는다. `git switch dev` 뒤 `git merge --no-ff <브랜치> -F <메시지 파일>` 은 막지 않는다. 충돌이 나면 `git commit` 으로 마무리할 수 없으니, 기능 브랜치에 `dev` 를 먼저 병합해 거기서 푼다.
 
-### 2026-11-03
+## 5. 환경 메모 (다음 세션이 헷갈릴 수 있는 것)
 
-- **`dev` 에 병합·푸시**: STADIUM 대형 경기장과 장식 디테일(`feature/m6-stadium-detail`, DECISIONS 2026-11-03 "STADIUM 대형 경기장과 장식 디테일") — 1층 뒤 위층 스탠드(1층과 같은 의자)·안장형 지붕 고리·흰 아치·전광판, LED 보드·결승 갠트리·허들·벤치·깃대. 사용자 플레이 "좋다 확인했고". 렌더러 1051, 정점 약 98만 — 프레임은 재지 않았다.
-- **사용자 답 (2026-11-03)**: SKYWAY 직선 봉 위치 "현재로 괜찮다"(그대로). SKYWAY 프레임(렌더러 4680) "문제없었던거 같은데" — 플레이로 확인한 것으로 닫는다. PALM COAST 랩 하한 검사 2건(아래 10-30 의 열린 문제)은 2026-11-02 랩 런 12칸(PALM 보통 포함)이 통과해 닫혔다(DECISIONS 2026-11-02 "테스트: 랩 런 하나로" 검증 줄).
-- ~~**다음 (사용자 순서)**: **벽 부딪힘·부스터 방향**~~ 끝남(2026-11-04, 위) — 사용자 "역주행 테스트 해보려했는데 벽에 닿을떄마다 확 돌아가 버렸다", "부스터 쓸떄마다 … 도로 진행방향으로 강제로 꺾이는 느낌". 원인: `Motion/GuardContact.cs:21-25` 가 벽 쪽을 보고 닿으면 늘 트랙 진행 방향(`trackForward`)으로 돌린다, `Motion/Slingshot.cs:47-56` `SteerToward` 가 당기는 동안 중심선 18 m 앞 점으로 초당 90° 돌린다(`RunnerMotor.cs:276`, 조향 뒤에 돈다). 요청서(`docs/NEXT_REQUESTS.md` M6 "벽·부스터 방향")는 올렸고 사용자가 "작업 하자 … codex로" — 브랜치 `feature/m6-wall-boost-heading` 를 `dev` 에서 만들고 같은 Codex 분담으로 시작한다. 시뮬 변경이라 서킷 지문·Steering·Drift·CornerSwing·Rollback 을 돌린다.
-- **Unity 작업 메모**: 사용자가 작업 중 에디터를 닫을 수 있다 — `Unity_RunCommand` 가 `Named pipe socket file not found` 로 끊기면 `Temp/UnityLockfile` 이 없는지 보고 배치 모드(`-executeMethod …`, `-runTests -testFilter …`)로 이어 간다(VERIFICATION §4-3 B). 에디터를 다시 열지 말라고 먼저 알린다.
-
-### 2026-11-02
-
-- **`dev` 에 병합** (`feature/m6-exterior-kit`, 푸시 전): 맵 디자인 보강 — DECISIONS 2026-11-02 "맵 디자인 보강" 과 그 아래 하위 항목. 장식 공통 도구, 네 트랙 실제 도로(질감·차선), STADIUM 경기장, **SKYWAY 시뮬 변경**(지상 베이·수직 가드, 오르막이 기존 30 m 고속도로에 합류하고 오른쪽 내리막으로 나감 `Bay.Highway`), SKYWAY 장식 디테일(도시·고속도로 지평선까지·외곽 블록, 땅·외곽은 재질별 메시로 합침, 렌더러 4680).
-- **테스트 규칙이 바뀌었다**: 봇 랩 런은 `Race_BotLap_*`(트랙 × 속도 한 바퀴, 장식·look 포함, `Lap` 카테고리) — 맵 구조가 바뀔 때만 그 트랙 칸만(VERIFICATION §4-4). 병합 때 같은 코드의 작업 중 실행은 다시 돌리지 않는다(CLAUDE.md §9-2). 결과 XML 값은 그때 DECISIONS 검증 줄에.
-- **사용자가 같은 에디터에서 플레이한다**: Refresh·테스트 시작 전에 `isPlayingOrWillChangePlaymode` 를 확인하고, 플레이 중이면 시작하지 않는다(플레이 중 재로드로 로비 NRE, 러너는 바로 멈춤).
-- **다음**: 푸시(지시 때). 렌더러 4680 에서 SKYWAY 프레임 확인. SKYWAY 직선 봉 위치(지금 고가 가운데 기준 ±11 m = 레이스 차선 기준 −20 / +2 m) 결정. R4 디테일 FINGER(DECISIONS "FINGER LANES 장식 디테일")와 서킷 공통 하늘(DECISIONS "서킷 공통 하늘" — 트랙 look 에 스카이박스·지평선 안개, 새 트랙은 빌더의 `BuildLook` 에 `ExteriorAssets.BuildSky` 를 넘긴다)은 `dev` 에 병합 → 다음은 R4 디테일 STADIUM. Codex 설계 리뷰는 한도로 못 했다 — 다음 병합 때 이 브랜치 범위도 함께 보게 할지 정한다.
-
-### 2026-10-30 저녁 기준
-
-- **브랜치**: `dev` `ce9411f` 를 origin 에 푸시했다(로컬과 같다). `main` 은 v0.5(M4). 지금 마일스톤은 **M6 폴리시**(진행 순서 M4 → M6 → M5 → M7, 아래 "멀티 개발 순서").
-- **이날 `dev` 에 들어간 것** (각각 DECISIONS 같은 날 항목, 모두 사용자 플레이 확인을 받았다 — 바람 이펙트만 따로 확인한 말이 없다):
-  - 부스트존: 넘친 속도에 비례해 빨리 줄고(k 0.8/s), 오르막 마지막 존은 턱 끝 10 m 앞("부스트존 감속"). 밟으면 화면 외곽 바람 줄기("부스트존 바람 이펙트"), 판은 짙은 초록 + `>>>` 화살표 3줄.
-  - 봉 걸기: 원호의 절반까지만 새로 건다, 지나간 코너·직선 봉은 안 걸린다("봉 걸기").
-  - 스윙: 줄은 회전 반경만 — 감아도 빨라지지 않는다(A), 놓은 뒤 남는 속도도 비례로 빨리 준다(S1, `swingCarryDecay` 0.8). 지름길 안쪽 키 최고 27.4 → 24.0 m/s("스윙: 줄은 회전 반경만").
-  - 부스터: 서킷 씬 `Runner` 의 `slingPullAcceleration` 240 · `slingTopSpeed` 32 · `slingCarrySpeed` 32(유지 2.6 s 그대로) — 0.2~0.3 s 에 최고의 95%(측정 `Probe_Booster_SpeedOnAStraight`).
-  - PALM COAST 장식과 트랙별 모습: `Race/TrackLook`(도로·벽·차선 표시 머티리얼, 로비 항목 → `RaceSetup.Look` → `CircuitRace.UseLook`), `PalmCoastEnvironmentBuilder`(메뉴 Create/Rebuild Palm Coast Exterior), 차선 표시는 런타임 `CircuitScenery.PaintMarkings`. 사용자 "내가 바라던 디자인이야".
-- **테스트 규칙 개정 (2026-10-30, DECISIONS "테스트 범위", CLAUDE.md §9-2)**: 작업 중(①)과 `feature → dev` 병합(②)은 바뀐 기능의 테스트만 이름으로 골라 돌린다(시뮬을 바꿨으면 서킷 지문·해당 롤백 포함). 게이트 전체는 마일스톤(③)에서만.
-  - 그래서 **M6 마감의 게이트 전체 2회가, 이날 시뮬 변경(스윙·부스터·봉 걸기·부스트존)이 다른 트랙 레이스와 랩 타임 하한 검사에 주는 영향을 처음 보는 자리다.** 알려진 후보: `Race_OtherSpeedClasses_BotFinishesEveryTrack(Normal,"PALM COAST")` 랩 하한(아래 열린 문제, 돌리지 않았다).
-- **다음 작업 후보 (사용자에게 묻는다, 각각 §3-2 요청서부터)**:
-  1. **다른 트랙의 장식·도로** (사용자 "한도 초기화 되면 다른 맵도 요청"): PALM COAST 와 같은 순서 — 레퍼런스 영상을 scratchpad 에 받아 1 s 접촉 시트로 색·소재 읽기(yt-dlp `--js-runtimes node` + OpenCV, scratchpad venv) → `TrackLook`(도로·벽·차선 표시) + `XxxEnvironmentBuilder`(`PalmCoastEnvironmentBuilder` 형식) → 발광 없는 차분한 색, `Hash` 로 건물·소품을 자리마다 다르게, 거리 소품. 도로 침범 검사는 축 정렬 경계라 대각선 도로에서 회전한 물체는 반경의 1.5배 밖에 둔다. STADIUM·SKYWAY·FINGER 는 이미 장식 씬이 있으니 TrackLook·차선 표시·디테일 위주. 사용자 몫: 장식 씬 저장, 빌드 씬 목록(ProjectSettings 만 담은 브랜치), 로비 항목 저장.
-  2. PALM COAST 구간별 바닥(2단계: 마을 돌길, 다리 콘크리트).
-  3. M6 마감(마일스톤 조건 ③).
-- **재지 않은 것**: PALM COAST 장식 렌더러 5361 의 플레이어 빌드 성능(사용자 "아직 못 느꼈다"). 느껴지면 같은 재질 장식을 메시로 합친다.
-- **두 PC 작업**: 끝낼 때마다 푸시하고, 시작할 때 `git fetch` 와 `git status -sb` 로 갈라짐부터 본다(2026-10-30 아침, 다른 PC 의 푸시 안 한 v0.5 를 모르고 작업한 일 — DECISIONS "멀티 개발 순서" 의 M4 정정 확인).
-
-### 그 전 기록
-
-- **2026-10-30 순서 (DECISIONS "멀티 개발 순서")**: 진행 순서 M4 → **M6 → M5** → M7(번호는 그대로). 멀티는 물리가 있는 AI 상대부터 — M5 = MP1 여러 레이서 구조(공유 월드) → MP2 물리 AI 상대(충돌·추월·상대 모션) → MP3 결정성, M7 = MP4 사람 멀티 → MP5 마무리. 고스트는 정지 자세로 충분.
-- ~~**M4 남은 것**: 부스터 발동 시각 효과 하나 … 그때까지 v0.5 태그는 미룬다.~~ → **M4 는 끝났다 (2026-10-30 확인)**: 사용자가 기억한 부스터 효과는 다른 PC 에서 2026-10-29 에 한 `feature/m4-control-feedback`(부스터 충격 고리·가장자리 빛줄기·게이지 칸 터짐·잔상 꼬리, 그래플·봉 걸림, 빗나감)이고, 그 PC 에서 `main` v0.5 태그까지 달았으나 푸시하지 않았던 것이다. `docs/sync-two-pc` 에서 `origin/dev` 와 합쳤다(문서 3개만 충돌, 코드 겹침 없음). 다음은 그대로 M6.
-- **M6 첫 트랙 PALM COAST (비치 드라이브 기반, 2026-10-30, `feature/m6-track-beach`, DECISIONS "PALM COAST"·"PALM COAST 개선")**: 네 번째 서킷 + 새 기능 **부스트존**(밟으면 부스터를 끊고 앞 속도 55 m/s, 이어서 스윙 이어달리기처럼 초당 3 m/s 로 감속). 12% 오르막 위 부스트존 3개 → 턱 → 바다 45 m 를 건너는 점프, 큰 곡선 2개의 해변, 원호 16개, 한 바퀴 2001 m, 부스트존 5개. 첫 구현은 Codex, 개선은 Claude 가 직접. 사용자 플레이 확인은 첫 단계만("부스터 존의 효과가 있는거 확인했고 트랙이 완성 된 것 확인했다"), 오르막 점프·곡선 배치는 확인 전.
-  - **열린 문제 — 게이트 2건이 `dev` 에서 계속 실패한다**: 랩 타임 하한 검사(`Race_OtherSpeedClasses_BotFinishesEveryTrack(Normal,"PALM COAST")` 99.12 s < 하한 100.06 s, `Race_PalmCoastFromTheLobby_BotFinishesTwoLaps` lap 2 80.0 s < 하한 80.05 s). 부스트존이 속도를 길게 이어 줘서 봇이 "랩 길이 ÷ 달리기 속도 ±20%" 보다 빠르다 — 사용자가 선택지(부스트존 있는 트랙만 하한 −35% / PALM COAST 만 제외 / 부스트존 줄이기)에 "일단 병합하라" 고만 답해 **고치지 않았다**. 다음 게이트를 돌리기 전에 정한다(§0: 테스트를 통과시키려고 고치지 않는다 — 기준 변경이면 DECISIONS 에 이유를 남긴다).
-    - 2026-10-30 부스트존 감속을 비례로 빠르게 바꾼 뒤(`feature/m6-boost-zone-falloff`, DECISIONS "부스트존 감속") `Race_PalmCoastFromTheLobby_BotFinishesTwoLaps` 는 통과한다. `Race_OtherSpeedClasses_*(Normal,"PALM COAST")` 는 돌리지 않았다(범위 밖). 사용자 플레이 확인(존 뒤 감속, 점프) 대기.
-  - 사용자에게 알린 것: 바다에 빠지면 마지막 부스트존 앞으로 돌아오는 복귀 규칙(`respawnPadReach`)은 요청 밖으로 더했다.
-- 아래는 2026-10-29 까지의 기록이다.
-
-- **M3 (v0.4) 끝 — `main` v0.4 (2026-10-29, DECISIONS "main v0.4", "M3 범위 조정")**: 트랙 3개 + 장식 + 속도 단계 3개로 닫았다. 남은 트랙(고저차 전용·T5 짧은 봉 뒤 헤어핀·그래플·종합 맵)은 M6 "트랙 추가" 로 옮겼다. 타이틀 버전 표기는 태그마다 같이 올린다(`TitleScreen.Version`). `dev`·`main`·태그 `v0.4` 모두 origin 에 푸시했다(2026-10-29).
-- ~~**지금 마일스톤: M5 (v0.6) 같이 달리는 맛**~~ → 2026-10-30 순서로 M6 먼저(위). 아래는 M4 동안의 기록이다.
-- **M4 (v0.5) 다시 할 이유** — 최고 기록 저장(트랙×속도마다 하나)·결과 화면 비교·그 고스트, 복귀 연출, 조작 피드백 이펙트(`docs/DESIGN.md` §5-1, `docs/NEXT_REQUESTS.md` "M4"). 2026-10-29 사용자가 기록·고스트부터 골랐다("1 ㄱㄱ"), 고스트는 위치 기록(DECISIONS "M4 기록 키·고스트 형식").
-  - **M4-1 러너별 기록·고스트 저장** (`feature/m4-best-records`): 병합 조건 ② 통과, 사용자 지시로 `dev` `f2517b6` 병합·origin 푸시(2026-10-29).
-  - **M4-2 결과 화면 비교** (`feature/m4-result-compare`): 사용자 지시로 `dev` `c7ed1e4` 병합(2026-10-29). 남은 것: 사용자 플레이 확인(로비에서 한 번 결승 → 다시 달려 결승, 두 줄과 차이·NEW 가 맞게 보이는지).
-  - **M4-3 고스트 재생** (`feature/m4-ghost-replay`): 사용자 지시로 `dev` `4a0bcf6` 병합·origin 푸시(2026-10-29). 남은 것: 사용자 플레이 확인(한 번 결승 → 다시 달리면 반투명 고스트가 함께 달리는지), 플레이어 빌드에서 투명이 보이는지(확인 못 함).
-  - **M4 복귀 연출** (`feature/m4-respawn-look`): 사용자 플레이 확인 "괜찮다", 사용자 지시로 `dev` `c4f66e9` 병합(2026-10-29, 푸시 안 함).
-  - **로비 순서 속도 → 트랙 → 러너** (`feature/lobby-speed-first`, DECISIONS 같은 이름): 사용자 보고(트랙 페이지가 아직 고르지 않은 속도의 기록을 보였다), 긴 기록 줄 사용자 확인, 사용자 지시로 `dev` 병합(2026-10-29). 고스트는 사용자가 레이스에서 확인했다("고스트 좋다").
-  - **고스트: 트랙 × 속도의 최고 기록 하나** (`feature/ghost-track-best`, DECISIONS 같은 이름): 사용자 "트랙별 최고기록만 남기고 싶다". 러너별 기록·고스트 삭제, 다시 달리기에서 새 고스트 불러오기, OMEGA 고스트 파일 이름 변경. `06ad587` 커밋, `dev` `7c588c2` 병합·푸시. 남은 것: 사용자 확인(다른 러너로 매우빠름·STADIUM 에서 고스트가 보이는지).
-  - **M4 조작 피드백 이펙트** (`feature/m4-control-feedback`, DECISIONS 같은 이름): 상태 글자 대신 이펙트 — 스윙 가능 봉 고리·사각 타겟(화면 밖이면 가장자리 + 화살표), 부스터 충격 고리·가장자리 빛줄기·게이지 칸 터짐·부스터 동안만 잔상 꼬리, 그래플·봉 걸림 고리·괄호 조임, 빗나감 코랄 흔들림. 상태 상자 삭제. 첫 구현은 사용자 지시로 Codex(`--write`), 플레이 피드백 2회·리뷰 결함 3개는 Claude. 사용자 플레이 "확인했다", 병합 조건 ② 통과(EditMode 296, PlayMode 50), 사용자 지시로 `dev` 병합(2026-10-29, 푸시 안 함).
-  - **M4 (v0.5) 끝 — `main` v0.5 (2026-10-29, DECISIONS "main v0.5")**: 게이트 2회 200/200·Device 3/3·사용자 "확인햇다". `dev`·`main`·태그 `v0.5` 는 2026-10-29 에 **푸시하지 않았고**, 2026-10-30 다른 PC 의 작업(PALM COAST·멀티 개발 순서)과 `docs/sync-two-pc` 에서 합쳤다(위 1절 첫 줄).
-  - ~~**다음 세션이 할 일**: 다음 마일스톤 M5 (v0.6) 같이 달리는 맛~~ → 2026-10-30 순서로 M6 이 먼저다(위 1절).
-  - 아직 받지 못한 확인: 다른 러너로 매우빠름·STADIUM 에서 고스트가 보이는지, 플레이어 빌드에서 고스트 투명이 보이는지.
-- 아래는 2026-10-28 까지의 기록이다.
-
-- **2026-10-27~28 에 `dev` 에 들어간 것 (모두 푸시, 각 DECISIONS 항목)**:
-  - FINGER LANES 외부 장식(파스텔 마을·시계탑·석교, 다른 AI 세션 작업) — 빌드 씬 목록은 `feature/settings-finger-build-scene` 으로 떼어 먼저 병합(DECISIONS 2026-10-27 "FINGER LANES 외부 장식과 로비 연결"). 사용자 "장식 확인햇다".
-  - 봉 스윙 한도: 줄과 ↑ 가 함께 올리는 속도는 달리기 가속까지, 부스터는 따로(DECISIONS 2026-10-27 "봉 스윙: 줄과 ↑ …", 측정 항목 포함). 사용자 "괜찮은거 같다". 덜 깎으려면 한도를 올린다.
-  - FINGER LANES 왼쪽 변 S자 굽이·시계탑 턱을 다리 턱처럼(35조각, 1488.3 m, DECISIONS 2026-10-28). 사용자 "테스트 봤는데 괜찮았다".
-  - 장식 도구 후속 ①·2(조각 성질 확인, 저장·등록 메서드 제거, DECISIONS 2026-10-28 "FINGER 장식 도구 정리") — `fix/finger-exterior-tool`, 게이트 통과. `dev` `8d0d2a1` 병합·푸시.
-- **받은 플레이 확인 (2026-10-27~28)**: M2 완료 조건의 남은 답 "러너마다 차이가 느껴진다"(정밀 밸런스는 나중), FINGER LANES "잘 구현되었다", 장식, 스윙 한도, S자 굽이. **아직 답이 없는 것**: ~~M3 완료 조건 "속도 단계마다 차이가 느껴진다"~~(2026-10-29 "느껴진다."), SKYWAY 2랩·직선 슬라럼, 코너 중간 봉 걸기, ↓ 후진·스윙 중 ↑, 그래플 거는 구간, 화면 설정(플레이어 빌드).
-- ~~**다음 (사용자에게 묻는다)**: M3 범위 결정~~ → 2026-10-29 "지금 닫기"·"태그에 맞추기"(위 첫 줄). M3 완료 조건 "속도 단계마다 차이가 느껴진다" 는 2026-10-29 "느껴진다.".
-- 아래는 2026-10-25 까지의 기록이다. "병합 여부는 … 본다" 로 적힌 브랜치(FINGER LANES·지름길·무한 모드 삭제·RF2·속도 단계·봉 각도)는 2026-10-27 확인 때 모두 `dev` 에 병합돼 있었다.
-
-- **M3 새 서킷 FINGER LANES (2026-10-25, `feature/m3-track-village-finger`, DECISIONS "FINGER LANES")**: 카트라이더 빌리지 손가락을 옮긴 세 번째 서킷(U턴 7개 R25, 반폭 7.2, 다리·시계탑 출구의 턱에서 속도로 뜬다 — 새 기능 도약대 `Segment.Kicker`). 로비 세 번째 트랙. `dev` `31cf9cd` 병합·푸시. 이어서 **지름길 2곳**(`feature/m3-finger-shortcuts`, DECISIONS "FINGER LANES 지름길": 연결로 R15·스윙 필수, 분기 좌표 `Centerline.AddBranch`) — 게이트 196 통과·지문 그대로. ~~남은 것: 사용자 플레이 확인(턱·헤어핀·지름길), 장식(T3e)~~ → 2026-10-27~28 위.
-
-- **무한 모드·적 삭제 (2026-10-25, `feature/remove-endless`, DECISIONS "무한 모드 삭제")**: 사용자 "무한모드 삭제하자 추후에 추가해볼 컨텐츠 아이디어로만 남기자", 적도 같이(추천안 "네 추천대로 진행"). 아이디어는 `docs/DESIGN.md` §10.
-- **리팩토링 순서 (2026-10-25 사용자와 정함, 각각 §3-2 요청서부터)**: 사용자 "확장만 하다보니 꽤 지저분하다" → ~~① RF3 `RunnerMotor.Step` 메서드 분해~~ 끝남(2026-10-25, DECISIONS "리팩토링 RF3") → ~~② RF3b 객체 분리~~ 끝남(2026-10-25, DECISIONS "리팩토링 RF3b", `Motion/`) → ~~③ RF4 `CircuitRace` 깔기 분리~~ 끝남(2026-10-25, DECISIONS "리팩토링 RF4", `Race/CircuitScenery`) → ~~④ `LobbyMenu`(664줄) 조사~~ 끝남 → RF7 페이지 객체화(2026-10-25, DECISIONS "리팩토링 RF7", `Flow/Lobby/`, 사용자 "확장성과 객체화를 생각해서") → ~~RF2 효과음 `RaceCue`~~ 끝남(2026-10-25, DECISIONS "리팩토링 RF2", `feature/refactor-cues` — 병합 여부는 그 항목과 사용자 지시를 본다). 남은 리팩토링은 RF6(M5 까지 보류)뿐이다. 다음은 아래 "다음 작업" 목록에서 고른다(사용자에게 묻는다) — 2026-10-25 후보: ~~M3 속도 단계~~(코드 끝, 아래 줄), M3 새 서킷, 코너 중간 봉 미걸림 측정, 사용자 플레이 확인 모음.
-- **M3 속도 단계 (2026-10-25, `feature/m3-speed-classes`, DECISIONS "M3 속도 단계")**: 보통 0.8·빠름 1.0·매우빠름 1.2, 로비에서 모두 열림, 게이트 189 통과·지문 그대로. 매우빠름 봇은 R22 코너 출구에서 가드를 스친다(허용). 병합 여부는 그 항목과 사용자 지시를 본다. 남은 것: 사용자 플레이 확인 "속도 단계마다 차이가 느껴진다"(M3 완료 조건). RF7 의 남은 것 중 "M2-b" 문구는 여기서 지웠고, 러너 검사의 `error` 버림(`LobbyMenu.Awake`)은 그대로다.
-- **M2 (v0.3) 끝 — `main` v0.3 (2026-10-23, DECISIONS "main v0.3"). 지금 마일스톤: M3 (v0.4) 고를 거리** (속도 단계 보통·매우빠름이 M2 에서 넘어왔다, DECISIONS "M2 범위 조정"). 아래는 M2 동안의 기록이다.
-- **M1 (v0.2) 끝 — M2 (v0.3) 게임의 뼈대** (`docs/DESIGN.md` §5-1, 2026-10-19 재배치 — DECISIONS "로드맵 재배치"). 2026-10-19 사용자가 **Additive 씬 구성**(타이틀 씬 → 로비 씬 → 달리는 씬 + 서킷 장식 씬, 조건 = 트랙·싱글/멀티·속도 단계·러너)과 A안(시뮬은 데이터로 달리는 씬에서, 장식 씬은 충돌체 없이)을 정했다(DECISIONS "M2 씬 구성"). M2-a1 씬 뼈대(`dev` `adf215f`)·M2-a2 빌드 씬 목록(`dev` `0432115`)을 병합했고(푸시 안 함), M2-b 러너 프로필 5명(ALPHA~OMEGA, 배율)도 `dev` 에 병합했다. 사용자 플레이 확인(2026-10-19 "정상 작동 확인") 피드백으로 로비 최고 기록·이름 잘림을 `feature/lobby-best-record` 에서 고쳤고, 점프 속도 유지(버니합)는 그대로 두고 기록했다. 2026-10-20 `feature/m2-settings` 에서 M2-c 설정(볼륨 3개·속도 시야 효과), 로비 마우스 클릭 버그 수정, 아트 AI 병행 작업(스타디움 장식·러너 디자인 5종), 러너 디자인 연결(`RunnerProfile.look` → `RunnerLook`)을 하고 `dev` 에 병합·푸시했다(DECISIONS 2026-10-20). 같은 날 `feature/m2-lobby-pause-ui` 에서 러너 선택창 프리뷰(드래그 회전)·입장 버튼·이전 버튼·인게임 일시정지 메뉴(계속·재시작·로비로)를 넣고 R 재시작을 없애 `dev` 에 병합·푸시했다(DECISIONS 2026-10-20 "러너 선택창 프리뷰 · 입장/이전 버튼 · 인게임 일시정지 메뉴"). 남은 M2: 러너 차이 체감 확인, 속도 단계 보통·매우빠름(후순위). 순서·범위는 `docs/NEXT_REQUESTS.md` "M2".
-  - M1 의 마지막 목록(플레이 확인, 부스터 게이지, 조향 2차, 그래플, ↑ 가속, 부스터 가속, 다른 씬 속력)은 모두 DECISIONS 2026-10-19 각 항목으로 옮겨졌다. 사용자 플레이 확인 "3랩 완주했다, 막히는 곳 없음"(2026-10-19) 뒤 v0.2 마일스톤 조건을 치렀다(DECISIONS "main v0.2"). 벽 마찰은 피드백이 오면 다룬다.
-  보류: 아이템(아이템전 구상 때). 적·무한 모드(R6)는 2026-10-25 지웠다(`docs/DESIGN.md` §10).
-- **최근 병합 (2026-10-22)**: `feature/refactor-ui-helpers` — 리팩토링 RF1, IMGUI 헬퍼 4벌을 `NightUi` 하나로(동작 변경 없음, DECISIONS "리팩토링 RF1"). 그 앞 `feature/motor-reverse-swing-throttle` — ↓ 후진, 스윙 중 ↑ 가속(DECISIONS "↓ 후진 · 스윙 중 ↑ 가속", 사용자 플레이 확인 아직). 그 앞 `feature/skyway-reshape` — SKYWAY 를 원작(빌리지 고가의 질주) 윤곽대로 재배치, 구간별 도로 폭(`Segment.endHalfWidth`), 직선 스윙 봉(`TrackDefinition.Pole` → `Centerline.AddPole`), 고가 구간 도로 30 m + 직선 봉 7개, 장식 다시 짓기(`Rebuild Skyway Exterior`). 사용자 "괜찮네 푸쉬 병합까지 완료"로 `dev` 병합·푸시. 서킷(스타디움) 지문 그대로. **남은 것**: 직선 슬라럼 체감 튜닝(봉 간격 40 m·걸리는 거리 16 m·한 번에 ⅓칸) — DECISIONS 2026-10-22.
-- **그 전 병합**: `fix/swing-boost-grapple` 을 2026-10-19 사용자 지시("커밋 병합 ㄱㄱ … 푸시")로 `dev` 에 병합하고 `origin/dev` 로 푸시했다(그 전 M2-a1·a2·M2-b·로비 최고 기록 병합도 함께 올라갔다). 들어간 것: 스윙 중 부스터(C), NetReconcile 1건 M7 까지 보류(`NetEndReplay`), 그래플은 앵커 높이 안에서만 걸기, 공중 가속(↑ 누르면 최대속도까지, 떼면 그대로) — DECISIONS "그래플: 앵커 높이 안에서만 건다 · 공중 가속". 서킷 지문 새 기준 `0x18F31E7A2B4F79B3`.
-- **다음 작업 (2026-10-22 정리, 권장 순서, 각각 §3-2 요청서부터)**:
-  1. **사용자 플레이 확인 (한 번에 모아서)** — 코드는 들어갔고 체감만 남은 것들:
-     - ↓ 후진 6 m/s·후진 조향 반전, 스윙 중 ↑ 상한 24 m/s (2026-10-22, DECISIONS "↓ 후진 · 스윙 중 ↑ 가속").
-     - SKYWAY 2랩, 고가 직선 슬라럼(봉 간격 40 m·걸리는 거리 16 m·한 번에 ⅓칸) (2026-10-22, DECISIONS "SKYWAY 재배치").
-     - 그래플 거는 구간(앵커 앞 약 6 m — 좁으면 `GrappleController.minHangHeight` 1.05 를 낮춘다), 공중 가속, 스윙 중 부스터(최대 42 m/s) (2026-10-19).
-     - ~~M2 완료 조건의 남은 답: "러너(ALPHA~OMEGA) 차이가 느껴지는가".~~ 2026-10-27 사용자 "러너마다 차이가 느껴진다. 다만 정확한 플레이감은 추후에 조정"(밸런스).
-     - RF1 은 그리는 값이 같아 화면이 바뀌지 않아야 한다 — 타이틀·로비·HUD 에서 이상이 보이면 알린다.
-  2. ~~**리팩토링 RF3 → RF2 → RF4**~~ 모두 끝남(2026-10-25, 위 "리팩토링 순서"). RF2 에 딸린 결정 2-1(롤백 재실행 중 효과음)은 M7 전에(`docs/NEXT_REQUESTS.md` RF2).
-  3. ~~**코너 중간 봉 미걸림 측정**~~ 측정 끝(2026-10-25, DECISIONS "측정: 코너 중간에 봉이 안 걸리는 원인은 각도(95°)다"): 러너 방향이 코너에서 5~17° 처져 봉이 95° 밖으로 넘어간다, 거리는 문제가 아니다. → 고침(2026-10-25, `fix/corner-pole-angle`, DECISIONS "봉 각도는 트랙 진행 방향에서 잰다"): 각도를 트랙 방향에서 잰다, 게이트 191 통과·지문 그대로. 남은 것: 사용자 플레이 확인(코너 중간 Shift, 후진 중 걸림).
-  4. ~~속도 단계 보통·매우빠름~~ → M3 으로 옮겼다 (2026-10-23, DECISIONS "M2 범위 조정").
-  5. ~~M2 마무리 → `dev → main` v0.3~~ — 2026-10-23 끝남(DECISIONS "main v0.3": 게이트 2회·Device·사용자 "어 느껴졌어", README 재작성·이미지). 그때 찾은 HUD 트랙 이름 `STADIUM` 고정은 `fix/hud-track-name` 에서 고쳤다(DECISIONS "HUD 트랙 이름"). README 의 `race.gif`·`skyway.png` 도 고친 화면으로 다시 찍었다. 타이틀 버전 표기 `TitleScreen.Version` 0.0.1 을 태그에 맞출지는 사용자에게 묻는다.
-  6. **M3 새 서킷** — 테크니컬·고저차·고속 (NEXT_REQUESTS "M3"). 테크니컬은 2026-10-25 FINGER LANES(빌리지 손가락, 위 1절 첫 줄). 속도 단계 보통·매우빠름은 2026-10-25 코드 끝(1절) — 새 트랙도 `Race_OtherSpeedClasses_BotFinishesEveryTrack` 에 넣어 단계마다 완주를 잰다. RF4 를 먼저 하면 장식(T3e)이 붙을 자리가 생긴다.
-  - (병합 기록, 옛 5번) M2 가 끝나면 `dev → main` v0.3 마일스톤 조건(③). 그 전: 2026-10-19 M2-a1 `feature/m2-scene-flow`·M2-a2 `feature/build-scene-list`·M2-b `feature/m2-runner-profile` 을 `dev` 에 병합했다(사용자 지시, 푸시 안 함). 그 전: 2026-10-19 `feature/tuning-jump-swing`(위 1번), `feature/scenes-circuit-physics`(위 5번), `feature/hud-boost-gauge`(위 2번)를 `dev` 에 병합하고 푸시했다. 2026-10-18 R4b 봉 스윙 v2(`feature/pole-swing-v2`, DECISIONS "R4b")와 M1-T 앞당김 1(`feature/tuning-m1`: 서킷 20 m/s·최소 회전 반지름 20 m·부스터 카트라이더 비율·방향키 조작, DECISIONS "M1-T 앞당김 1")을 `dev` 에 병합했다. 서킷 지문 새 기준 `0x12DE39829FD6B3DB`. 같은 날 적·아이템(아이템전 구상 때)과 무한 모드 테스트를 `Enemy`·`Endless` 카테고리로 게이트에서 뺐다(`feature/test-exclude-enemy`, DECISIONS "적·아이템·무한 모드 테스트 보류" — 보류 동안 `Long`·`Sweep` 은 돌리지 않는다). R4c(사각 서킷 R22 + 조향·감속, 점프 키 왼쪽 Alt, `feature/circuit-r22`)도 병합하고 푸시했다(DECISIONS "R4c" — 서킷 지문 새 기준 `0x150CA0904EFFEBDE`). 다음 후보: `docs/NEXT_REQUESTS.md` "M1-T 에 넘긴 플레이 피드백"의 2026-10-18 추가 목록(조향감, 중앙 하단 부스터 게이지·아이템 칸, 벽 마찰, 다른 씬 속력). `ProjectSettings/`·`Packages/packages-lock.json`·`ProtoHarness.slnx` 는 이 머신의 버전 차이라 넣지 않는다.
-- **끝난 것**: R4 코너 봉 스윙 시뮬(`7f5ae8f`, DECISIONS "R4"), R5 봉 표현 — 원호마다 빛나는 봉, 줄은 봉의 띠를 문다, 걸 수 있는 봉 표시(`a762fa3`, DECISIONS "R5": 첫 모양이 플레이에서 안 보여 같은 브랜치에서 키웠다).
-- **`main` v0.1 (2026-10-13) 뒤 `dev` 에 들어온 것** (2026-10-14~18): 테스트 3단·`Long` 묶음, 작업대 이름 변경·코너 스윙 S1 연출, 코너 봉 제안서, 브랜치 정리 기록, 테스트 대기를 틱으로(R1), 서킷 집중, 네트워크 상대 네모 모형(R9), 작업대 정리·`ArmoredRunner` 프리팹(R3), 서킷 낙하 → 트랙 복귀(R2), 플레이 경험 순서 로드맵, 코너 봉 스윙 시뮬(R4), 로드맵 문서 정리(싱글 서킷 집중, M4 도 싱글), 코너 봉 표현(R5). 각각 DECISIONS 같은 이름 항목.
-
-- 아래는 v0.1 까지의 기록이다(2026-10-13 작성). 브랜치: `dev` 에 P3 준비(조사·롤백 안전성·정규화 비용), **P3 스파이크 보고(`a50d18e`)**, **C1a 격리 월드(`cc01b50`)**, **NGO 2.13.3 패키지(`0b82595`)**, **C1b 2인 네트워크 레이스(`bad7159`)**, C1c-1·C1c-1b·예측기 구멍 fix·C1c-2a 순위(`28a9fc7`)·**C1c-2b 순위 표시(`eb4d0d7`)**·네트워크 레이스 A 기준 fix(`6c08f88`)·**C1c-3 진행 중 순위**(`feature/p3-c1c3-running-order`, 검증은 DECISIONS 2026-10-13 "P3 C1c-3") 가 병합돼 있다. **다른 입력의 두 레이서**(레이스 C, 테스트만, `75b998d`)도 병합돼 있고 `origin/dev` 로 푸시했다(2026-10-13). **같은 시각 출발 + 카운트다운**(`feature/p3-c1-same-start`, DECISIONS 2026-10-13 "P3 C1 같은 시각 출발")도 병합돼 `main` v0.1 에 들어갔다. 스파이크 브랜치(`spike/p3-ngo-prediction`)와 옛 패키지 브랜치(`feature/p3-ngo-package`)의 코드는 `dev` 에 `Net` 이름으로 이식됐고, 두 브랜치는 2026-10-15 확인 때 로컬·원격 어디에도 없었다(3절 #6).
-- 구현된 것 요약
-  - 트랙 좌표계 `Centerline`(루프·초점), 이동·드리프트·체인 액션, 절차 노면(T3a)·시드 생성기(T3b)·절차 무한 코스(T3c)·서킷(T4), 직선 무한 코스 정리(T3d).
-  - **P2** (DECISIONS 2026-10-08 "P2"): 입력 기록·재생(`InputLog`·`InputRecorder`·`InputReplay`, `Control/`)과 상태 트레이스 비교(`StateTrace`, 테스트). **같은 시드 + 같은 입력 = 같은 런이 같은 머신·같은 에디터에서 비트 단위로 성립한다**: 서킷 1700틱·절차 코스 2500틱을 같은 세션(6배속)·씬 재로드(2배속)·별도 세션에서 모두 재현했다.
-  - **롤백 안전성** (DECISIONS 2026-10-08 "롤백 안전성"): 서킷에서 한 틱 스냅샷·복원(`SimSnapshot`, `StepTick`)과 "되감아 다시 해도 같은 결과"를 비트 단위로 증명했다(지상·공중·그래플·슬링·코너 스윙·랩 이음매, 한 프레임 20회 되감기). **`CharacterController` 의 내부 위치가 `transform.position` 보다 정밀해 처음엔 1 ULP 어긋났고, 매 틱 컨트롤러를 껐다 켜서 막았다. 그 대가로 P2 재생 해시가 바뀌었다**(서킷 `0xF9A914DA3FAA680B`, 절차 코스 `0xE81912109A2EB020`). 정규화 비용은 껐다 켜기 1회 2.94 µs, 한 틱 28.2 µs 로 틱 예산(20 ms)의 1% 미만이라 병목이 아니다(DECISIONS "컨트롤러 정규화 비용 측정", 에디터 안 값).
-  - **P3 스파이크** (DECISIONS 2026-10-10 "P3 스파이크"): NGO 2.13.3 으로 서버 1(별도 스탠드얼론 프로세스) + 클라 1(에디터)이 서킷에서 같은 입력으로 **비트 단위로 같은 1001개 상태**를 냈고(보정 0회), 서버가 입력을 놓치면 클라가 `RestoreSnapshot` + 입력 재실행으로 보정한다(보정 1회 평균 약 0.4 ms). 다른 기기·IL2CPP·모바일 일치와 100 ms 에서의 체감은 확인하지 못했다.
-  - **C1b 2인 네트워크 레이스** (DECISIONS 2026-10-10 "P3 C1b-0·C1b-1"): `Runtime/Net/`(asmdef `ProtoHarness.Net`). 서버(`RaceServer`)는 레이서마다 격리 월드 1개·입력 버퍼·지연 큐를 갖고, 한 레이서의 상태는 주인에게 통째로, 위치는 상대에게 보낸다. 클라(`RaceClient`)는 `ClientPredictor`(`TickCompleted` 구독)로 자기만 예측·보정하고 상대는 `RemoteInterpolator` + `RemoteGhost`(런타임에 내 러너 모형 `RunnerTilt.Body` 를 복제, 2026-10-15 R9 전에는 캡슐)로 그린다. 같은 플레이어 빌드가 `-raceServer`/`-raceClient` 로 서버도 클라도 된다(`RaceBootstrap`). 입력 로그는 `InputLogFile`(`Control/`)로 파일에 저장·로드한다. **고정 지연(RTT 100 ms)에서 에디터·플레이어 클라 둘 다 보정 0회, 상대 위치 936개가 자기 런과 비트 일치, 고스트 최대 한 프레임 0.27 m.**
-  - **C1c-1 런 종료 알림** (DECISIONS 2026-10-11 "P3 C1c-1"): 서버가 런이 끝난 틱에 `race.end`(틱·이유·그 틱에 쓴 입력)를 주인 클라에 보내고, 클라(`ClientPredictor.OnServerEnd`)는 같은 결말이면 그대로, 아니면 T-1 로 되감아 서버 입력으로 틱 T 를 다시 돈다. 재현 못 하거나 종료 처리에서 예외가 나면 예측기가 고장(`Faulted`) 상태가 되고 클라가 멈춘다. 지터 레이스에서 낙하한 레이서의 클라가 타임아웃 없이 `ended=Failed@657` 로 끝났다. 클라만 먼저 끝나는 경우는 C1c-1b 에서 막았다(아래).
-  - **C1c-1b 클라만 먼저 끝나는 경우** (DECISIONS 2026-10-11 "P3 C1c-1b"): 클라 런이 끝난 뒤 그 틱 이후의 서버 상태가 오면 서버 상태로 되돌아가 기록 입력으로 다시 돌고, 끝날 때의 앞섬만큼 live 입력으로 따라잡는다(목표 틱 상한). 지금 서킷에서는 서버도 다음 틱에 끝나 따라잡기는 최대 1틱이다(S+L 상한 경로는 테스트로 끝까지 돌지 않았다).
-  - **예측기 구멍 fix** (DECISIONS 2026-10-11 "P3 C1c 예측기 구멍 4개"): 예측기가 입력을 내준 뒤의 `Clear`(R·Enter·HUD 의 `StartRun`)는 재시작이라 고장이 되고, 고장은 무엇으로도 풀리지 않는다(새 경기 = 새 예측기). `OnServerState` 의 모든 예외도 고장을 세운다. `LargestJolt` 는 일시정지 중에도 그 틱의 예측 상태에서 잰다(DONE 줄 `jolt=` 를 다시 근거로 쓸 수 있다). 끝난 클라가 더 이른 서버 상태로 되살아나도 따라잡는다.
-  - **C1c-2a 순위** (DECISIONS 2026-10-11 "P3 C1c-2a"): 서버가 `RaceStandings`(레이서별 대기·달리는 중·결승·낙하, 순위, 확정)를 갖고 바뀔 때마다(출발·끝·확정) 모든 클라에 `race.standings` 를 보낸다(각 클라 자신의 `ToOwner` 큐, 자기 `race.end` 뒤). 순위는 **각자 출발부터 결승까지의 틱 수**, 같은 틱은 공동, 낙하는 순위 없음. 다른 레이서가 아직 그 틱 수 안에 결승할 수 있으면(대기 중이거나 그 틱을 아직 못 넘김) 잠정이다. 클라(`RaceClient.Standings`·`You`)는 받기만 하고 런은 읽지 않는다.
-  - **C1c-2b 순위 표시** (DECISIONS 2026-10-12 "P3 C1c-2b"): `RaceClient` 가 `showRemote` 일 때 `RaceStandingsView`(Net, OnGUI, 런타임 추가)를 붙여 HUD 헤더 아래 왼쪽에 순위 줄을 그리고(`RaceStandingsText`), 상대가 결승·낙하하면 고스트를 숨긴다. 패널의 첫 그리기(약 130 ms)는 접속 전에 투명하게 해 둔다 — 첫 순위 때 처음 그리면 에디터 클라가 약 95 ms 멈춰 입력이 서버에 늦게 닿았다. 고스트 숨김은 실제 지터 레이스에서 양쪽 다 일어났다(낙하 `Failed@657`: 2026-10-12 플레이어 클라, 2026-10-13 에디터 클라).
-  - **C1c-3 진행 중 순위** (DECISIONS 2026-10-13 "P3 C1c-3"): 서버의 `RaceOrder`(Net)가 달리는 레이서끼리 **각자 런의 같은 틱**에서 진행 거리(`LapCounter.Progress`)를 비교한다(모두가 도달한 가장 최근 틱). 1 m 넘게 앞서야 순서가 바뀌고, 거리가 같으면 공동이다. 바뀔 때만 `race.order` 로 모든 클라에 보낸다(각 클라의 `ToOwner` 큐, standings 뒤). 클라(`RaceClient.Order`)는 받아 두기만 하고, 패널은 주행 중 레이서를 결승자 다음 순위로 숫자를 보인다(`RaceStandingsText`). 결승 순위(`RaceStandings`)와 그 메시지는 바꾸지 않았다.
-  - **다른 입력의 두 레이서** (DECISIONS 2026-10-13 "P3 C1 다른 입력의 두 레이서"): `NetworkRaceTests` 레이스 C 가 같은 봇에 드리프트 구간만 달리 준 두 런을 돌린다. 오프라인에서 같은 `RaceOrder` 로 만든 순서 변화(`0:동률 → 155:에디터 앞섬 → 697:추월`)를 서버·두 클라가 그대로 지났다 — **실제 레이스에서 주행 중 순위가 처음 뒤집혔다.** 보정 0 / 0, 상대 위치 1001개가 오프라인 런과 비트 일치. 레이스 C 1회와 A 1회는 에디터 프레임 한 번이 125~136 ms 멈춰 늦은 입력(7, 5)으로 실패했다 — 사용자 판단은 에디터 포커스 없음(미확인).
-  - **같은 시각 출발 + 카운트다운** (DECISIONS 2026-10-13 "P3 C1 같은 시각 출발"): 서버는 전원이 접속하면 `race.go` 를 보내고, 모든 레이서의 입력이 쌓인 프레임에 한꺼번에 출발시킨다(레이스 A·B·C 모두 두 레이서 같은 프레임). 클라는 신호를 받으면 3·2·1 카운트다운 뒤 출발하고, 경기 내내 `ManualStart=false` 라 R·RUN AGAIN 이 막힌다. 싱글도 Enter·R·HUD 버튼이 카운트다운을 거친다(`ChainRushGame.StartCountdown`). `StartRun()` 은 그대로 즉시 출발이라 P2 해시는 같다.
-  - **C1a 격리 월드** (DECISIONS 2026-10-10 "P3 C1a"): 레이서마다 서킷 씬 복사본을 `RaceWorld.IsolatedLoad`(Additive + Physics3D)로 로드하면 각자 자기 물리 씬을 가지며, 두 복사본을 함께 돌려도 각자 솔로와 비트 단위로 같다(공유 물리 월드 대조군은 757틱에서 갈라진다). `RunnerMotor.SnapToGround`·`GrappleController` 의 물리 조회는 오브젝트가 속한 씬의 물리 월드를 쓴다. `ChainRushGame.TickCompleted(int)` 는 틱이 끝난 틱 사이 상태에서 스냅샷을 찍는 자리다(`Consume` 안에서 찍으면 틱 사이 상태가 아니다). 복사본 로더(에디터/플레이어)는 만들지 않았다.
-- 레이스 씬 2개(2026-10-25 `ChainRushProcedural` 절차 무한 씬 삭제): `ChainRushCircuit`(서킷), `ChainRushTestBench`(테스트 작업대, 2026-10-14 `ChainRushPrototype` 에서 이름만 바꿈, 2026-10-15 R3 에서 첫 구간만 남기고 결승선·구 머리 캐릭터를 걷어냄). 두 씬의 러너 모형은 프리팹 `ArmoredRunner` 하나다.
-- 테스트: 2026-10-25 무한 모드 삭제로 `Endless`·`Long`·`Sweep` 카테고리와 메뉴 `Run Long Tests`·`Run Course Sweep` 가 없어졌다. 게이트 수는 바뀌지 않았다(지운 테스트는 모두 게이트 밖이었다, DECISIONS "무한 모드 삭제"). 아래는 옛 값이다. 최근 값은 R4(2026-10-15) EditMode 255, 게이트 `Run PlayMode Tests` 143(통과 140 + `[Explicit]` 네트워크 레이스 skipped 3), `Long` 4, Device 3, Sweep 1(DECISIONS "R4"). 아래 줄의 나머지는 2026-10-13 값이다 — EditMode 237, PlayMode 148(Device 3 + Sweep 1 + `[Explicit]` 네트워크 레이스 3 + 게이트 141, `feature/p3-c1-same-start` 기준). 병합 조건 실행은 Device·Sweep 제외 144건 중 141 통과·3 skipped(Explicit), 이 머신(19f1)에서 약 580~660초/회(이전 머신 약 556초/회, 121건). `Net` 카테고리로 고르면 `[Explicit]` 네트워크 레이스도 같이 돈다(2026-10-11 확인). 20 시드 스윕(`Run Course Sweep`) 약 933초. 네트워크 레이스는 플레이어 빌드(`Path.GetTempPath()/ProtoHarnessRaceBuild/RaceBuild.exe`, `BuildPipeline.BuildPlayer` 로 서킷 씬만)가 있어야 하고 이름으로 골라 돌린다(약 90초).
-- **테스트 3단** (DECISIONS 2026-10-14 "테스트 3단", `docs/test-tiers`; **2026-10-18 "병합은 바뀐 부분만"** 으로 병합은 `select-tests -Range dev...HEAD` 가 고른 테스트, "전체" 판정일 때만 게이트 전체 — 아래 옛 설명보다 우선): 병합(`feature → dev`)은 PlayMode 전체(`Long` 제외, 코어 변경이면 `Long` 도) **1회**, 2회차·Sweep·Device·네트워크 레이스는 마일스톤(`dev → main`)으로 옮겼다(`CLAUDE.md` §9-2). 작업 중 빠른 확인은 `tools/select-tests.ps1` 이 바뀐 파일로 고른 테스트(병합 근거 아님). 도구가 만든 필터는 Unity 에서 실행해 고른 테스트만 도는 것을 확인했다(2026-10-14, 18건 78초, VERIFICATION §4-4).
-
-## 2. 다음 작업 (후보, 사용자 승인 대기)
-
-**2026-10-14: 다음 작업은 `docs/NEXT_REQUESTS.md` 에 합의 요청서(R2~R9, R0 문서·저장소 정리와 R1 테스트 안정화는 2026-10-15 끝남)로 정리했다 — 권장 순서·선행·검증 시간·사용자 결정이 거기 있다.** 아래는 그 전의 후보 목록(배경 설명)이다.
-
-**2026-10-15 서킷 집중** (DECISIONS 같은 날 "서킷 집중"): 무한 모드와 멀티의 새 기능을 멈추고 서킷(속도전) 싱글을 먼저 다듬는다. 테스트·병합 조건은 그대로다. R6·R7 은 보류다. 플레이어 모형은 네모(`Armored Runner`) 하나로 맞춘다 — 네트워크 상대는 R9, 작업대와 꺼진 둥근 모형은 R3. 아래 목록 가운데 무한 모드(공격 판정 방향)·멀티(C1 마무리 측정, C2) 항목은 다시 열 때까지 손대지 않는다.
-
-**2026-10-15 플레이 경험 순서 로드맵** (DECISIONS 같은 날, `docs/DESIGN.md` §5-1): M1 한 판이 끝까지 돈다(v0.2) → M2 다시 할 이유(기록·고스트) → M3 고를 거리(트랙 2~3개) → M4 같이 달리는 맛(AI 상대) → M5 멀티 재개. 지금은 **M1** 이다(`docs/NEXT_REQUESTS.md` R5 → M1-T, R4 끝남). 실제 네트워크 레이스(플레이어 빌드 + 레이스)는 M5 까지 돌리지 않는다. **2026-10-19 재배치** (DECISIONS 같은 날 "로드맵 재배치"): M2 게임의 뼈대 → M3 트랙 → M4 기록·고스트 → M5 AI 상대 → M6 폴리시 → M7 멀티 재개 — 위 문장의 M5 는 이제 M7 이다. 마일스톤 조건에는 네트워크 레이스 대신 사용자 플레이 확인이 들어갔다(`CLAUDE.md` §9-2 ③).
-
-C1c-3(진행 중 순위)와 다른 입력의 두 레이서(레이스 C)까지 `dev` 에 병합했다(위 1절). 아래는 다음 후보이고, 권장 순서는 위에서 아래다. 새 요청서(§3-2)를 먼저 올린다.
-
-- **설계 제안서 3건의 남은 단계 (모두 Unity 필요)**: ① ~~`Long` 묶음~~ 끝남(DECISIONS 2026-10-14 "Long 묶음": 게이트 651 → 428초, 코어 변경이면 `Run Long Tests` 198초 추가). ② 맵 정리 — 2단계(이름 `ChainRushTestBench`) 끝남, 3단계(발판·결승선·표적 걷기, 테스트 삭제·합치기)가 남았다. ④ **코너 봉 스윙** (`docs/PROPOSAL_CORNER_POLE.md`, 2026-10-14 사용자 결정 7개 반영, 승인 대기): 지금 코너 스윙을 "코너 중앙의 봉 + 고정 줄 길이 + 관성 + Ctrl 유지" 로 대체. P1(시뮬) → P2(표현) → P3(절차 코스). ③ ~~코너 스윙 S1 연출~~ 끝남(DECISIONS 2026-10-14 "코너 스윙 S1 연출"). S1b·S2 는 **하지 않는다** — ④ 봉 스윙으로 대체(DECISIONS 2026-10-14 "코너 스윙을 봉 스윙으로 대체"). 각 단계 §3-2 합의.
-- ~~떨어지면 트랙으로 복귀~~: 설계 결정 끝, 구현은 `feature/circuit-fall-respawn`(`docs/NEXT_REQUESTS.md` R2). 남은 후속 후보: 복귀 연출(깜빡임·카메라), 정지 시간 체감 튜닝, 정지 중 공격 입력(지금은 `ChainRushGame.Attack` 이 정지와 무관하게 돈다 — 서킷엔 대상이 없어 링·소리만 난다).
-- ~~진행 중 순위의 앞뒤 거리 표시~~: **하지 않는다**(2026-10-13 사용자 "두 유저 사이의 거리는 필요없을거같다"). ~~같은 시각 출발~~ 과 ~~네트워크 클라의 HUD 재시작 버튼~~ 은 `feature/p3-c1-same-start` 가 다룬다(경기 내내 `ManualStart` 를 꺼 R·RUN AGAIN 을 막는다).
-
-- **C1c 의 남은 것**: 따라잡기의 S+L 상한은 표적·충돌 같은 다른 종료 조건이 생기면 다시 시험한다(지금 서킷에서는 만들 수 없다). `RaceClient.OnState`·`OnEnd` 에서 예측기에 넘기기 전 디코딩이 던지는 손상 바이트는 고장을 세우지 않는다(Netcode 가 예외를 로그로 남김).
-- **공격 판정 방향 (이슈, 설계 결정 대기)**: 공격 판정이 몸 방향도 트랙 방향도 아닌 **월드 +z** 를 앞으로 본다. `CourseTarget.TryHit`(`CourseTarget.cs:53-54`)은 플레이어 기준 월드 z 로 -0.5 ~ 5 m, |x|·|y| ≤ 2.5 m 상자다. 직선 코스 전제라 자유 조향·커브에서 바라보는 쪽과 맞는 쪽이 갈라진다. 공격 링 `Strike Arc` 는 루트 자식(local z=1.6, `ChainRushSceneBuilder.cs:159-161`)이라 프로토타입에서는 판정과 같은 +z 를 보여 주지만, 서킷은 루트가 출발선 방향으로 돌아가 있어(`ChainRushCircuitSceneBuilder.cs:109`) 링과 판정이 어긋날 수 있다(서킷에 공격 대상이 있는지는 미확인). 링만 몸 방향으로 돌리면 판정과 더 어긋나므로 하지 않았다(2026-10-10, `fix/runner-heading-visual` 에서 몸만 `Heading` 을 보게 함). 정할 것: 판정 기준을 몸 방향(`Heading`)으로 할지 트랙 진행 방향으로 할지. 판정은 시뮬레이션(`ChainRushGame.cs:281` 의 `racer.AddHit`)이다. P2 재생 해시에 영향이 있는지는 확인하지 못했다 → 요청서(§3-2)부터. 링은 같은 기준으로 같이 돌린다.
-- **P3 C1 마무리 측정**: (서로 다른 입력의 두 레이서는 레이스 C 로 끝남) 3인 이상 서버, 100 ms 에서의 체감(프레임 시간·입력 지연), 패킷 유실(앱 수준 지연 큐는 유실을 모사하지 못한다), 모바일/IL2CPP 빌드의 일치.
-- **P3 C2 (충돌·추월)**: 격리 월드로는 못 한다. 공유 월드가 필요하고 `CircuitRace` 의 월드/레이서 분리, `Centerline` focus 의 레이서별 분리가 선행이다(DECISIONS "P3 C1a" 의 버린 계획 이유).
-- **P2 후속(고스트)**: 입력 로그 파일 저장은 `InputLogFile` 로 끝났다. 남은 것은 최고 기록 저장과 겨루기(고스트 재생)와 UI.
-- **T3e 장식**, **T5 보충 모듈**(`docs/COURSE.md`).
-- 체감 튜닝: 2026-10-18 사용자 플레이 피드백을 받았다 — `docs/NEXT_REQUESTS.md` "M1-T 에 넘긴 플레이 피드백"(드리프트 항목은 R4b 로 없어진다).
-- **하네스**: ① SessionStart 의 `resume` 트리거 미확인(`clear`·`startup`·`fork` 는 확인됨). 2026-10-10 백그라운드 세션을 `dev` 위에서 resume 했을 때 transcript 에 `SessionStart:resume` 기록이 없었다. dev 커밋은 PreToolUse guard 가, 낡은 인덱스는 LOOKUP §6-2 가 따로 막으므로 우선순위 낮음 ② 서브에이전트 안의 훅은 Bash deny 만 확인됨(DECISIONS 2026-10-10 "하네스 자동화" 한계). `ask`·PowerShell·PostToolUse 는 미확인 ③ C모드 재논의: 우리 `.cs` 가 95개(2026-10-10 `git ls-files`)로 §6-3 의 재논의 트리거(60개 초과)를 넘었다. 만들지는 별도 합의.
-
-## 3. 보류된 사용자 결정
-
-| # | 주제 | 상태 | 참고 |
-|---|---|---|---|
-| 1 | ~~병합 조건 검증 줄이기~~ **해결** | 2026-10-14 테스트 3단으로 대체했다: 병합은 PlayMode 1회, 2회는 마일스톤(`CLAUDE.md` §9-2, DECISIONS 2026-10-14 "테스트 3단"). 그 전 2026-10-13 "병합 2회차 축소"(Net 만 바꾸면 2회차 `Net` 만)는 지웠다. D(장거리 테스트 배속)는 하지 않았다 — 원하면 별도 합의 | 2026-10-14 |
-| 2 | 물리 값 체감 튜닝 | 전부 계산으로 정한 시작값. 사용자 플레이 피드백 대기 | 아래 표 |
-| 3 | 헤딩 범위 제한 | 계속 꺾으면 뒤로도 돈다(가드에 닿으면 앞으로 돌려짐). 막을지 미정 | DECISIONS T2a |
-| 4 | ~~기존 PlayMode 테스트의 착지 확인~~ **해결** | 2026-10-26 R8(`fix/test-landing-check`)로 `ChainRushCurveTests`·`CornerSwingTests`·`DriftTests`·`SlopeTests` 의 `StartOn` 도 고정 틱 1회 뒤 확인으로 고쳤다(DECISIONS 2026-10-26 "R8") | 2026-10-26 |
-| 5 | ~~원격 `origin/dev` 와 갈라짐~~ **해결** | `feature/integrate-origin-dev`(`138446a`)로 통합하고 `dev` 를 푸시했다(경위는 DECISIONS 2026-10-09 "코스 T3b (다른 클론…)"). 백업 원격 `backup/dev-2026-10-10` 은 `dev` 에 들어 있음을 확인하고 2026-10-15 사용자 지시로 지웠다. 남은 결정: 앞보기 300m 를 로컬 생성기에 옮길지(별도 합의) | 2026-10-15 |
-| 6 | ~~끝난 브랜치 정리~~ **해결** | 2026-10-15 사용자 지시로 `dev` 에 병합된 것을 지웠다: 로컬 `docs/design-proposals`·`docs/test-tiers`·`feature/test-long-tier`·`feature/scene-test-bench`·`feature/corner-swing-look`, 원격 `docs/design-proposals`·`backup/dev-2026-10-10`. `spike/p3-ngo-prediction`·`feature/p3-ngo-package`·`feature/course-t3c-endless` 는 그때 이미 없었다. 그때 남은 `feature/circuit-fall-respawn`(R2)은 같은 날 `dev` 에 병합됐다(`7f0a982`). 2026-10-18 확인: `dev` 에 병합 안 된 로컬 브랜치는 `main` 뿐이고, 병합됐지만 남은 로컬 6개(`docs/circuit-focus`·`docs/roadmap-playable`·`feature/circuit-fall-respawn`·`feature/corner-pole-sim`·`feature/net-boxy-ghost`·`feature/scene-test-bench-strip`)와 원격 2개(`feature/circuit-fall-respawn`·`feature/corner-pole-sim`)는 2026-10-18 사용자 지시("무쓸모 브랜치 지우기")로 `docs/roadmap-sync` 와 함께 지웠다(이번에는 자동 모드가 막지 않았다). 같은 날 R5 병합 뒤 `feature/corner-pole-look` 도 지웠다. 병합됐지만 남았던 로컬 `docs/branch-cleanup-record`·`docs/corner-pole-proposal`·`docs/main-v0.1`·`feature/p3-c1-same-start` 도 같은 날 사용자가 지웠다 | 2026-10-15 |
-| 7 | ~~미추적 `Assets/DefaultNetworkPrefabs.asset` (+`.meta`)~~ **해결** | NGO 가 자동 생성한 빈 목록(`IsDefault: 1`). 2026-10-10 사용자 "a" 대로 C1c-1 브랜치(`feature/p3-c1c-run-end`)에서 내용 수정 없이 커밋하고 게이트를 같이 치렀다(DECISIONS 2026-10-11 "P3 C1c-1"). `ProtoHarness.slnx` 는 Unity 가 다시 만드는 파일이라 수정으로 보여도 커밋하지 않는다 | 2026-10-11 |
-| 8 | `dev → main` 병합과 태그 | 마일스톤마다만(`CLAUDE.md` §9). 2026-10-13 `main` 을 P3 C1(2인 네트워크 레이스·같은 시각 출발)까지 올리고 첫 태그 `v0.1` 을 달았다(DECISIONS 2026-10-13 "main v0.1"). 그 전 `main` 은 `7e4a0a8`(P0·P1-1·P1-2). 다음 병합도 사용자가 시킬 때만 | 2026-10-13 |
-| 9 | `.claude/settings.json` (읽기 전용 허용 8개 + 훅 3개) | 허용 목록은 `/fewer-permission-prompts` 로 만들어 2026-10-10 사용자의 "커밋" 지시로 커밋했다(`.claude/` 변경). 범위가 마음에 안 들면 줄인다. 훅은 `docs/harness-automation` 에서 추가(DECISIONS 2026-10-10 "하네스 자동화") | 2026-10-10 |
-
-튜닝 대상 시작값 (`RunnerMotor`/`FollowCamera`/`GrappleController` 인스펙터, 씬 값이 없으면 코드 기본값):
-
-| 묶음 | 값 |
-|---|---|
-| 조향 | `maxTurnRate` 120°/s, `turnAcceleration` 1200°/s², `airTurnScale` 0.5, `sideGrip` 60, `airSideGrip` 18 |
-| 경사 | `slopeSpeedFactor` 1.5, 속도 배율 0.7 ~ 1.3, `groundSnapDistance` 0.3 |
-| 가드 | `guardSpeedLoss` 0.15 |
-| 드리프트 | `driftGrip` 12, `driftTurnScale` 1.3, `driftSpeedScale` 0.9, `slideMetersPerSlot` 6 |
-| 슬링샷 | `slingLead` 18, 당김 0.4 s · 45 m/s² · 최대 20, `slingTurnRate` 90°/s, 유지 0.8 s · 16 |
-| 그래플 강화 | `empoweredRetractSpeed` 12, `empoweredReleaseSpeed` 18 |
-| 코너 스윙 | `swingSpeed` 14, `swingAcceleration` 20, `swingMaxTime` 2, `swingExitSpeed` 17, `swingExitCarryTime` 0.6 |
-| 카메라 | `maxYawSpeed` 180°/s |
-
-## 4. 환경 메모 (다음 세션이 헷갈릴 수 있는 것)
-
-- 작업 머신이 둘이다. `D:/PCUBE/ProtoHarness`(2026-10-10)의 에디터는 **6000.3.25f1**(결정 버전과 같음)이고 Hub 에 18f1·25f1 이 있다. `C:/Users/User/Desktop/PCUBE/ProtoHarness`(C1c-2b 를 한 곳, 2026-10-12)는 **6000.3.19f1** 이라 열면 `ProjectVersion.txt`·`packages-lock.json`·`ProjectSettings.asset`(키 3개 빠짐)이 바뀌어 보인다 — 커밋하지 않는다. 이 머신의 `Path.GetTempPath()` 는 `C:\Users\User\AppData\Local\Temp\` 이고 Windows 빌드 모듈이 있다. 검증 보고에는 실제로 돌린 에디터 버전을 적는다.
-- 네트워크 레이스가 도는 중에는 `Unity_RunCommand` 를 부르지 않는다. 2026-10-12 A 도중 `ScreenCapture` 를 부른 직후 에디터 클라 예측기가 고장 났다(`server's state is for tick 230 but the client is at tick 229`). 에디터가 멈춘 사이 서버가 클라를 앞지른 것으로 보이나 재현 실험은 하지 않았다.
-- 서버·클라 겸용 플레이어는 `BuildPipeline.BuildPlayer`(서킷 씬만, 출력은 리포 밖 `Path.GetTempPath()/ProtoHarnessRaceBuild/`)로 만든다. 서버·클라 코드를 바꾸면 다시 빌드해야 통합 테스트에 반영된다. 에디터에는 `NetworkManager` 가 프로세스당 하나뿐이라 통합 테스트의 두 번째 클라는 별도 프로세스다.
-- **플레이어 빌드는 Unity 가 `ProjectSettings` 를 자동으로 바꾼다**(`ProjectSettings.asset`·`UnityConnectSettings.asset`·`Assets/Settings/*.asset`, 2026-10-10 스파이크 서버 빌드 때 확인). 커밋하지 않고 파일을 지정해 `git restore` 한다. 빌드 중 임시 `Assets/Resources/` 가 생겼다 사라진다.
-- `Assets/DefaultNetworkPrefabs.asset`(+`.meta`, NGO 가 자동 생성한 빈 목록)은 C1c-1 에서 커밋했다(3절 #7). `ProtoHarness.slnx` 가 수정으로 보이면 Unity 가 다시 만든 것이라 커밋하지 않는다. `.claude/settings.json` 은 커밋돼 있다(3절 #9).
-- 서브에이전트 5종은 `claude-opus-5-5` + `effort: high` 로 고정돼 있다(DECISIONS 2026-10-10 "서브에이전트 모델·노력 고정"). 이 브랜치가 그 병합(`3495fc6`) 전 `dev` 에서 갈라졌으면 파견 때 `model`·`effort` 를 직접 넘긴다.
-- 이 환경에서 검증할 때: 테스트 결과는 XML 을 `Grep` 으로 읽고, 완료 알림은 `Editor.log` 의 `ChainRush tests:` 줄을 쓴다. `Unity_RunCommand` 는 `System.Reflection` 을 막는다(타입 확인은 `System.Type.GetType("...")`). 컴파일 확인은 `EditorApplication.isCompiling` 과 새 타입 로드 여부를 같이 본다(리프레시 직후 `False` 는 아직 이르다). 사용자는 허용 프롬프트가 많은 것을 싫어하므로 읽기·수정은 `Read`/`Grep`/`Edit` 로 하고 Bash 는 최소로 쓴다.
-- 테스트 결과 XML 은 Unity 의 `Path.GetTempPath()/ChainRush-PlayMode-results.xml` 하나에 덮어쓴다(EditMode 실행도 같은 파일). 에디터의 `Path.GetTempPath()` 는 이 머신에서 `C:\Users\Public\Documents\ESTsoft\CreatorTemp\` 이다(2026-10-08 Editor.log 의 `ChainRush tests: ... XML=` 줄로 확인. 셸의 `%TEMP%` 와 다르다). 경로는 Editor.log 에서 `ChainRush tests:` 를 찾으면 나온다. EditMode 는 MCP `Unity_RunCommand` 로 `TestRunnerApi.Execute(new Filter { testMode = TestMode.EditMode })`, PlayMode 는 `EditorApplication.ExecuteMenuItem("ProtoHarness/Chain Rush/Run PlayMode Tests")` 로 시작했다. 실행마다 따로 보관하려면 끝날 때 복사한다.
-- Unity MCP: 도메인 리로드마다 브리지가 몇 초 끊긴다(`Unity not detected (no fresh discovery files found)`). `~/.unity/mcp/connections/bridge-*.json` 이 다시 생기면 재시도한다. 에디터가 백그라운드면 스크립트를 자동 임포트하지 않을 수 있다 → `AssetDatabase.Refresh()`. 테스트 전에 새 코드가 로드됐는지(리플렉션 등) 확인한다.
-- `.codex/agents/` 가 `git status` 에 수정으로 보이면 `autocrlf` 표시다(내용은 HEAD 와 같음). 손대지 않는다.
-- `index/symbols.tsv` 를 마지막으로 만든 커밋은 그 헤더의 `git-head` 에 있다. 그 뒤 커밋이 생기면 다시 낡는다. 세션 시작 때 SessionStart 훅(`tools/hooks/session-start.ps1`)이 낡았으면 알린다. B모드로 쓰기 전에 재생성한다(§6-2).
-- 훅 3개가 `.claude/settings.json` 에 있다(DECISIONS 2026-10-10 "하네스 자동화"): 되돌릴 수 없는 git 명령·`main`/`dev` 커밋은 deny, 보호 파일 Edit/Write 는 ask, 에이전트 정의를 고치면 `.codex` 어긋남 알림. 훅이 막으면 우회하지 말고 사유를 보고한다.
-- GitHub Desktop 이 켜져 있으면 `.git/index.lock` 이 남을 수 있다. 실행 중인 `git.exe` 가 없을 때만 지운다(2026-10-05 한 번 발생).
-- 씬 저장을 `Unity_RunCommand` 로 하려면 매번 승인받는다(§0, §3-3). T2a 의 승인은 1회성이었다.
-- 도메인 리로드 때 `Deleting invalid font reference.` 경고가 나온다(P1-3a 부터, 원인 미확인). 변경과 무관.
+- **리포 이름 ProjectRun (2026-11-18, DECISIONS "리포 이름 ProjectRun")**: GitHub 이름만 바뀌었고 코드·폴더·`productName` 은 `ProtoHarness` 그대로다. D:/PCUBE PC 는 아직 옛 주소일 수 있다 — 그 PC 에서 시작하면 `git remote -v` 를 보고 `git remote set-url origin https://github.com/DosangE/ProjectRun.git`.
+- **두 PC 와 버전 차이**: `D:/PCUBE/ProtoHarness` 의 에디터는 6000.3.25f1(결정 버전), `C:/Users/User/Desktop/PCUBE/ProtoHarness` 는 6000.3.19f1 이라 열면 `ProjectVersion.txt`·`packages-lock.json`·`ProjectSettings.asset`·`ProtoHarness.slnx` 가 바뀌어 보인다 — 커밋하지 않는다. 검증 보고에는 실제로 돌린 에디터 버전을 적는다. 끝낼 때마다 푸시하고, 시작할 때 `git fetch` 와 `git status -sb` 로 갈라짐부터 본다(2026-10-30 다른 PC 의 푸시 안 한 v0.5 를 모르고 작업한 일). 원격 브랜치를 셀 때는 `git ls-remote --heads origin` 이나 `git fetch --prune` 뒤에 본다.
+- **같은 작업 트리를 다른 세션이 쓸 수 있다**: 브랜치를 바꾸기 전에 `git branch --show-current`·`git status` 로 다른 세션의 커밋 안 한 파일이 없는지 본다(2026-11-09 아트 세션이 리뷰 도중 브랜치를 바꿨다).
+- **사용자가 같은 에디터에서 플레이한다**: Refresh·테스트 시작 전에 `EditorApplication.isPlayingOrWillChangePlaymode` 를 확인하고, 플레이 중이면 시작하지 않는다(플레이 중 재로드로 로비 NRE).
+- **사용자가 작업 중 에디터를 닫을 수 있다**: `Unity_RunCommand` 가 `Named pipe socket file not found` 로 끊기면 `Temp/UnityLockfile` 이 없는지 보고 배치 모드(`-executeMethod …`, `-runTests -testFilter …`)로 이어 간다(VERIFICATION §4-3 B). 에디터를 다시 열지 말라고 먼저 알린다.
+- **테스트 결과 XML**: Unity 의 `Path.GetTempPath()/ChainRush-PlayMode-results.xml` 하나에 덮어쓴다(EditMode 도 같은 파일). PC 마다 다르다 — `C:/Users/User/Desktop/PCUBE` PC 는 `C:\Users\User\AppData\Local\Temp\`(2026-11-12 `Unity_RunCommand` 로 확인), `D:/PCUBE` PC 는 `C:\Users\Public\Documents\ESTsoft\CreatorTemp\`(2026-11-14 `Unity_RunCommand` 의 `Path.GetTempPath()` 로 확인). 실행할 때 `Path.GetTempPath()` 로 구한다. 실행마다 `tools/test-runs.ps1 -Record` 로 남긴다(§4-4). 같은 PC 에서 두 에디터로 동시에 테스트를 돌리지 않는다.
+- **Unity MCP**: 도메인 리로드마다 브리지가 몇 초 끊긴다. 에디터가 백그라운드면 스크립트를 자동 임포트하지 않을 수 있다 → `AssetDatabase.Refresh()`. 컴파일 확인은 `%LOCALAPPDATA%\Unity\Editor\Editor.log` 의 `Tundra build success/failed` 줄(새로고침 **전** 줄 수를 세어 둔다). `Unity_RunCommand` 는 `System.Reflection` 을 막는다.
+- **네트워크 레이스** (M7): 도는 중에는 `Unity_RunCommand` 를 부르지 않는다(2026-10-12 예측기 고장). 서버·클라 겸용 플레이어는 `BuildPipeline.BuildPlayer`(서킷 씬만, 출력은 리포 밖 `Path.GetTempPath()/ProtoHarnessRaceBuild/`). 에디터에는 `NetworkManager` 가 프로세스당 하나라 두 번째 클라는 별도 프로세스다.
+- **플레이어 빌드는 Unity 가 `ProjectSettings` 를 자동으로 바꾼다**(`ProjectSettings.asset`·`UnityConnectSettings.asset`·`Assets/Settings/*.asset`). 커밋하지 않고 파일을 지정해 되돌린다. 빌드 중 임시 `Assets/Resources/` 가 생겼다 사라진다.
+- `Assets/DefaultNetworkPrefabs.asset`(NGO 가 만든 빈 목록)은 커밋돼 있다. `.codex/agents/` 가 수정으로 보이면 `autocrlf` 표시다(내용은 HEAD 와 같음).
+- **세션 기록 보존**: Claude Code 는 세션 기록(`~/.claude/projects/<리포 경로>/*.jsonl`)을 기본 30일 뒤 지운다(`cleanupPeriodDays`). `tools/harness-cost.py` 의 재측정에 기록이 필요해 사용자 설정 `~/.claude/settings.json` 에 `"cleanupPeriodDays": 365` 를 넣는다 — `C:/Users/User/Desktop/PCUBE` PC 는 2026-11-13, `D:/PCUBE` PC 는 2026-11-14 에 넣었다(사용자 설정이라 리포에 없다).
+- `index/symbols.tsv` 는 2026-11-13 부터 선택 도구다(B모드는 코드 `Grep`). SessionStart 훅은 더 이상 인덱스가 낡았다고 알리지 않는다. 대신 2026-11-15 부터 HANDOFF 를 고치지 않은 `dev` 병합을 알린다(`CLAUDE.md` §9-2, 로컬 `dev` 기준이라 `git fetch` 와 `dev` 갱신 뒤에 맞다). 쓴다면 먼저 재생성한다(§6-2).
+- 훅 3개(`.claude/settings.json`, DECISIONS 2026-10-10 "하네스 자동화"): 되돌릴 수 없는 git 명령·`main`/`dev` 커밋은 deny, 보호 파일 Edit/Write 는 ask, 에이전트 정의를 고치면 `.codex` 어긋남 알림. 훅이 막으면 우회하지 말고 사유를 보고한다.
+- GitHub Desktop 이 켜져 있으면 `.git/index.lock` 이 남을 수 있다. 실행 중인 `git.exe` 가 없을 때만 지운다.
+- 서브에이전트는 `.claude/agents/*.md` frontmatter 의 `model`·`effort` 가 원본이다(DECISIONS 2026-10-10 "서브에이전트 모델·노력 고정").
