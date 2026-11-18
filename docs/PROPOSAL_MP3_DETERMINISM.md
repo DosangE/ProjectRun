@@ -1,5 +1,48 @@
 # MP3 여러 레이서 결정성 — §3-2 합의 요청서 초안
 
+## 0. 2026-11-18 합의: MP3 는 "재생만", 롤백은 M7 (구현 승인됨)
+
+> **승인**: 사용자 2026-11-18 "다 추천대로. 다만 작업은 새 세션에서 하겟다" — 아래 요청서와 정할 것 ①②③ 모두 추천안. 범위를 줄인 이유는 사용자 질문 "mp3 작업 얼마나걸릴것같나" 에 초안 그대로 3~5일 / 재생만 1~2일로 답하고, v1.0 게임에는 롤백을 쓰는 곳이 없다(롤백은 네트워크 보정용, M7)고 추천한 것.
+> **이 절이 MP3 의 구현 범위다.** 아래 1~4절(2026-11-15 초안)은 롤백 부분을 M7 에서 다시 열 때의 자료로 남긴다. 그 초안의 "사용자가 정할 것" 6항목은 1·2·4·5 가 이 절로 정해졌고(A 회귀 검출, B 전원 입력 기록, B 논리 순서 고정, 게이트 포함), 3·6(롤백 범위·봇 상태 계약)은 M7 로 넘어갔다.
+> 근거 줄 번호는 2026-11-18 `dev` `c6d8c42` 기준으로 다시 확인했다.
+
+**런타임 코드를 고치지 않고 테스트만으로 한다.** 근거:
+- 봇을 직접 관측에 연결하고(`bot.Observe(field, i)`) 필드를 한 틱씩 돌리는 방식이 이미 있다 — `Tests/PlayMode/RaceBotTests.cs:182-190`, 필드 한 틱 `:210`(`FieldTick` = `RaceField.FixedUpdate` 리플렉션, `:26`), 봇전 로드 `LoadRace` `:216`.
+- 입력원을 `InputRecorder` 로 감싸면 `RaceField.Initialize` 의 자동 `Observe`(`Runtime/ChainRush/Race/RaceField.cs:149,151`, `is RaceBot` 검사)가 걸리지 않는다 → 위처럼 테스트가 `Observe` 를 직접 부른다.
+- 기록·재생은 `InputRecorder`(`Control/InputRecorder.cs:21`)·`InputReplay`(`Control/InputReplay.cs:23`). `SetInputSource`·`StartRun` 이 `Clear` 를 부르므로 입력원을 건 뒤 `StartRun` 한다.
+- 러너 상태 전체의 비트 비교는 `Runtime/Net/SimSnapshotCodec.cs:15` `Encode(ChainRushGame.CaptureSnapshot())`. 코덱의 `WriteRacer` 는 `RacerState.Snapshot` 의 저장 필드 29개를 모두 쓴다(2026-11-18 대조; `IsDown` 은 대조에서 코덱에 없었다 — 계산 속성인지 구현 때 확인). `CaptureSnapshot` 은 `Running` 에서만 된다(`ChainRushGame.cs:281`) — 결승한 러너는 그 뒤 필드 결과로 비교한다. 같은 방식의 선례 `Tests/PlayMode/NetReconcileTests.cs:166`.
+
+```
+목표:      봇전(플레이어 + 봇 3, 접촉 켬)의 전원 입력을 기록해 다시 돌리면 매 틱 전원 상태와
+           필드 결과(Place·Progress·FinishTick·ContactSwingBreaks·ContactSequence)가 비트 단위로 같다.
+           v1.0 봇전의 결정성 회귀 검출. 롤백은 M7.
+브랜치:    feature/mp3-field-replay (dev 에서 분기)
+건드릴 것:
+  Tests/PlayMode/ChainRushReplayTests.cs   새 테스트 2개 추가 (기존 2개는 그대로)
+  tools/select-tests.ps1                   Race/·Bots/ 변경 때 ChainRushReplayTests 의 새 테스트가 골라지는지 확인, 빠지면 배정
+  docs/DESIGN.md:107                       MP3 행에서 롤백을 M7 으로 옮김 (정할 것 ①)
+새로 만들 것: 없음 (기존 리플레이 테스트 파일, 정할 것 "위치")
+테스트:
+  Replay_BotRaceAllRunners_RepeatsEveryTickBitForBit — STADIUM·SUMMIT DROP ([Values], 정할 것 ③), Hard
+    전원 입력을 기록하며 결승까지 (상한 6,000틱), 같은 세션 / 씬 재로드 / 프레임당 틱 묶음을 바꿔 재생,
+    매 틱 4명의 Encode 바이트 + 필드 결과 비교. 전제 단언: 접촉이 실제로 일어남(ContactSequence > 0).
+    봇전 해시는 로그로 남기고 DECISIONS 에 기록 (고정 상수 단언 없음, 정할 것 ②).
+  Replay_BotRaceOneInputChanged_DivergesFromThatTickOnAndNotBefore
+    상대 하나의 입력 인덱스 300 을 바꾸고, 300틱까지 같고 301틱에 그 러너부터 갈라지는지 (대조군).
+검증:      컴파일 에러 0, 새 테스트 + 기존 ChainRushReplayTests·RaceBotTests 를 이름으로 골라 1회.
+           실행 시간을 재 게이트 포함 여부 판단(초안 5번 B: 게이트 포함이 기본).
+안 하는 것: 필드 스냅샷·복원, IRewindableInputSource, 롤백 테스트 9건(M7), 런타임 코드 수정,
+           봇전 리플레이 기능, 8인, 다른 PC 의 비트 일치, 혼자 판 지문 고정 상수 단언(정할 것 ②)
+멈추는 조건: 재생이 어긋나면 결정성 버그 — 고치지 않고 멈춰 첫 불일치 틱·러너·필드를 보고(§3-3).
+```
+
+| 정할 것 | 답 (2026-11-18 "다 추천대로") |
+|---|---|
+| ① 롤백을 M7 로, `DESIGN.md` 수정 | 예 |
+| ② 혼자 판 지문 `0xEF92FB76BFD1D767` 고정 상수 단언 | 안 넣는다 — 시뮬 튜닝마다 상수 갱신 합의가 필요해진다. 로그 + DECISIONS 기록 유지 |
+| ③ 트랙 | STADIUM·SUMMIT DROP |
+| 위치 | 기존 `ChainRushReplayTests.cs` 에 추가 (새 파일 없음) |
+
 > 작성·보관: 2026-11-15.
 > 구현 승인 상태: 없음. 이 문서는 합의 요청서 초안이며, 문서 보관 지시는 구현 승인이 아니다.
 > 보관 승인: 사용자 “해당 요청서 프로젝트 경로에 md파일로 보관하라. 요청서 경로가 따로 있다면 거기에, 없다면 만들어서”.
