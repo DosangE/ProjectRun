@@ -10,6 +10,30 @@
 
 ---
 
+## 2026-11-18 · main v0.7: M5 "같이 달리는 맛" — `dev` 를 `main` 에 병합하고 태그 `v0.7` (`feature/m5-release-prep`)
+
+- **결정 (사용자, 2026-11-18)**: "확인했다 병합 태그 푸시 모두 진행". 플레이 확인을 부탁한 넷 — ① 완료 조건 "봇과 몸싸움하며 겨뤄 순위가 나온다"(봇전 한 판), ② D8 유령(STADIUM·쉬움, S 119 첫 틈에 떨어져 깜빡이는 1초 동안 뒤의 봇이 통과하는지), ③ MP2 ④ 의 부스트존 → 스윙 → 부스터 감속 체감, ④ README 새 화면 — 에 대한 답이다. 절차는 "main v0.6" 과 같다: `feature/m5-release-prep`(타이틀 `0.7`·README·화면) → `dev` → `main` `--no-ff`, 주석 태그 `v0.7`.
+- **v0.7 에 든 것** (`main` v0.6 뒤): MP1 격리 월드 + 조정자(`RaceField`), MP2 봇전(단계 A 판·순위, 단계 B 몸싸움·출발 격자, ④ 봇 난이도 3단계와 스윙 중 부스트 감속, 남은 것 D8 유령), MP3 봇전 전원 입력 재생 비트 일치(롤백은 M7), 러너 캐릭터 새 모형·Animator·로비 초상·접촉 움찔, 장식 킷 K1·K3·K4, 화면 텍스트 정리. 각각 이 문서의 같은 이름 항목.
+- **마일스톤 조건 (`CLAUDE.md` §9-2 ③)** — 코드는 `fe5a8e5`(`2ebafa7` + `TitleScreen.Version` 한 줄. 실행은 커밋 전 작업 트리였고 `test-runs.ps1 -Last -Passed` 가 커밋 뒤 "실행한 코드 = 지금 커밋한 코드" 로 판정), 에디터 **6000.3.19f1**(`Application.unityVersion`, 이 PC). 실행마다 `-Record`. 시각은 UTC(결과 XML):
+  - EditMode (`!Enemy`): `testcasecount="433" result="Passed" passed="433" failed="0" skipped="0"` (05:24:13Z~05:24:21Z).
+  - PlayMode 게이트 1회차 (`Run PlayMode Tests`): `testcasecount="386" result="Failed(Child)" passed="349" failed="1" skipped="36"` (05:24:51Z~05:42:56Z). 실패 `ChainRushBotRaceTests.Race_BotsWithoutOpponents_RefusesAssemblyLoudly` (05:25:16Z): `TearDown : Unhandled log message: '[Warning] Account API did not become accessible within 30 seconds. This may be due to network issues or editor focus.'`, 스택 `Unity.AI.Toolkit.Accounts.Services.States.ApiAccessibleState/<WaitForCloudProjectSettings>d__4:MoveNext () (at ./Library/PackageCache/com.unity.ai.assistant@c0127625258e/Modules/Unity.AI.Toolkit.Accounts/Services/States/ApiAccessibleState.cs:46)`.
+  - PlayMode 게이트 2회차 (같은 코드, Unity 포커스 3초 뒤 시작): `testcasecount="386" result="Passed" passed="350" failed="0" skipped="36"` (05:45:05Z~06:03:50Z, 1124.4초).
+  - PlayMode 게이트 3회차 (같은 코드): `testcasecount="386" result="Passed" passed="350" failed="0" skipped="36"` (06:04:38Z~06:23:15Z, 1116.7초). 세 회차 모두 서킷 지문 `hash 0xEF92FB76BFD1D767`(기준과 같다). skipped 36 은 모두 `[Explicit]` — `BotLapBenchTests` 24, `ChainRushProbeTests` 7, `Measure_DrawBatches…` 2, `NetworkRaceTests` 3.
+  - `Run Device Input Tests`: `testcasecount="3" result="Passed" passed="3" failed="0" skipped="0"` (06:25:56Z~06:26:13Z). 포커스가 3초 유지되면 시작하도록 걸었다(`[milestone] Device starting, focused=True`).
+  - 하지 않은 것: 네트워크 레이스(M7 부터), 플레이어 빌드(③ 조건이 아니다).
+- **1회차 실패의 원인**: MCP 를 주는 `com.unity.ai.assistant` 패키지가 도메인 리로드 뒤 계정 API 를 30초 기다리다 못 받으면 경고를 한 번 남긴다(`ApiAccessibleState.cs:41-46`, 접근 조건은 `:16` `network.IsAvailable && signIn.IsSignedIn && cloudConnected.IsConnected`). 게이트 실행이 Play 진입 리로드로 시작한 뒤 약 30초에 이 경고가 났고, 그때 돌던 테스트가 TearDown 에서 `LogAssert.NoUnexpectedReceived()`(`ChainRushBotRaceTests.cs:64`)를 불러 실패했다. 우리 코드와 무관하다. 2회차에도 같은 경고가 났지만(`Editor.log`) 로그를 검사하지 않는 테스트 중이었다. 포커스는 원인이 아니었다(2회차는 포커스 상태에서 시작). 사용자는 로그인되어 있었고 `Application.internetReachability` 는 `ReachableViaLocalAreaNetwork`, `CloudProjectSettings.organizationId` 는 비어 있었다 — 어느 조건이 거짓인지는 패키지 내부 상태라 확인하지 못했다. 그래서 다음 게이트도 같은 이유로 실패할 수 있다(HANDOFF 2절 하네스 후보).
+- **README 화면** (`docs/images/`, 사용자 "새로 찍자"): v0.6 방식(2026-11-09 "README 갱신")을 따르되, 플레이어 주행은 테스트 봇 복사 대신 런타임 `RaceBot` + `BotTuning.Hard` 를 `Unity_RunCommand` 안에서 붙였다(저장소에 남기지 않음). 메뉴는 `LobbyMenu.Highlight`·`Confirm`, 프레임은 `Application.onBeforeRender` 에서 `ScreenCapture.CaptureScreenshot` + `Time.captureFramerate = 10`, GIF 는 600px·64색. Game 뷰가 1229×691 이라 정지 화면은 1배.
+  - 다시 찍음: `title.png`(v0.7 표기), `lobby.png`(러너 선택 — 새 모형), `tutorial.png`(3단계 후진), `palm-coast.png`(20.9초), `finger-lanes.png`(13.7초), `race.gif`(SUMMIT DROP 36.1~53.1초(틱 1805~2655) — 부스트 패드 점프, 숲 공터 봉 스윙, 협곡 스윙, 171프레임 6.6 MB), `swing.gif`(FINGER LANES 지름길 스윙 25.0~29.5초, 46프레임 1.9 MB).
+  - 새로: `lobby-mode.png`(타임어택/봇전), `bot-race.gif`(STADIUM·어려움·빠름 봇전, 카운트다운 2부터 약 14초, 164프레임 8.1 MB), `bot-result.png`(봇전 결과 — 1st OMEGA 01:06.1 … 4th THETA 진행 중).
+  - `result.png` 는 다시 찍지 않았다 — README 의 결과 칸을 `bot-result.png` 로 바꿔 쓰지 않게 됐고, 파일은 `skyway.png` 처럼 남긴다.
+  - 기록 보호: 타임어택 세 판은 레이스 씬이 열리자마자 `RaceAssembler.Records`·`Ghosts` 를 임시 저장소(`BestRecords("ProtoHarness.ReadmeCapture.")`, 스크래치패드 폴더)로 바꿨고(로비 `Records` 도), 끝에 임시 기록을 지웠다. SUMMIT DROP 은 결승(3448틱)했다. 사용자 기록 SUMMIT DROP 빠름 3247틱 ALPHA·고스트 파일 수정 시각(2026-11-09 14:08)은 그대로임을 확인했다.
+  - 처음 시도는 에디터가 포커스 밖이라 Game 뷰가 드물게 그려져 캡처가 한 단계씩 밀렸다(타이틀 자리에 메인 메뉴). 캡처 파일이 생긴 뒤 다음 단계로 넘어가게 하고 `InternalEditorUtility.RepaintAllViews()` 를 매 틱 부르고, 사용자가 Unity 를 앞에 두고 다시 찍었다. `Unity_RunCommand` 안의 `File.Delete` 는 "User interactions are not supported for MCP tool calls" 로 거부됐다.
+
+## 2026-11-18 · 태그: M7(멀티 재개) = v0.8 (`feature/m5-release-prep`)
+
+- **결정 (사용자, 2026-11-18)**: "멀티가 0.8", "이번 decisions에 적어둬라". v0.7 README 를 고칠 때, README 의 "멀티 레이스: v0.8 이후 다시 엶" 과 버전표 `v0.8~ 멀티 레이스 재개` 를 그대로 둘지 물은 데 대한 답이다. 그래서 README 의 두 줄은 고치지 않는다. 태그는 M6 = v0.6, M5 = v0.7(2026-11-05 "M6 범위")에 이어 **M7 = v0.8** 이다.
+- **정하지 않은 것**: 2026-11-12 "방향 재설정" 은 v1.0 을 PC 싱글 + 봇전(M5 까지)으로, 멀티(M7)를 v1.0 밖으로 둔다(`docs/DESIGN.md` 첫 인용·§1). M7 이 v0.8 이면 버전 번호로는 v1.0 앞이 된다. v1.0 범위를 다시 정한 것인지는 이 답에 없다 — M7 을 열 때 묻는다. `docs/DESIGN.md` §5-1 의 "태그" 줄은 이 항목을 쓸 때 고치지 않았다.
+
 ## 2026-11-18 · MP3 범위: 봇전 전원 입력 재생의 비트 일치만, 롤백은 M7 (`docs/mp3-replay-proposal`, 구현은 `feature/mp3-field-replay`)
 
 - **승인**: 사용자 "mp3 작업 얼마나걸릴것같나" → 초안(2026-11-15) 그대로 3~5일 / 재생만 1~2일, v1.0 게임에는 롤백을 쓰는 곳이 없다는 추천 → "두가지에 대해 둘다 진행" → 재생만 요청서와 정할 것 ①②③ → "다 추천대로. 다만 작업은 새 세션에서 하겟다".
