@@ -15,7 +15,14 @@
 - **승인**: 사용자 "mp3 작업 얼마나걸릴것같나" → 초안(2026-11-15) 그대로 3~5일 / 재생만 1~2일, v1.0 게임에는 롤백을 쓰는 곳이 없다는 추천 → "두가지에 대해 둘다 진행" → 재생만 요청서와 정할 것 ①②③ → "다 추천대로. 다만 작업은 새 세션에서 하겟다".
 - **결정**: MP3 는 플레이어 + 봇 3 봇전의 전원 입력 기록·재생이 매 틱 전원 상태(`SimSnapshotCodec.Encode`)와 필드 결과까지 비트 일치하는지 검증하는 테스트 2개다(STADIUM·SUMMIT DROP, Hard, 결승까지). 런타임 코드는 바꾸지 않는다. 필드 스냅샷·복원·`IRewindableInputSource`·롤백 테스트는 M7 로 옮긴다. 혼자 판 지문은 고정 상수로 단언하지 않는다(시뮬 튜닝마다 상수 갱신 합의가 필요해진다 — 로그 + 이 문서 기록 유지). 범위·근거 줄·테스트는 `docs/PROPOSAL_MP3_DETERMINISM.md` 0절이 원본이다.
 - **버린 대안**: 초안 그대로(필드 전체 스냅샷·복원, 봇 내부 상태 복원 인터페이스, 롤백 테스트 9건) — v1.0 범위에서 쓰는 곳이 없고 공개 API 가 늘며 3~5일. 기존 300틱 위치 해시 확대 — 숨은 상태·순위·결승을 못 잡는다(초안 2절 5번 A).
-- **남은 것**: 구현(새 세션). 재생이 어긋나면 결정성 버그로 멈추고 보고.
+- **구현 (`feature/mp3-field-replay`)**: `ChainRushReplayTests.cs` 에 테스트 2개와 비교용 중첩 클래스 `FieldTrace`(틱마다 러너 4명의 `SimSnapshotCodec.Encode` 바이트 — 끝난 러너는 결승·실패·틱 — 와 필드의 Place·FinishTick·Progress·ContactSwingBreaks·ContactSequence·HasResult). 봇 연결·필드 한 틱은 `RaceBotTests.LoadRace`·`StepField` 를 그대로 쓴다. 런타임 코드는 바꾸지 않았다. `IsDown` 은 계산 속성(`RacerState.cs:91` `health <= 0`)이라 코덱 29필드로 전부다.
+  - `Replay_BotRaceAllRunners_RepeatsEveryTickBitForBit(Stadium|SummitDrop)`: Hard 4명, 플레이어 결승까지 기록 → 같은 월드(프레임당 37틱)·새로 로드한 월드(250틱)로 재생, 매 틱 비교.
+  - `Replay_BotRaceOneInputChanged_DivergesFromThatTickOnAndNotBefore`: STADIUM 700틱, 상대 2의 입력 300 을 오른쪽 끝으로 → 300틱까지 같고 301틱에 러너 2 가 다르다. **요청서에 더한 대조군**: 접촉을 켠 판에서는 301틱에 4명이 함께 달라졌다(출발 6 s, 무리 지어 달린다) — 월드 사이 누수와 구분하려고 같은 테스트에서 `ContactEnabled = false` 로 다시 기록·변조해 700틱 내내 러너 2 만 다른지 본다(통과).
+- **봇전 해시 (에디터 6000.3.19f1, 시드 1, Hard, 두 실행 같음)**: STADIUM 3,054틱 `0xB57631C6C70EE385`(순위 3·1·2·4, 접촉 시작 7·4·5·5), SUMMIT DROP 3,447틱 `0x83659C86EF778050`(2·1·3·4, 1·1·2·2). 고정 상수로 단언하지 않는다(정할 것 ②). 서킷 지문은 그대로 `0xEF92FB76BFD1D767`.
+- **게이트**: 새 테스트는 카테고리가 없어 메뉴 `Run PlayMode Tests`(`ChainRushSceneBuilder.cs:273`, 카테고리 제외만)에 들어간다. 세 칸 합 약 21 s — 초안 5번 B(게이트 포함) 그대로.
+- **`select-tests.ps1`**: `Race/` 줄은 이미 `ChainRushReplayTests` 전체를 고른다. `Bots/(BotDifficulty|BotTuning|RaceBot)`·`Bots/`·`Race/RaceOrder` 세 줄은 고르지 않아 `Tests = ChainRushReplayTests.Replay_BotRace` 를 더했다. 확인: `-Range d932d9e^..d932d9e`(RaceBot·BotTuning·ShortcutBot 이 바뀐 커밋) 출력에 `ChainRushReplayTests.Replay_BotRace*` 가 붙는다.
+- **검증 (에디터 6000.3.19f1, `83afad7` + 테스트 1파일)**: 컴파일 `*** Tundra build success (2.02 seconds), 5 items updated, 1618 evaluated`, `error CS` 없음. 실행은 모두 `test-runs.ps1 -Record`. ① `groupNames { ChainRushReplayTests\.Replay_BotRace }` → `testcasecount="3" result="Passed" passed="3" failed="0" skipped="0"`, 05:13:38Z~05:14:00Z(대조군을 더하기 전). ② 대조군을 더한 뒤 `groupNames { ^…ChainRushReplayTests, ^…RaceBotTests }` `categories !Device !Enemy !NetEndReplay !^Lap$` → `testcasecount="14" result="Passed" passed="14" failed="0" skipped="0"`, 05:15:31Z~05:17:09Z. Console 에러 0.
+- **남은 것**: v0.7 마일스톤(§9-2 ③, HANDOFF 2절 0번). 다른 PC 의 비트 일치는 보지 않는다(안 하는 것).
 
 ## 2026-11-18 · 리포 이름 ProjectRun: GitHub 에 보이는 이름만 바꾼다 (`docs/repo-name-projectrun`)
 
