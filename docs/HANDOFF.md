@@ -76,6 +76,7 @@
 
 ## 5. 환경 메모 (다음 세션이 헷갈릴 수 있는 것)
 
+- **리포 이름 ProjectRun (2026-11-18, DECISIONS "리포 이름 ProjectRun")**: GitHub 이름만 바뀌었고 코드·폴더·`productName` 은 `ProtoHarness` 그대로다. D:/PCUBE PC 는 아직 옛 주소일 수 있다 — 그 PC 에서 시작하면 `git remote -v` 를 보고 `git remote set-url origin https://github.com/DosangE/ProjectRun.git`.
 - **두 PC 와 버전 차이**: `D:/PCUBE/ProtoHarness` 의 에디터는 6000.3.25f1(결정 버전), `C:/Users/User/Desktop/PCUBE/ProtoHarness` 는 6000.3.19f1 이라 열면 `ProjectVersion.txt`·`packages-lock.json`·`ProjectSettings.asset`·`ProtoHarness.slnx` 가 바뀌어 보인다 — 커밋하지 않는다. 검증 보고에는 실제로 돌린 에디터 버전을 적는다. 끝낼 때마다 푸시하고, 시작할 때 `git fetch` 와 `git status -sb` 로 갈라짐부터 본다(2026-10-30 다른 PC 의 푸시 안 한 v0.5 를 모르고 작업한 일). 원격 브랜치를 셀 때는 `git ls-remote --heads origin` 이나 `git fetch --prune` 뒤에 본다.
 - **같은 작업 트리를 다른 세션이 쓸 수 있다**: 브랜치를 바꾸기 전에 `git branch --show-current`·`git status` 로 다른 세션의 커밋 안 한 파일이 없는지 본다(2026-11-09 아트 세션이 리뷰 도중 브랜치를 바꿨다).
 - **사용자가 같은 에디터에서 플레이한다**: Refresh·테스트 시작 전에 `EditorApplication.isPlayingOrWillChangePlaymode` 를 확인하고, 플레이 중이면 시작하지 않는다(플레이 중 재로드로 로비 NRE).
