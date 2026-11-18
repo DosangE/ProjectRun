@@ -1,4 +1,4 @@
-# ProtoHarness
+# ProjectRun
 
 체인을 봉에 걸어 코너를 돌고, 스윙으로 모은 게이지를 부스터로 쓰는 3D 레이싱 게임 프로토타입입니다. Unity 6로 만들고 있으며, 지금은 혼자 달리는 싱글 레이스를 플레이할 수 있습니다. 2D 게임 [Chain Rush](https://github.com/DosangE/Chain-Rush)의 조작을 러너 뒤에서 따라가는 3인칭 시점과 카트라이더식 트랙으로 옮겼습니다.
 
