@@ -45,7 +45,7 @@ namespace ProtoHarness.Tests.PlayMode
             RaceLaunch.Clear();
             if (runner != null) UnityEngine.Object.Destroy(runner);
             yield return null;
-            LogAssert.NoUnexpectedReceived();
+            TestLogs.AssertNoUnexpected();
         }
 
         // ---- the way in ----------------------------------------------------------------------------------

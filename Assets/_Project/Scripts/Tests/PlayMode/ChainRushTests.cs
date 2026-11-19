@@ -97,7 +97,7 @@ namespace ProtoHarness.Tests.PlayMode
         {
             Time.timeScale = previousTimeScale;
             yield return null;
-            LogAssert.NoUnexpectedReceived();
+            TestLogs.AssertNoUnexpected();
         }
 
         [UnityTest]

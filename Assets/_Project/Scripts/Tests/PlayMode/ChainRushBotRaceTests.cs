@@ -61,7 +61,7 @@ namespace ProtoHarness.Tests.PlayMode
             foreach (SpeedClass speed in Enum.GetValues(typeof(SpeedClass))) records.Clear("Circuit_Stadium", speed);
             if (Directory.Exists(ghosts.Folder)) Directory.Delete(ghosts.Folder, true);
             yield return null;
-            LogAssert.NoUnexpectedReceived();
+            TestLogs.AssertNoUnexpected();
         }
 
         [TestCase(1, "1st"), TestCase(2, "2nd"), TestCase(3, "3rd"), TestCase(4, "4th")]

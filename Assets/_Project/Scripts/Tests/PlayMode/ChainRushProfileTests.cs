@@ -58,7 +58,7 @@ namespace ProtoHarness.Tests.PlayMode
         {
             Time.timeScale = timeScale;
             yield return null;
-            LogAssert.NoUnexpectedReceived();
+            TestLogs.AssertNoUnexpected();
         }
 
         [Test]

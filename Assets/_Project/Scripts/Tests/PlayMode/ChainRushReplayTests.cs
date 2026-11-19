@@ -47,7 +47,7 @@ namespace ProtoHarness.Tests.PlayMode
             Time.timeScale = timeScale;
             RaceLaunch.Clear();
             yield return null;
-            LogAssert.NoUnexpectedReceived();
+            TestLogs.AssertNoUnexpected();
         }
 
         // ---- circuit -------------------------------------------------------------------------------

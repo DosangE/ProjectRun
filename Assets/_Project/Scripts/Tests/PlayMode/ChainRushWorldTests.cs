@@ -61,7 +61,7 @@ namespace ProtoHarness.Tests.PlayMode
             if (second != null) second.Game.SetInputSource(new InputReplay(new InputLog()));
             Time.timeScale = timeScale;
             yield return null;
-            LogAssert.NoUnexpectedReceived();
+            TestLogs.AssertNoUnexpected();
         }
 
         // ---- the worlds are separate ------------------------------------------------------------------

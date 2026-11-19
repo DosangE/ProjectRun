@@ -58,7 +58,7 @@ namespace ProtoHarness.Tests.PlayMode
             Time.timeScale = scale;
             AudioListener.volume = volume;
             yield return null;
-            LogAssert.NoUnexpectedReceived();
+            TestLogs.AssertNoUnexpected();
         }
 
         // Select the generated case name (e.g. Solo_FiveTracks(Normal)) to measure just a changed difficulty.
