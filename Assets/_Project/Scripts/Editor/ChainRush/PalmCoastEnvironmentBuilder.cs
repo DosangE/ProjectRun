@@ -100,6 +100,23 @@ namespace ProtoHarness.Editor.ChainRush
             private Mesh chevronPanel, chevronArrow;
             // The board's front (0.071) plus half the arrow's thickness (0.057).
             private const float ArrowOut = 0.128f;
+            // The town house kit (docs/ART_REQUEST_PROPS.md K8): façade bays 2.6 m wide, 3.6 m on the ground floor and
+            // 3.2 m above, the house 0.3 m wider than its bays. A bay's slot objects share the bay's origin: the middle of
+            // its width and height, on the wall's face, the bay standing out in front (+Z).
+            private const string TownKit = "TownHouseKit";
+            private const float BayWidth = 2.6f, GroundStorey = 3.6f, UpperStorey = 3.2f, HouseMargin = 0.3f;
+            private static readonly string[] BaySlots = { "Trim", "Glass", "Accent", "Metal" };
+            private static readonly string[] BayMeshes =
+            {
+                "UpperShutter_Trim", "UpperShutter_Glass", "UpperShutter_Accent", "UpperTall_Trim", "UpperTall_Glass", "UpperTall_Metal",
+                "UpperPair_Trim", "UpperPair_Glass", "GroundDoor_Trim", "GroundDoor_Accent", "GroundShop_Trim", "GroundShop_Glass",
+                "GroundWindow_Trim", "GroundWindow_Glass", "GroundWindow_Accent",
+            };
+            private static readonly string[] UpperBays = { "UpperShutter", "UpperTall", "UpperPair" };
+            private readonly Dictionary<string, Mesh> townKit = new Dictionary<string, Mesh>();
+            // The town's and the stairs' houses, each district merged into one mesh per material once built (user
+            // 2026-11-19): they stand either side of the road, so ValidateClearance checks them vertex by vertex.
+            private readonly List<Transform> townDistricts = new List<Transform>();
             private const float FrondTilt = 10f;
             private static readonly Vector3 FrondSize = new Vector3(1.2f, 1.2f, 4f);
             private static readonly Vector3 FrondStalk = new Vector3(0f, 0.56f, -2f);
@@ -133,7 +150,11 @@ namespace ProtoHarness.Editor.ChainRush
 
             // Every renderer outside the road corridor, except the land and sea below it and what spans the road above
             // the runner: the start arch's beam and lettering and the bridges' top beams.
-            internal void ValidateClearance(GameObject root) => corridor.ValidateClearance(root, Ground + 0.01f);
+            internal void ValidateClearance(GameObject root)
+            {
+                if (townDistricts.Count == 0) throw new InvalidOperationException("Palm Coast built no town houses; check the town's scenery shares.");
+                corridor.ValidateClearance(root, Ground + 0.01f, null, townDistricts);
+            }
 
             // The record video's lap (7.0 .. 60.0 s, DECISIONS "PALM COAST") read as shares of the lap.
             private Scenery SceneryAt(double s)
@@ -153,6 +174,7 @@ namespace ProtoHarness.Editor.ChainRush
                 // A re-exported frond of another size would leave FrondStalk off its stalk and the fronds off the coconuts.
                 if ((palmFrond.bounds.size - FrondSize).sqrMagnitude > 1e-4f)
                     throw new InvalidOperationException($"Kit mesh PalmFrond is {palmFrond.bounds.size}, not {FrondSize}; measure its stalk end again and update FrondSize and FrondStalk.");
+                LoadTownKit();
                 Land(Group("01 Sea and land below road", root.transform));
                 StartArch(Group("02 Start arch", root.transform));
                 Bridges(Group("03 Red steel bridges", root.transform));
@@ -291,7 +313,8 @@ namespace ProtoHarness.Editor.ChainRush
                     TrackFrame frame = line.FrameAt(s);
                     for (int side = -1; side <= 1; side += 2)
                     {
-                        float width = city ? 12f + index % 3 * 2f : 9f + index % 2 * 2f;
+                        int bays = 3 + index % 2;
+                        float width = city ? 12f + index % 3 * 2f : bays * BayWidth + HouseMargin;
                         float depth = city ? 12f : 9f;
                         float radius = new Vector2(width, depth).magnitude * 0.5f + 1f;
                         Vector3 position = frame.Position + frame.Right * side * (definition.HalfWidthAt(s) + 6f + radius);
@@ -300,7 +323,7 @@ namespace ProtoHarness.Editor.ChainRush
                         if (corridor.Available(position, radius))
                         {
                             if (city) Tower(parent, position, facing, width, depth, 20f + index % 4 * 7f, index);
-                            else TownHouse(parent, position, facing, width, depth, 8f + index % 3 * 2.5f, index);
+                            else TownHouse(District(parent, here), position, facing, bays, depth, 2 + index % 3, index);
                             corridor.Reserve(position, radius);
                         }
                         // The city's skyline: a taller tower behind, half a step along, as dense as the reference's high-rises.
@@ -318,6 +341,44 @@ namespace ProtoHarness.Editor.ChainRush
                         index++;
                     }
                 }
+                foreach (Transform district in townDistricts) MergeByMaterial(district, district.name.Split(' ')[0]);
+            }
+
+            // The group a town house of this scenery goes in, made the first time: "Town houses" or "Stairs houses".
+            private Transform District(Transform parent, Scenery here)
+            {
+                string name = (here == Scenery.Town ? "Town" : "Stairs") + " houses";
+                foreach (Transform district in townDistricts)
+                    if (district.name == name) return district;
+                Transform made = Group(name, parent);
+                townDistricts.Add(made);
+                return made;
+            }
+
+            // The town house kit's meshes, checked where their origins lie: a re-export with another pivot would stand every
+            // bay off the wall or the floor, and the gable, bands and chimney are placed by their bounds centre.
+            private void LoadTownKit()
+            {
+                foreach (string name in BayMeshes)
+                {
+                    Mesh mesh = KitPiece(TownKit, name);
+                    float storey = name.StartsWith("Ground", StringComparison.Ordinal) ? GroundStorey : UpperStorey;
+                    Bounds b = mesh.bounds;
+                    // 0.05 m below: the door's step reaches 0.015 under its bay into the plinth.
+                    if (b.min.z < -0.01f || b.max.z > 0.5f || b.min.x < -BayWidth * 0.5f || b.max.x > BayWidth * 0.5f
+                        || b.min.y < -storey * 0.5f - 0.05f || b.max.y > storey * 0.5f)
+                        throw new InvalidOperationException($"Kit mesh {name} in {TownKit} has bounds {b}, outside its {BayWidth} x {storey} m bay from an origin on the wall's face; export it with the bay's pivot.");
+                    townKit[name] = mesh;
+                }
+                // The flower box and its flowers share one origin, the middle of the box's depth.
+                foreach (string name in new[] { "FlowerBox", "Flowers" })
+                {
+                    Mesh mesh = KitPiece(TownKit, name);
+                    if (Mathf.Abs(mesh.bounds.center.x) > 0.05f || Mathf.Abs(mesh.bounds.center.z) > 0.05f)
+                        throw new InvalidOperationException($"Kit mesh {name} in {TownKit} has its origin off the box's middle ({mesh.bounds.center}).");
+                    townKit[name] = mesh;
+                }
+                foreach (string name in new[] { "Cornice", "FloorBand", "GableEnd", "Chimney" }) townKit[name] = KitMesh(TownKit, name);
             }
 
             // A city tower of one to three tiers, each narrower than the one below, with window bands or columns, a
@@ -391,16 +452,23 @@ namespace ProtoHarness.Editor.ChainRush
                 Box("Roof railing", tower, new Vector3(0f, roof + 0.6f, d * 0.5f - 0.1f), new Vector3(w, 0.15f, 0.12f), metal);
             }
 
-            // A two- or three-storey house of the pink town: pitched tiled or flat roof by turns, shuttered windows with
-            // flower boxes, a door, and on some an upper balcony or a striped awning.
-            private void TownHouse(Transform parent, Vector3 position, Quaternion facing, float width, float depth, float height, int index)
+            // A house of the pink town, two to four storeys of the town house kit's façade bays (docs/ART_REQUEST_PROPS.md
+            // K8, user 2026-11-19): on the ground floor a door bay and shop or shuttered-window bays, above one kind of bay
+            // per floor (shuttered, tall with a railing, or a narrow pair), a cornice under the roof and on some a band
+            // between floors. The plastered body, the plinth and the roof stay boxes; a pitched roof gets the kit's gable and
+            // on some a chimney. An upper balcony or a striped awning on some, as before.
+            private void TownHouse(Transform parent, Vector3 position, Quaternion facing, int bays, float depth, int storeys, int index)
             {
+                float width = bays * BayWidth + HouseMargin;
+                float height = GroundStorey + (storeys - 1) * UpperStorey;
                 Transform house = Group("Town house " + index, parent);
                 house.SetPositionAndRotation(position, facing);
                 Material walls = Pick(index * 3 + 11, pink, apricot, cream, white, mint);
                 Material shutters = Pick(index * 5 + 12, cyan, mint, white, terracotta);
+                Material trim = walls == white ? cream : white;
                 Box("Plaster walls", house, new Vector3(0f, height * 0.5f, 0f), new Vector3(width, height, depth), walls);
                 Box("Plinth", house, new Vector3(0f, 0.4f, 0f), new Vector3(width + 0.2f, 0.8f, depth + 0.2f), stone);
+                float wall = depth * 0.5f;
                 if (Hash(index * 7 + 13) > 0.45f)
                 {
                     float rise = width * 0.22f;
@@ -411,39 +479,103 @@ namespace ProtoHarness.Editor.ChainRush
                             new Vector3(new Vector2(width * 0.5f, rise).magnitude + 0.4f, 0.3f, depth + 0.6f), terracotta);
                         panel.transform.localRotation = Quaternion.Euler(0f, 0f, -side * slope);
                     }
-                    for (int tier = 0; tier < 4; tier++)
-                        Box("Gable", house, new Vector3(0f, height + rise * (tier + 0.5f) / 4f, 0f), new Vector3(width * (1f - (tier + 0.5f) / 4f) * 0.95f, rise / 4f, depth * 0.96f), walls);
+                    // The gable's slopes run along the middles of the roof panels, which cover them.
+                    Shape("Gable", house, new Vector3(0f, height + rise * 0.5f, 0f), new Vector3(width, rise, depth), walls, townKit["GableEnd"]);
+                    // Halfway down a slope the roof is rise / 2 up; 0.35 m above that the 2 m chimney is buried 0.65 m.
+                    if (Hash(index * 47 + 18) > 0.5f)
+                        Piece("Chimney", house, new Vector3((Hash(index * 53 + 19) > 0.5f ? 1f : -1f) * width * 0.25f, height + rise * 0.5f + 0.35f, -depth * 0.2f),
+                            stone, townKit["Chimney"]);
                 }
                 else
                 {
                     Box("Flat roof", house, new Vector3(0f, height + 0.2f, 0f), new Vector3(width + 0.3f, 0.4f, depth + 0.3f), stone);
-                    Box("Parapet", house, new Vector3(0f, height + 0.7f, depth * 0.5f), new Vector3(width + 0.3f, 0.6f, 0.25f), walls);
+                    Box("Parapet", house, new Vector3(0f, height + 0.7f, wall), new Vector3(width + 0.3f, 0.6f, 0.25f), walls);
                 }
-                int storeys = height > 10f ? 3 : 2;
-                float front = depth * 0.5f + 0.06f;
+                // The cornice's and the band's backs (z -0.25, -0.06 from their centres) on the wall.
+                Shape("Cornice", house, new Vector3(0f, height - 0.2f, wall + 0.25f), new Vector3(width + 0.2f, 0.4f, 0.5f), trim, townKit["Cornice"]);
+                if (Hash(index * 59 + 20) > 0.5f)
+                    for (int floor = 1; floor < storeys; floor++)
+                        Shape("Floor band", house, new Vector3(0f, GroundStorey + (floor - 1) * UpperStorey, wall + 0.06f), new Vector3(width, 0.2f, 0.12f), trim, townKit["FloorBand"]);
+                // 1 cm off the wall so the bays' backs do not flicker against it.
+                float face = wall + 0.01f;
+                int door = Mathf.Min(bays - 1, (int)(Hash(index * 61 + 21) * bays));
+                string ground = Hash(index * 67 + 22) < 0.5f ? "GroundShop" : "GroundWindow";
+                Material doorColour = Pick(index * 37 + 15, wood, cyan, terracotta);
+                for (int bay = 0; bay < bays; bay++)
+                {
+                    var at = new Vector3((bay - (bays - 1) * 0.5f) * BayWidth, GroundStorey * 0.5f, face);
+                    string kind = bay == door ? "GroundDoor" : ground;
+                    Bay(kind, house, at, trim, bay == door ? doorColour : shutters);
+                    if (kind == "GroundWindow") FlowerBox(house, at, kind, Pick(index * 31 + bay + 14, pink, leaf, yellow, violet));
+                }
                 for (int floor = 1; floor < storeys; floor++)
-                    for (int col = -1; col <= 1; col++)
+                {
+                    string kind = UpperBays[Mathf.Min(UpperBays.Length - 1, (int)(Hash(index * 71 + floor * 13 + 23) * UpperBays.Length))];
+                    float y = GroundStorey + (floor - 1) * UpperStorey + UpperStorey * 0.5f;
+                    for (int bay = 0; bay < bays; bay++)
                     {
-                        float y = floor * height / storeys + 1.1f;
-                        Box("Window", house, new Vector3(col * width * 0.3f, y, front), new Vector3(1.2f, 1.6f, 0.12f), glass);
-                        for (int side = -1; side <= 1; side += 2)
-                            Box("Shutter", house, new Vector3(col * width * 0.3f + side * 0.85f, y, front + 0.04f), new Vector3(0.45f, 1.7f, 0.08f), shutters);
-                        Box("Flower box", house, new Vector3(col * width * 0.3f, y - 1f, front + 0.25f), new Vector3(1.3f, 0.3f, 0.4f), wood);
-                        Box("Flowers", house, new Vector3(col * width * 0.3f, y - 0.75f, front + 0.25f), new Vector3(1.2f, 0.25f, 0.3f), Pick(index * 31 + col + 14, pink, leaf, yellow, violet));
+                        var at = new Vector3((bay - (bays - 1) * 0.5f) * BayWidth, y, face);
+                        Bay(kind, house, at, trim, shutters);
+                        if (kind == "UpperShutter") FlowerBox(house, at, kind, Pick(index * 31 + floor * 7 + bay + 14, pink, leaf, yellow, violet));
                     }
-                Box("Door", house, new Vector3(-width * 0.22f, 1.3f, front), new Vector3(1.3f, 2.4f, 0.12f), Pick(index * 37 + 15, wood, cyan, terracotta));
-                Box("Ground window", house, new Vector3(width * 0.2f, 1.6f, front), new Vector3(2.2f, 1.4f, 0.12f), glass);
+                }
                 float extra = Hash(index * 41 + 16);
                 if (extra < 0.4f)
                 {
-                    Box("Balcony slab", house, new Vector3(0f, height / storeys + 0.2f, front + 0.6f), new Vector3(width * 0.5f, 0.2f, 1.2f), stone);
-                    Box("Balcony rail", house, new Vector3(0f, height / storeys + 0.75f, front + 1.15f), new Vector3(width * 0.5f, 0.9f, 0.08f), white);
+                    Box("Balcony slab", house, new Vector3(0f, GroundStorey + 0.2f, wall + 0.66f), new Vector3(width * 0.5f, 0.2f, 1.2f), stone);
+                    Box("Balcony rail", house, new Vector3(0f, GroundStorey + 0.75f, wall + 1.21f), new Vector3(width * 0.5f, 0.9f, 0.08f), white);
                 }
                 else if (extra < 0.75f)
                 {
                     Material stripe = Pick(index * 43 + 17, violet, terracotta, cyan, mint);
                     for (int s = 0; s < 5; s++)
-                        Box("Striped awning", house, new Vector3((s - 2) * width * 0.17f, 3.1f, depth * 0.5f + 1f), new Vector3(width * 0.17f, 0.25f, 2f), s % 2 == 0 ? stripe : white);
+                        Box("Striped awning", house, new Vector3((s - 2) * width * 0.17f, 3.1f, wall + 1f), new Vector3(width * 0.17f, 0.25f, 2f), s % 2 == 0 ? stripe : white);
+                }
+            }
+
+            // Every slot object of one kind of bay at the bay's origin: trim, glass, accent (shutters or the door) and metal.
+            private void Bay(string kind, Transform house, Vector3 at, Material trim, Material accent)
+            {
+                foreach (string slot in BaySlots)
+                    if (townKit.TryGetValue(kind + "_" + slot, out Mesh mesh))
+                        Piece(kind + " " + slot, house, at, slot == "Trim" ? trim : slot == "Glass" ? glass : slot == "Accent" ? accent : metal, mesh);
+            }
+
+            // A flower box under the window of a bay, its top 5 mm under the sill and its back 0.02 m off the wall.
+            private void FlowerBox(Transform house, Vector3 at, string kind, Material flowers)
+            {
+                Mesh box = townKit["FlowerBox"];
+                float top = townKit[kind + "_Trim"].bounds.min.y - 0.005f;
+                var place = new Vector3(at.x, at.y + top - box.bounds.max.y, at.z + 0.02f - box.bounds.min.z);
+                Piece("Flower box", house, place, wood, box);
+                Piece("Flowers", house, place, flowers, townKit["Flowers"]);
+            }
+
+            // Same material merge and persistent mesh naming as SummitDropEnvironmentBuilder, the meshes named
+            // PalmCoastExterior_<key>_<material>.
+            private static void MergeByMaterial(Transform group, string key)
+            {
+                var byMaterial = new Dictionary<Material, List<CombineInstance>>();
+                foreach (MeshFilter filter in group.GetComponentsInChildren<MeshFilter>(true))
+                {
+                    Material material = filter.GetComponent<MeshRenderer>().sharedMaterial;
+                    if (!byMaterial.TryGetValue(material, out List<CombineInstance> parts)) byMaterial[material] = parts = new List<CombineInstance>();
+                    parts.Add(new CombineInstance { mesh = filter.sharedMesh, transform = group.worldToLocalMatrix * filter.transform.localToWorldMatrix });
+                }
+                for (int i = group.childCount - 1; i >= 0; i--) UnityEngine.Object.DestroyImmediate(group.GetChild(i).gameObject);
+                foreach (KeyValuePair<Material, List<CombineInstance>> pair in byMaterial)
+                {
+                    var mesh = new Mesh { name = $"PalmCoastExterior_{key}_{pair.Key.name}", indexFormat = UnityEngine.Rendering.IndexFormat.UInt32 };
+                    mesh.CombineMeshes(pair.Value.ToArray(), true, true);
+                    mesh.RecalculateBounds();
+                    var part = new GameObject(key + " " + pair.Key.name);
+                    part.transform.SetParent(group, false);
+                    part.AddComponent<MeshFilter>().sharedMesh = mesh;
+                    MeshRenderer renderer = part.AddComponent<MeshRenderer>();
+                    renderer.sharedMaterial = pair.Key;
+                    renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                    renderer.receiveShadows = false;
+                    GameObjectUtility.SetStaticEditorFlags(part, StaticEditorFlags.BatchingStatic);
                 }
             }
 
