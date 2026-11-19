@@ -19,6 +19,7 @@
 - **사용자 플레이 확인**: "마을 구간 잘 되었다."
 - **§0 위반과 처리**: 메인이 `TownHouseKit.fbx.meta` 를 `RoadsideKit.fbx.meta` 복사 + 직접 만든 GUID 로 썼다("GUID 는 Unity 만 발급한다" 위반, 커밋 전 리뷰 체크리스트에서 발견). 사용자 승인으로 ① meta 를 지우고 Refresh → Unity 가 meta 를 다시 썼지만 GUID 같음, ② `AssetDatabase.DeleteAsset` 은 MCP 가 막아("User interactions are not supported") 디스크에서 FBX·meta 를 지우고 Refresh(경로의 GUID 가 빈 것 확인) → FBX 만 다시 복사 → Refresh → GUID 가 또 같은 `540603bdbc2f4ffd98bd050d22867b47`. Unity 가 `Library/` 의 경로 기록으로 같은 GUID 를 다시 쓰는 것으로 보인다(소스 확인 못 함). 사용자 "ㄱㄱ" 로 그대로 둔다: meta 는 Unity 가 썼고 설정은 기본값(`RoadsideKit` 과 GUID 줄만 다름), 이 GUID 를 참조하는 곳은 없다(병합 메시로 구워 프리팹이 FBX 를 참조하지 않음). 메시 21개는 매번 같은 이름·정점·bounds.
 - **확인 못 한 것**: 재빌드 뒤 마을집 채 수(전 35 — 폭이 줄어 통로 검사 결과가 달라졌을 수 있는데 병합 뒤 집 그룹이 남지 않는다), 실제 게임 조명에서의 셰이딩, 정점 +71% 의 프레임 비용.
+- **병합 전 리뷰**: Codex `adversarial-review --base dev` 실패 — `The 'gpt-6.2-sol' model is not supported when using Codex with a ChatGPT account.`(`~/.codex/config.toml:3` `model = "gpt-6.2-sol"`, 전역 설정이라 고치지 않음). 사용자 "1."(메인 리뷰만으로 병합)으로 메인이 `unity-reviewer` 체크리스트로 봤다: 치명은 위 `.meta` 한 건(처리·기록), 중대·보통 없음, 제안 — `MergeByMaterial` 이 SKYWAY·SUMMIT 에 이어 세 번째 사본(공용화는 따로). Codex 모델 설정을 고치면 이 병합을 대상으로 다시 돌릴 수 있다.
 - **두는 것**: `tools/select-tests.ps1` 표 `:62` 장식 킷 패턴에 `TownHouseKit` 추가(하네스 변경, 따로 합의). 정점 줄이기(꽃 덩어리 단순화 등)는 필요하면 따로. `unity-reviewer` 는 이 세션(작업 디렉터리 `PCUBE` 에서 시작)의 에이전트 목록에 없어 메인이 체크리스트로 대신 봤다.
 - **검토했으나 버린 대안**: 집마다 슬롯별 병합(렌더러 약 280, 메시 `.asset` 약 280개), 병합 안 함(렌더러 약 +300), 칸을 ±8% 늘려 지금 폭 유지(창 비율이 집마다 달라짐), 3층까지만(13 m 집이 10 m 로 낮아져 높이가 두 가지).
 
