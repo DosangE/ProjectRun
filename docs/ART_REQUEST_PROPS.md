@@ -289,6 +289,7 @@
   - `WaterTank` 12각 원통·원뿔 뚜껑·다리 4·받침 판, `RoofUnit` 상자 1.4 × 1.0 × 1.4 + 10각 팬 테, 둘 다 바닥면 없음.
   - 머티리얼: `M_Trim`·`M_Glass`·`M_Metal`·`M_Accent` 는 열린 세션의 기존 것(TownHouseKit 과 같은 것)을 썼고, `M_ShopGlass`(0.05, 0.10, 0.16)·`M_Concrete`(0.62, 0.62, 0.60)는 새로 만들었다. 차양은 FacadeKit FBX 의 `AwningStripe` 를 X ×3.0 으로 렌더에만 썼다.
 - `.blend` 에 같이 저장된 것(`save_as_mainfile(copy=True)` 는 세션 전체를 쓴다): 열린 세션의 `Scene`·`TownHouseKit` 장면, FacadeKit 가져오기로 생긴 `M_*.001`·`PreviewCT_Src_*`. FBX 는 `CityTowerKit` 컬렉션만 내보내므로 영향은 없다.
+- **PALM Unity 반영 끝 (2026-11-19, 사용자 "ㅇㅋ")**: 확정한 치수·병합·측정은 `DECISIONS.md` 2026-11-19 "K9 CityTowerKit PALM 반영". 뒷줄도 킷이고, 랜드마크(`BuildingKit` 5종)는 K10 에서 정한다.
 - 지금 코드에서 본 것(손대지 않음): 단 루프가 마지막 단 뒤에도 `w *= 0.78`·`d *= 0.8`(`PalmCoast…:424-425`)을 해서 옥상 난간(`:452`)과 옥상 소품 자리(`:438-450`)가 맨 위 단보다 좁은 폭으로 계산된다. 킷 반영 때 칸 단위 난간으로 바뀌면서 없어진다.
 
 ## 4. 트랙 고유 소품 (2차, 트랙마다 따로 요청서)

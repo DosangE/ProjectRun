@@ -114,9 +114,22 @@ namespace ProtoHarness.Editor.ChainRush
             };
             private static readonly string[] UpperBays = { "UpperShutter", "UpperTall", "UpperPair" };
             private readonly Dictionary<string, Mesh> townKit = new Dictionary<string, Mesh>();
-            // The town's and the stairs' houses, each district merged into one mesh per material once built (user
-            // 2026-11-19): they stand either side of the road, so ValidateClearance checks them vertex by vertex.
+            // The city tower kit (docs/ART_REQUEST_PROPS.md K9): façade bays 3.0 m wide, 4.8 m on the ground floor and
+            // 3.2 m (UpperStorey) above, a tier 0.6 m wider than its bays at either end. The same bay origin as the town
+            // house kit; a bay stands out at most 0.3 m (upper), 1.3 m (balcony) or 0.4 m (ground floor).
+            private const string TowerKit = "CityTowerKit";
+            private const float TowerBayWidth = 3f, TowerGround = 4.8f, TowerMargin = 0.6f, TowerCorniceDepth = 0.5f;
+            private static readonly string[] TowerBayMeshes =
+            {
+                "TowerBand_Trim", "TowerBand_Glass", "TowerColumn_Trim", "TowerColumn_Glass", "TowerBalcony_Trim", "TowerBalcony_Glass",
+                "TowerBalcony_Metal", "TowerShop_Trim", "TowerShop_Glass", "TowerShop_Accent", "TowerEntry_Trim", "TowerEntry_Glass",
+            };
+            private readonly Dictionary<string, Mesh> towerKit = new Dictionary<string, Mesh>();
+            // The town's and the stairs' houses, and the city's and the harbour's towers, each district merged into one
+            // mesh per material once built (user 2026-11-19): they stand either side of the road, so ValidateClearance
+            // checks them vertex by vertex.
             private readonly List<Transform> townDistricts = new List<Transform>();
+            private readonly List<Transform> towerDistricts = new List<Transform>();
             private const float FrondTilt = 10f;
             private static readonly Vector3 FrondSize = new Vector3(1.2f, 1.2f, 4f);
             private static readonly Vector3 FrondStalk = new Vector3(0f, 0.56f, -2f);
@@ -153,7 +166,10 @@ namespace ProtoHarness.Editor.ChainRush
             internal void ValidateClearance(GameObject root)
             {
                 if (townDistricts.Count == 0) throw new InvalidOperationException("Palm Coast built no town houses; check the town's scenery shares.");
-                corridor.ValidateClearance(root, Ground + 0.01f, null, townDistricts);
+                if (towerDistricts.Count == 0) throw new InvalidOperationException("Palm Coast built no city towers; check the city's scenery shares.");
+                var merged = new List<Transform>(townDistricts);
+                merged.AddRange(towerDistricts);
+                corridor.ValidateClearance(root, Ground + 0.01f, null, merged);
             }
 
             // The record video's lap (7.0 .. 60.0 s, DECISIONS "PALM COAST") read as shares of the lap.
@@ -175,6 +191,7 @@ namespace ProtoHarness.Editor.ChainRush
                 if ((palmFrond.bounds.size - FrondSize).sqrMagnitude > 1e-4f)
                     throw new InvalidOperationException($"Kit mesh PalmFrond is {palmFrond.bounds.size}, not {FrondSize}; measure its stalk end again and update FrondSize and FrondStalk.");
                 LoadTownKit();
+                LoadTowerKit();
                 Land(Group("01 Sea and land below road", root.transform));
                 StartArch(Group("02 Start arch", root.transform));
                 Bridges(Group("03 Red steel bridges", root.transform));
@@ -303,7 +320,7 @@ namespace ProtoHarness.Editor.ChainRush
 
             private void Buildings(Transform parent)
             {
-                int index = 0;
+                int index = 0, front = 0, behind = 0, houses = 0;
                 for (double s = 10d; s < lap; s += 24d)
                 {
                     Scenery here = SceneryAt(s);
@@ -313,8 +330,11 @@ namespace ProtoHarness.Editor.ChainRush
                     TrackFrame frame = line.FrameAt(s);
                     for (int side = -1; side <= 1; side += 2)
                     {
-                        int bays = 3 + index % 2;
-                        float width = city ? 12f + index % 3 * 2f : bays * BayWidth + HouseMargin;
+                        // A tower of 4 or 5 bays (13.2 or 16.2 m) and 5 to 11 floors above its shops (20.8 .. 40 m), the
+                        // row behind one bay wider and 9 to 15 floors (33.6 .. 52.8 m): the old towers' 12 .. 16 m and
+                        // 20 .. 41 m, 34 .. 52 m behind, in whole bays and floors (docs/ART_REQUEST_PROPS.md K9 C1, C2).
+                        int bays = city ? 4 + (int)(Hash(index * 29 + 9) * 2f) : 3 + index % 2;
+                        float width = city ? TowerWidth(bays) : bays * BayWidth + HouseMargin;
                         float depth = city ? 12f : 9f;
                         float radius = new Vector2(width, depth).magnitude * 0.5f + 1f;
                         Vector3 position = frame.Position + frame.Right * side * (definition.HalfWidthAt(s) + 6f + radius);
@@ -322,36 +342,43 @@ namespace ProtoHarness.Editor.ChainRush
                         Quaternion facing = Flat(-frame.Right * side);
                         if (corridor.Available(position, radius))
                         {
-                            if (city) Tower(parent, position, facing, width, depth, 20f + index % 4 * 7f, index);
-                            else TownHouse(District(parent, here), position, facing, bays, depth, 2 + index % 3, index);
+                            if (city) { Tower(District(parent, here), position, facing, bays, depth, 5 + index % 4 * 2, index); front++; }
+                            else { TownHouse(District(parent, here), position, facing, bays, depth, 2 + index % 3, index); houses++; }
                             corridor.Reserve(position, radius);
                         }
                         // The city's skyline: a taller tower behind, half a step along, as dense as the reference's high-rises.
                         if (city)
                         {
-                            TrackFrame behind = line.FrameAt(s + 12d);
-                            Vector3 back = behind.Position + behind.Right * side * (definition.HalfWidthAt(s) + 6f + radius * 3f + 4f);
+                            TrackFrame rear = line.FrameAt(s + 12d);
+                            Vector3 back = rear.Position + rear.Right * side * (definition.HalfWidthAt(s) + 6f + radius * 3f + 4f);
                             back.y = Footing;
                             if (corridor.Available(back, radius))
                             {
-                                Tower(parent, back, Flat(-behind.Right * side), width + 2f, depth + 2f, 34f + index % 3 * 9f, index + 1000);
+                                Tower(District(parent, here), back, Flat(-rear.Right * side), bays + 1, depth + 2f, 9 + index % 3 * 3, index + 1000);
                                 corridor.Reserve(back, radius);
+                                behind++;
                             }
                         }
                         index++;
                     }
                 }
                 foreach (Transform district in townDistricts) MergeByMaterial(district, district.name.Split(' ')[0]);
+                foreach (Transform district in towerDistricts) MergeByMaterial(district, district.name.Split(' ')[0]);
+                // The counts the merge hides (the merged districts keep no building groups).
+                Debug.Log($"Palm Coast buildings: {front} city towers along the road and {behind} behind ({TowerKit}), {houses} town houses ({TownKit}).");
             }
 
-            // The group a town house of this scenery goes in, made the first time: "Town houses" or "Stairs houses".
+            // The group a building of this scenery goes in, made the first time: "Town houses", "Stairs houses",
+            // "City towers" or "Harbour towers".
             private Transform District(Transform parent, Scenery here)
             {
-                string name = (here == Scenery.Town ? "Town" : "Stairs") + " houses";
-                foreach (Transform district in townDistricts)
+                bool towers = here == Scenery.City || here == Scenery.Harbour;
+                string name = towers ? (here == Scenery.City ? "City" : "Harbour") + " towers" : (here == Scenery.Town ? "Town" : "Stairs") + " houses";
+                List<Transform> districts = towers ? towerDistricts : townDistricts;
+                foreach (Transform district in districts)
                     if (district.name == name) return district;
                 Transform made = Group(name, parent);
-                townDistricts.Add(made);
+                districts.Add(made);
                 return made;
             }
 
@@ -381,75 +408,128 @@ namespace ProtoHarness.Editor.ChainRush
                 foreach (string name in new[] { "Cornice", "FloorBand", "GableEnd", "Chimney" }) townKit[name] = KitMesh(TownKit, name);
             }
 
-            // A city tower of one to three tiers, each narrower than the one below, with window bands or columns, a
-            // cornice per tier, a shop front with an awning and a blank sign, sometimes balconies, and roof clutter (a
-            // water tank, an antenna, plant boxes). Everything varies by index (user 2026-10-30: the same boxes repeated
-            // read as a ghost town).
-            private void Tower(Transform parent, Vector3 position, Quaternion facing, float width, float depth, float height, int index)
+            // The city tower kit's meshes, checked like the town house kit's: every bay inside its 3.0 m bay from an
+            // origin on the wall's face, the cornice, railing and roof clutter placed by their bounds centre.
+            private void LoadTowerKit()
             {
+                const float Slack = 1e-3f;
+                foreach (string name in TowerBayMeshes)
+                {
+                    Mesh mesh = KitPiece(TowerKit, name);
+                    bool ground = name.StartsWith("TowerShop", StringComparison.Ordinal) || name.StartsWith("TowerEntry", StringComparison.Ordinal);
+                    float storey = ground ? TowerGround : UpperStorey;
+                    float reach = ground ? 0.4f : name.StartsWith("TowerBalcony", StringComparison.Ordinal) ? 1.3f : 0.3f;
+                    Bounds b = mesh.bounds;
+                    if (b.min.z < -0.01f || b.max.z > reach || b.min.x < -TowerBayWidth * 0.5f - Slack || b.max.x > TowerBayWidth * 0.5f + Slack
+                        || b.min.y < -storey * 0.5f - Slack || b.max.y > storey * 0.5f + Slack)
+                        throw new InvalidOperationException($"Kit mesh {name} in {TowerKit} has bounds {b}, outside its {TowerBayWidth} x {storey} m bay (at most {reach} m out) from an origin on the wall's face; export it with the bay's pivot.");
+                    towerKit[name] = mesh;
+                }
+                foreach (string name in new[] { "TowerCornice", "RoofRail", "WaterTank", "Antenna", "RoofUnit" }) towerKit[name] = KitMesh(TowerKit, name);
+                // The cornices meet at the corners by this depth (TierCornice).
+                if (Mathf.Abs(towerKit["TowerCornice"].bounds.size.z - TowerCorniceDepth) > Slack)
+                    throw new InvalidOperationException($"Kit mesh TowerCornice in {TowerKit} is {towerKit["TowerCornice"].bounds.size.z} m deep, not {TowerCorniceDepth}; update TowerCorniceDepth.");
+            }
+
+            private static float TowerWidth(int bays) => bays * TowerBayWidth + TowerMargin * 2f;
+
+            private static float TowerBayX(int bay, int bays) => (bay - (bays - 1) * 0.5f) * TowerBayWidth;
+
+            // A city tower of the city tower kit's façade bays (docs/ART_REQUEST_PROPS.md K9, user 2026-11-19): one to
+            // three tiers, each a bay narrower (at least two) and 0.8 as deep as the one below, the floors above the shops
+            // shared out between them; one kind of window for the whole tower (bands, columns, or bands with balconies
+            // every other floor), a cornice round every tier, a shop front of one entry bay and shop bays with blank signs
+            // under one awning, and on the roof a water tank, an antenna and a plant room, or three plant boxes, behind a
+            // railing. The tiers' bodies, the plant room and the awning stay boxes. Everything varies by index (user
+            // 2026-10-30: the same boxes repeated read as a ghost town).
+            private void Tower(Transform parent, Vector3 position, Quaternion facing, int bays, float depth, int floors, int index)
+            {
+                int tiers = 1 + (int)(Hash(index * 7 + 3) * 3f);
+                if (bays < 2 || floors < tiers)
+                    throw new ArgumentException($"A city tower needs at least 2 bays and a floor per tier ({bays} bays, {floors} floors, {tiers} tiers).");
                 Transform tower = Group("City tower " + index, parent);
                 tower.SetPositionAndRotation(position, facing);
                 Material facade = Pick(index * 3 + 1, cream, stone, cyan, pink, apricot, mint, white);
                 Material trim = Pick(index * 5 + 2, white, concrete, stone);
-                int tiers = 1 + (int)(Hash(index * 7 + 3) * 3f);
                 bool columns = Hash(index * 11 + 4) > 0.5f;
                 bool balconies = !columns && Hash(index * 13 + 5) > 0.45f;
-                float y = 0f, w = width, d = depth, tierHeight = height / tiers;
+                float y = 0f, d = depth, w = 0f;
+                int floor = 0, tierBays = bays;
                 for (int t = 0; t < tiers; t++)
                 {
-                    Box("Tier", tower, new Vector3(0f, y + tierHeight * 0.5f, 0f), new Vector3(w, tierHeight, d), facade);
-                    Box("Tier cornice", tower, new Vector3(0f, y + tierHeight, 0f), new Vector3(w + 0.4f, 0.4f, d + 0.4f), trim);
-                    float front = d * 0.5f + 0.06f;
-                    float bottom = t == 0 ? 4.6f : y + 1f;
-                    if (columns)
+                    if (t > 0) d *= 0.8f;
+                    tierBays = Mathf.Max(2, bays - t);
+                    w = TowerWidth(tierBays);
+                    int tierFloors = floors / tiers + (t < floors % tiers ? 1 : 0);
+                    float floorsFrom = t == 0 ? TowerGround : y, top = floorsFrom + tierFloors * UpperStorey;
+                    Box("Tier", tower, new Vector3(0f, (y + top) * 0.5f, 0f), new Vector3(w, top - y, d), facade);
+                    TierCornice(tower, w, d, top, trim);
+                    // 1 cm off the wall so the bays' backs do not flicker against it.
+                    float face = d * 0.5f + 0.01f;
+                    for (int f = 0; f < tierFloors; f++, floor++)
                     {
-                        int count = Mathf.Max(2, (int)(w * 0.8f / 2.4f));
-                        for (int c = 0; c < count; c++)
-                        {
-                            float x = -w * 0.4f + (c + 0.5f) * w * 0.8f / count;
-                            float tall = y + tierHeight - 1f - bottom;
-                            if (tall > 1f) Box("Window column", tower, new Vector3(x, bottom + tall * 0.5f, front), new Vector3(1.2f, tall, 0.12f), glass);
-                        }
+                        string kind = columns ? "TowerColumn" : balconies && floor % 2 == 0 ? "TowerBalcony" : "TowerBand";
+                        float at = floorsFrom + (f + 0.5f) * UpperStorey;
+                        for (int bay = 0; bay < tierBays; bay++) TowerBay(kind, tower, new Vector3(TowerBayX(bay, tierBays), at, face), trim, null);
                     }
-                    else
-                    {
-                        for (float b = bottom + 0.8f; b < y + tierHeight - 1f; b += 3.2f)
-                        {
-                            Box("Window band", tower, new Vector3(0f, b, front), new Vector3(w * 0.84f, 1.4f, 0.12f), glass);
-                            if (balconies && (int)(b / 3.2f) % 2 == 0)
-                                Box("Balcony", tower, new Vector3(0f, b - 0.9f, front + 0.6f), new Vector3(w * 0.6f, 0.2f, 1.2f), trim);
-                        }
-                    }
-                    y += tierHeight;
-                    w *= 0.78f;
-                    d *= 0.8f;
+                    y = top;
                 }
-                // The shop front: dark glass, a door, a coloured awning and a sign board without lettering.
-                float shopFront = depth * 0.5f + 0.08f;
-                Box("Shop glass", tower, new Vector3(0f, 1.9f, shopFront), new Vector3(width * 0.8f, 2.8f, 0.12f), dark);
-                Box("Shop door", tower, new Vector3(width * 0.25f, 1.4f, shopFront + 0.06f), new Vector3(1.4f, 2.6f, 0.1f), trim);
-                Box("Shop awning", tower, new Vector3(0f, 3.7f, depth * 0.5f + 1f), new Vector3(width * 0.9f, 0.25f, 2f), Pick(index * 17 + 6, violet, terracotta, mint, apricot, cyan));
-                Box("Shop sign", tower, new Vector3(0f, 4.4f, shopFront + 0.05f), new Vector3(width * 0.5f, 0.8f, 0.15f), Pick(index * 19 + 7, white, yellow, cyan, pink));
-                // Roof clutter on the top tier.
+                // The shop front: one entry bay, the rest shop bays with a blank sign each, one awning over them all.
+                float shopFace = depth * 0.5f + 0.01f;
+                int entry = Mathf.Min(bays - 1, (int)(Hash(index * 29 + 10) * bays));
+                Material sign = Pick(index * 19 + 7, white, yellow, cyan, pink);
+                for (int bay = 0; bay < bays; bay++)
+                    TowerBay(bay == entry ? "TowerEntry" : "TowerShop", tower, new Vector3(TowerBayX(bay, bays), TowerGround * 0.5f, shopFace), trim, sign);
+                Box("Shop awning", tower, new Vector3(0f, 3.7f, depth * 0.5f + 1f), new Vector3(bays * TowerBayWidth, 0.25f, 2f), Pick(index * 17 + 6, violet, terracotta, mint, apricot, cyan));
+                // Roof clutter on the top tier (its own width and depth), standing on the roof by its bounds' bottom.
                 float roof = y;
                 float r = Hash(index * 23 + 8);
                 if (r < 0.4f)
-                {
-                    Shape("Water tank", tower, new Vector3(w * 0.2f, roof + 2.2f, -d * 0.1f), new Vector3(2.4f, 2.4f, 2.4f), metal, Cylinder);
-                    for (int leg = -1; leg <= 1; leg += 2)
-                        Box("Tank leg", tower, new Vector3(w * 0.2f + leg * 0.8f, roof + 0.5f, -d * 0.1f), new Vector3(0.2f, 1f, 0.2f), metal);
-                }
+                    Piece("Water tank", tower, new Vector3(w * 0.2f, roof + towerKit["WaterTank"].bounds.extents.y, -d * 0.1f), metal, towerKit["WaterTank"]);
                 else if (r < 0.7f)
                 {
-                    Box("Antenna", tower, new Vector3(-w * 0.2f, roof + 3f, 0f), new Vector3(0.18f, 6f, 0.18f), metal);
+                    Piece("Antenna", tower, new Vector3(-w * 0.2f, roof + towerKit["Antenna"].bounds.extents.y, 0f), metal, towerKit["Antenna"]);
                     Box("Roof plant room", tower, new Vector3(w * 0.15f, roof + 1.2f, 0f), new Vector3(w * 0.35f, 2.4f, d * 0.4f), trim);
                 }
                 else
                 {
                     for (int box = 0; box < 3; box++)
-                        Box("Roof unit", tower, new Vector3(-w * 0.3f + box * w * 0.3f, roof + 0.6f, d * 0.15f), new Vector3(1.4f, 1.2f, 1.4f), concrete);
+                        Piece("Roof unit", tower, new Vector3(-w * 0.3f + box * w * 0.3f, roof + towerKit["RoofUnit"].bounds.extents.y, d * 0.15f), concrete, towerKit["RoofUnit"]);
                 }
-                Box("Roof railing", tower, new Vector3(0f, roof + 0.6f, d * 0.5f - 0.1f), new Vector3(w, 0.15f, 0.12f), metal);
+                // A railing bay over every façade bay, on the roof's front edge.
+                Mesh rail = towerKit["RoofRail"];
+                for (int bay = 0; bay < tierBays; bay++)
+                    Piece("Roof railing", tower, new Vector3(TowerBayX(bay, tierBays), roof + rail.bounds.extents.y, d * 0.5f - rail.bounds.extents.z), metal, rail);
+            }
+
+            // Every slot object of one kind of tower bay at the bay's origin: trim, glass (the shop front's dark), the
+            // shop's sign and the balcony's metal railing.
+            private void TowerBay(string kind, Transform tower, Vector3 at, Material trim, Material sign)
+            {
+                bool shopFront = kind == "TowerShop" || kind == "TowerEntry";
+                foreach (string slot in BaySlots)
+                    if (towerKit.TryGetValue(kind + "_" + slot, out Mesh mesh))
+                    {
+                        Material material = slot == "Trim" ? trim : slot == "Glass" ? (shopFront ? dark : glass) : slot == "Metal" ? metal : sign;
+                        if (material == null) throw new ArgumentException($"Tower bay {kind} has a sign but no sign colour was given.", nameof(sign));
+                        Piece(kind + " " + slot, tower, at, material, mesh);
+                    }
+            }
+
+            // A cornice round a tier just under its top, its back on the wall. The front and back pieces run past the
+            // sides by the cornice's depth and the side pieces fit between them, so no two pieces share a face. The kit's
+            // cornice faces +Z, so each piece is turned to face out.
+            private void TierCornice(Transform tower, float w, float d, float top, Material trim)
+            {
+                Mesh cornice = towerKit["TowerCornice"];
+                float height = cornice.bounds.size.y, at = top - height * 0.5f, half = TowerCorniceDepth * 0.5f;
+                for (int side = -1; side <= 1; side += 2)
+                {
+                    Shape("Tier cornice", tower, new Vector3(0f, at, side * (d * 0.5f + half)), new Vector3(w + TowerCorniceDepth * 2f, height, TowerCorniceDepth), trim, cornice)
+                        .transform.localRotation = Quaternion.Euler(0f, side > 0 ? 0f : 180f, 0f);
+                    Shape("Tier cornice", tower, new Vector3(side * (w * 0.5f + half), at, 0f), new Vector3(d, height, TowerCorniceDepth), trim, cornice)
+                        .transform.localRotation = Quaternion.Euler(0f, side * 90f, 0f);
+                }
             }
 
             // A house of the pink town, two to four storeys of the town house kit's façade bays (docs/ART_REQUEST_PROPS.md
