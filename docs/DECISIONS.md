@@ -10,6 +10,17 @@
 
 ---
 
+## 2026-11-19 · 건물 킷 v2: 완성형 5종 대신 조립 부품(칸·띠)으로 다시 만든다, 마을집(K8) → PALM 먼저 (`docs/art-buildingkit-v2`)
+
+- **결정 (사용자 2026-11-19)**: "blender로 만든 건물이 5종류 밖에 없는데 너무 적어서 이거로만 적용시키면 단조로울 것 같다. 기존 트랙에 있는 건물들 디자인을 기반으로 blender로 다시 만드는 식으로 발전시켜볼까" → 메인의 제안 세 가지(조립식 / 기존 5종은 랜드마크로 한두 채 / 마을집 먼저, PALM 먼저 반영)에 "ㄱㄱ". 요청서 `docs/ART_REQUEST_PROPS.md` 3절 "건물 킷 v2 (K8~K11)" 와 "K8. `TownHouseKit`" 가 원본이고 여기에는 이유만 둔다.
+- **이유**: 코드 건물은 배치마다 폭·높이·층수·색·지붕·앞면 장식을 해시로 고른다(`PalmCoast…:327,396` 등) — 2026-10-30 "유령 도시 같다" 피드백으로 넣은 다양성이다. `art-src/BuildingKit/`(2026-11-14 병합, 요청서·결정 없음)의 5종은 그 디자인을 하나씩 고정한 완성형이라 그대로 쓰면 이것을 잃는다. 칸(폭 2.6 m × 한 층) 단위 부품이면 창을 늘리지 않고 폭·층수를 바꿀 수 있고, 같은 정점 예산으로 조합이 수백 가지가 된다(요청서 K8 "조립 규칙 초안").
+- **범위**: K8 마을집(FINGER 49·PALM 35·SKYWAY 50채, 세 트랙 공통 디자인) → K9 도시 타워(PALM 77) → K10 스카이라인 타워(SKYWAY 24) → K11 통나무 오두막(SUMMIT 6, 4절의 "오두막 통째" 를 옮김). 채 수는 `Assets/_Project/Prefabs/*Exterior.prefab` 의 `m_Name` grep. K5 `FacadeKit` 은 따로 Unity 에 연결하지 않고 K8 칸의 원재료로 쓴다. K2·K7·K6 보류는 그대로.
+- **2절 규칙과 다른 점**: 집 몸통·지붕 판·밑단은 2절 "길이가 바뀌는 것" 대로 코드 상자로 남는다. `Chimney` 는 2절에서 뺐지만 높이 2.0 고정으로 다시 넣었다(지붕에 묻히는 깊이로 맞춘다).
+- **남은 것**: B1(칸 폭으로 바뀌는 집 폭)·B2(3층 집 높이 10.0 m)·B3(FINGER 전용 칸) — 시안 때 묻는다. 칸을 그대로 놓으면 렌더러가 늘어나므로(추정 28 → 37, 측정 아님) Unity 반영 요청서에서 집마다 슬롯별 병합을 같이 정한다. 기존 5종 랜드마크 자리는 K9 Unity 요청서에서 정한다.
+- **확인 못 한 것**: `FacadeKit` 부품의 실제 치수가 K5 표와 같은지(FBX 에서 오브젝트·슬롯 이름만 읽었다 — `WindowFrame`·`WindowGlass`·`Shutter`·`Door`·`AwningStripe`·`BalconyRail`, 슬롯 `M_Trim`·`M_Glass`·`M_Accent`). PALM 렌더러 5,319 중 마을집 몫.
+- **K8 시안 (같은 날, 사용자 "좋다")**: 오브젝트 21개, FBX 내보냄. 결과·삼각형·표와 다른 곳은 요청서 K8 "시안 결과". 칸 피벗을 bounds 가운데에서 **칸 원점**으로 바꿨다 — 한 칸의 슬롯 오브젝트들은 bounds 가 달라 bounds 가운데로는 같은 자리에 둘 수 없다. `blender-artist` 가 이 세션(작업 디렉터리 `PCUBE` 에서 시작)의 에이전트 목록에 없어, 메인이 같은 제약(쓰기 `art-src/` 만·새 장면·`copy=True` 저장·세이프 모드 우회 없음)으로 Blender MCP 를 직접 썼다.
+- **검토했으나 버린 대안**: 완성형 건물을 15종쯤으로 늘리기(배치마다의 폭·층수·장식 다양성을 여전히 잃고, 종류당 정점이 그대로 든다), 기존 5종만 적용(사용자 "단조로울 것 같다"), FacadeKit 부품을 Unity 에서 창마다 하나씩 붙이기(창 하나에 렌더러 4~5개 — 칸 안에서 슬롯별로 미리 합치는 쪽이 싸다).
+
 ## 2026-11-19 · 테스트 로그 검사에서 AI 패키지의 계정 대기 경고 한 문장만 뺀다 (`fix/test-log-ai-warning`)
 
 - **결정**: PlayMode TearDown 25곳의 `LogAssert.NoUnexpectedReceived()` 를 `TestLogs.AssertNoUnexpected()` (`Assets/_Project/Scripts/Tests/PlayMode/TestLogs.cs`) 로 바꾼다. 도우미는 `Application.logMessageReceived` 로 **그 테스트 안에서**(`TestContext.CurrentContext.Test.ID` 비교) `LogType.Warning` 이고 문장 전체가 `Account API did not become accessible within 30 seconds. This may be due to network issues or editor focus.` 인 로그가 나온 횟수만큼 `LogAssert.Expect` 를 건 뒤 `NoUnexpectedReceived()` 를 부른다. 다른 로그는 그대로 검사한다. §0 "테스트를 통과시키려고 특수 케이스를 넣지 않는다" 의 예외로, 사용자 2026-11-19 "ㄱㄱ"(합의 요청서 대화).
