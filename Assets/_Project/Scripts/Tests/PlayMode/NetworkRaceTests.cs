@@ -180,7 +180,7 @@ namespace ProtoHarness.Tests.PlayMode
             if (game != null) game.SetInputSource(new InputReplay(new InputLog()));
             Time.timeScale = timeScale;
             yield return null;
-            LogAssert.NoUnexpectedReceived();
+            TestLogs.AssertNoUnexpected();
         }
 
         // 100 ms round trip (50 ms each way), no jitter, an input buffer of 3 ticks: nothing arrives late, so the server's

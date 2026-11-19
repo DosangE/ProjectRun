@@ -64,7 +64,7 @@ namespace ProtoHarness.Tests.PlayMode
             RaceLaunch.Clear();
             if (Directory.Exists(ghosts.Folder)) Directory.Delete(ghosts.Folder, true);
             yield return null;
-            LogAssert.NoUnexpectedReceived();
+            TestLogs.AssertNoUnexpected();
         }
 
         // ---- the setup ---------------------------------------------------------------------------------

@@ -80,7 +80,7 @@ namespace ProtoHarness.Tests.PlayMode
             for (int i = 0; i < built.Count; i++) if (built[i] != null) Object.Destroy(built[i]);
             built.Clear();
             yield return null;
-            LogAssert.NoUnexpectedReceived();
+            TestLogs.AssertNoUnexpected();
         }
 
         [UnityTest]

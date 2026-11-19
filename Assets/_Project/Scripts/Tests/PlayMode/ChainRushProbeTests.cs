@@ -72,7 +72,7 @@ namespace ProtoHarness.Tests.PlayMode
                 if (System.IO.Directory.Exists(lapGhosts.Folder)) System.IO.Directory.Delete(lapGhosts.Folder, true);
             }
             yield return null;
-            LogAssert.NoUnexpectedReceived();
+            TestLogs.AssertNoUnexpected();
         }
 
         // The bot over the grapple gap: plain, with a booster fired before it, and with the grapple empowered.

@@ -71,7 +71,7 @@ namespace ProtoHarness.Tests.PlayMode
         public IEnumerator TearDown()
         {
             yield return null;
-            LogAssert.NoUnexpectedReceived();
+            TestLogs.AssertNoUnexpected();
         }
 
         private void MovePlayer(Vector3 position)

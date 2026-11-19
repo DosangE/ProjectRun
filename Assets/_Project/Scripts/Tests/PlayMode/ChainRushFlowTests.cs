@@ -66,7 +66,7 @@ namespace ProtoHarness.Tests.PlayMode
             if (runner != null) UnityEngine.Object.Destroy(runner);
             DeleteGhosts();
             yield return null;
-            LogAssert.NoUnexpectedReceived();
+            TestLogs.AssertNoUnexpected();
         }
 
         // ---- the conditions ------------------------------------------------------------------------------

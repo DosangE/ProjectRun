@@ -61,7 +61,7 @@ namespace ProtoHarness.Tests.PlayMode
             pieces.Clear();
             if (material != null) Object.Destroy(material);
             yield return null;
-            LogAssert.NoUnexpectedReceived();
+            TestLogs.AssertNoUnexpected();
         }
 
         [UnityTest]

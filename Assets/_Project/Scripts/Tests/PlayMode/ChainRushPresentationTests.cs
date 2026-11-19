@@ -61,7 +61,7 @@ namespace ProtoHarness.Tests.PlayMode
         }
 
         [UnityTearDown]
-        public IEnumerator TearDown() { yield return null; LogAssert.NoUnexpectedReceived(); }
+        public IEnumerator TearDown() { yield return null; TestLogs.AssertNoUnexpected(); }
 
         [UnityTest]
         public IEnumerator Presentation_RunPauseRestart_SynchronizesAudioAndPose()

@@ -44,7 +44,7 @@ namespace ProtoHarness.Tests.PlayMode
             Time.timeScale = scale;
             AudioListener.volume = volume;
             yield return null;
-            LogAssert.NoUnexpectedReceived();
+            TestLogs.AssertNoUnexpected();
         }
 
         [UnityTest, Timeout(120000)]
