@@ -185,7 +185,7 @@
 - 폭 **2.6 m**. 집 폭 = 칸 수 × 2.6 + 양끝 여백 0.3 → 3칸 8.1 · 4칸 10.7 · 5칸 13.3 (지금 코드 폭 FINGER 7~10.5, PALM 9~11, SKYWAY 8~13).
 - 높이: 1층 칸 **3.6 m**(문 2.4 + 위 여유, 차양이 3.1 에 붙는다 — 지금 코드 값), 위층 칸 **3.2 m**. 2층 집 6.8 m, 3층 집 10.0 m.
 - 깊이(앞으로 튀어나온 것) ≤ 0.5 m. 꽃상자는 별도 오브젝트라 여기에 들지 않는다.
-- 피벗: 2절과 같이 bounds 가운데. 칸의 **뒷면(Unity −Z) 이 몸통 앞면에 닿는 면**이다 — 코드가 `front + 깊이/2` 에 둔다.
+- 피벗: **칸 원점** — 가로 가운데·높이 가운데·뒷면(벽에 닿는 면, Unity −Z). 2절의 "bounds 가운데" 와 다르다: 한 칸의 `_Trim`·`_Glass`·`_Accent` 는 bounds 가 서로 달라서 bounds 가운데로는 코드가 셋을 같은 자리에 둘 수 없다(2026-11-19 시안에서 정정). 코드는 칸의 모든 슬롯 오브젝트를 같은 위치(몸통 앞면, 칸 가운데)에 스케일 1 로 둔다. 띠 부품·`GableEnd`·`Chimney` 는 2절대로 bounds 가운데, `FlowerBox`·`Flowers` 는 둘을 합친 bounds 의 가운데를 같이 쓴다.
 - 칸은 벽면을 갖지 않는다(벽은 코드 몸통이 보인다). 창·문 둘레의 틀·창턱·인방만 만든다.
 
 | 오브젝트 (칸 종류 + `_` 슬롯) | 크기 종류 · bounds (폭×높이×깊이) | 슬롯 | 등급 | 설명 |
@@ -193,7 +193,7 @@
 | `UpperShutter_Trim` · `_Glass` · `_Accent` | 실제 · 2.6 × 3.2 × ≤0.3 | `M_Trim` · `M_Glass` · `M_Accent` | S · S · S | 위층 기본 칸: 창틀·십자살·창턱 / 유리 / 덧문 두 짝. 지금 코드의 위층 창 그대로 |
 | `UpperTall_Trim` · `_Glass` · `_Metal` | 실제 · 2.6 × 3.2 × ≤0.5 | `M_Trim` · `M_Glass` · `M_Metal` | S · S · S | 바닥까지 내려오는 긴 창 + 앞에 작은 철제 난간(줄리엣 발코니). 새 변형 |
 | `UpperPair_Trim` · `_Glass` | 실제 · 2.6 × 3.2 × ≤0.3 | `M_Trim` · `M_Glass` | S · S | 좁은 창 둘(덧문 없음). 새 변형 |
-| `GroundDoor_Trim` · `_Accent` | 실제 · 2.6 × 3.6 × ≤0.4 | `M_Trim` · `M_Accent` | S · S | 문틀 + 문짝(FacadeKit `Door`) + 문 앞 계단 한 단 |
+| `GroundDoor_Trim` · `_Accent` | 실제 · 2.6 × 3.6 × ≤0.4 | `M_Trim` · `M_Accent` | S · S | `_Accent` = FacadeKit `Door`(문틀·문짝이 한 메시라 문틀도 문 색), `_Trim` = 문 앞 계단 한 단 + 문 위 인방 |
 | `GroundShop_Trim` · `_Glass` | 실제 · 2.6 × 3.6 × ≤0.3 | `M_Trim` · `M_Glass` | S · S | 가게 진열창(지금 `Shop window` 2.4 × 1.5) + 틀 |
 | `GroundWindow_Trim` · `_Glass` · `_Accent` | 실제 · 2.6 × 3.6 × ≤0.3 | 위와 같음 | S · S · S | 1층 덧문 창 (`UpperShutter` 와 같은 창, 높이만 1층) |
 | `FlowerBox` · `Flowers` | 실제 · 1.3 × 0.55 × 0.4 (둘 합친 bounds) | `M_Wood` · `M_Flower` | S · S | 꽃상자 + 꽃 덩어리. 칸과 따로 — 코드가 창 아래에 붙이거나 뺀다 |
@@ -204,6 +204,13 @@
 
 - 차양은 `FacadeKit` 의 `AwningStripe` 를, 발코니는 `BalconyRail`(2.0 폭 → 한 칸) 을 그대로 쓴다. 지금 발코니는 집 폭의 0.5 인 판 하나라 칸 단위로 바뀐다.
 - 지붕 판·몸통·밑단은 코드 상자로 남는다(위 규칙).
+
+**시안 결과 (2026-11-19, 사용자 "좋다")** — `art-src/TownHouseKit/TownHouseKit.blend`·`.fbx`, 렌더 `Render_Parts_Front.png`·`Render_Parts_Angle.png`·`Render_Combos6_Palm.png`(PALM 색 조합 6채)·`Render_CodeVsKit.png`(지금 코드 집과 같은 폭 10.7·3층 비교).
+- 오브젝트 21개, 모두 슬롯 하나·플랫. 삼각형: `UpperShutter` Trim 140 / Glass 12 / Accent 152, `UpperTall` 140 / 12 / Metal 132, `UpperPair` 192 / 24, `GroundDoor` Trim 88 / Accent 92, `GroundShop` 184 / 12, `GroundWindow` 140 / 12 / 152, `FlowerBox` 44, `Flowers` 180, `Cornice` 28, `FloorBand` 20, `GableEnd` 8, `Chimney` 132. 모두 S 상한(200) 안이지만 칸 대부분이 목표(상한의 1/3~1/2)를 넘는다 — FacadeKit `WindowFrame` 하나가 96이다.
+- 표와 다르게 만든 것: 피벗(위 "공통 치수"), `GroundDoor` 문틀 색(표), 위층·1층 덧문 창 위 인방(Trim), `GroundShop` 진열창 아래 판·간판 판(Trim). `UpperPair` 는 상한 때문에 인방이 없다. FacadeKit 부품은 FBX 로 가져와 늘려 썼다 — 창틀 높이 ×1.143(긴 창 ×1.786, 좁은 창 가로 ×0.6, 가게 ×1.833 / ×1.357), 덧문 ×0.818 / ×1.214.
+- FacadeKit 원본 치수는 K5 표와 같다(가져와 잼).
+- `.blend` 에는 렌더용 `Preview_*`·`Src_*`(가져온 FacadeKit) 오브젝트가 다른 컬렉션에 같이 있다. FBX 는 `TownHouseKit` 컬렉션 21개만 내보냈다(2절 FBX 설정 그대로).
+- 시안 관찰(B 질문용): 칸 2.6 m 에 창+덧문(폭 2.15)이 양옆 0.22 여유로 들어간다. 비교 렌더에서 3층 높이 10.0 대 10.5 는 거의 구별되지 않는다.
 
 **조립 규칙 초안** (Unity 요청서에서 확정한다 — 여기서는 시안 조합을 만들 기준)
 - 집마다: 칸 수 3~5, 층수 2~3(지금 식 그대로: 높이 > 10 이면 3층), 위층 칸 종류는 **층마다 하나**(한 줄이 같은 창이어야 집처럼 보인다), 1층은 문 1칸 + 나머지는 가게 또는 창.
