@@ -10,6 +10,17 @@
 
 ---
 
+## 2026-11-20 · PALM 복귀 지점이 바다 위: 복귀 S 의 틈 검사를 루프에도, 순서는 틈 → 패드 (`fix/palm-respawn-over-sea`)
+
+- **보고 (사용자 2026-11-19)**: "palm coast에서 부스트존으로 점프구간 넘어간 뒤 역주행으로 낙하가능한 구간으로 떨어지면 재시작 지점이 공중이라 진행 불가하다."
+- **원인**: `RunnerMotor.RespawnOnTrack` 은 `LastGroundedS − respawnBackoff`(4 m) 에 세우고, 50 m(`respawnPadReach`) 안에 패드가 있으면 그 패드 앞으로 보냈다. 틈 안이면 틈 앞으로 옮기는 검사는 `!IsLoop`(열린 코스, SUMMIT) 에서만 돌았다. PALM(루프)의 바다는 358.7~403.7, 마지막 패드는 333.7. 바다 건너편(≥ 403.7)에 서 있다가 떨어지면 복귀 S 가 바다 안(≈ 400)이고 패드는 66 m 뒤라 찾지 못해 바다 위 공중에 세웠다. `LastGroundedS` 는 착지 전까지 그대로라 같은 자리로 계속 돌아왔다. 역주행이 아니어도 착지 뒤 4 m 안에서 옆으로 떨어지면 같았을 것이다(확인 못 함).
+- **결정 (사용자 "ㄱㄱ")**: 틈 검사를 루프에도 적용하고 순서를 "틈 → 패드 → (열린 코스만) 범위 고정" 으로 바꾼다. 틈 앞(354.7)에서 다시 패드를 찾으니 바다 끝에서 떨어져도 마지막 패드 앞 329.7 로 돌아와 그 패드로 다시 건넌다.
+- **동작이 바뀌는 곳**: SUMMIT 에서 틈 바로 건너편에 섰다 떨어지면, 전에는 `틈 시작 − 4` 였고 이제는 그 자리에서 50 m 안에 패드가 있으면 패드 앞이다(기존 `SummitDrop_JumpWithoutPad_` 의 "Recovery must offer the pad again" 과 같은 방향). 이 경우를 직접 보는 테스트는 없다.
+- **검증 (에디터 6000.3.19f1, Unity MCP)**: 새 테스트 `ChainRushFlowTests.Respawn_FallJustPastThePalmCoastSea_ComesBackBeforeTheLastPad`(Normal·Fast·VeryFast — 바다 끝 + 1 m 에서 떨어뜨려 복귀 S, 대기 중 재낙하 없음, 그 패드로 바다를 건넘). 고치기 전 `testcasecount="3" result="Failed(Child)" passed="0" failed="3"` (2026-11-20 04:13:26Z) — 원문 `Back before the last pad, not above the sea. Expected: 329.68583679199219d +/- 0.5d But was: 400.68583679199219d`. 고친 뒤 컴파일 `*** Tundra build success (4.97 seconds), 11 items updated, 1618 evaluated`, PlayMode (`!Device !Enemy !NetEndReplay !^Lap$`) `testcasecount="25" result="Passed" passed="25" failed="0" skipped="0"` (04:15:44Z~04:17:27Z). 둘 다 `test-runs.ps1 -Record`. 영향 평가: `RunnerMotor.RespawnOnTrack` → 떨어진 뒤의 복귀만(`CountDownAndCheckFall`, `RunnerMotor.cs:438`) → 새 테스트·PALM 점프·SUMMIT 낙하 4종(`JumpWithoutPad`·`OpenLeftEdge`·`BotAtEachSpeed`·`OpenCourse_StartGuardAndFalls`)·`ChainRushCircuitTests.Gap_` 2·`ChainRushContactTests` 복귀 3·틈 가장자리 밀림·스윙 끊김·도로 가장자리 낙하 + 결정성(서킷 지문, `Rollback_AroundAFallAndTheRespawnHold_`, `NetReconcileTests.Client_WhenTheServersRunFellAfterAMissedInput_`). Lap 은 돌리지 않았다 — 떨어지지 않는 주행 경로는 바뀌지 않았고 지문·SUMMIT 봇 주행이 통과했다.
+- **사용자 플레이 확인**: 확인을 부탁한 보고에 "확인했다 병합 푸시 진행하라".
+- **두는 것**: SUMMIT 의 위 경우를 보는 테스트. 테스트를 돌리는 동안 Unity 가 PALM 타워 머티리얼 7개(`M_PalmTower*.mat`)의 `_Color` 를 `_BaseColor` 값으로 다시 써 작업 트리에 남았다 — 이 브랜치에 넣지 않았다(다음 에디터 저장 때 다시 생길 수 있다, 동작 같음).
+- **검토했으나 버린 대안**: `respawnPadReach` 를 70 m 이상으로 늘리기(씬 값이고 다른 트랙의 패드 뒤 복귀 범위도 같이 넓어진다), PALM 에서만 따로 처리하기(같은 문제가 루프의 다른 틈에도 생긴다).
+
 ## 2026-11-20 · PALM 트랙 조명과 타워 색: 트랙마다 자기 조명(`TrackLook`), PALM 타워 벽은 건물 색 7개 (`feature/palm-track-light`)
 
 - **원인 (조사, 2026-11-19 ~ 20)**: K9 플레이 피드백 "질감과 파스텔 톤 색상이 묘하게 구린 느낌" 의 원인은 조명이었다. 다섯 트랙이 서킷 씬의 해 하나(`(0.83, 0.93, 1)` × 1.9, `ChainRushCircuit.unity:262-263`)와 단색 앰비언트(`(0.34, 0.38, 0.54)`, `:23,27`)를 함께 쓰고, `RaceAssembler.UseSky` 는 하늘·안개만 바꾼다. 선형 색 공간에서 크림 벽의 그늘면이 슬레이트 블루, 볕 드는 면이 민트빛 흰색, 분홍이 모브가 된다. 서킷 씬의 앰비언트 값은 빌더 코드(`ChainRushSceneBuilder.cs:185` `(0.4, 0.55, 0.62)`)와 다르다(에디터에서 바꾼 값, 이번에 고치지 않음). 질감(텍스처 없는 단색, 매끄러움 0.16)은 비교 렌더에서 영향이 작았다. 후처리는 기본 볼륨의 톤매핑 mode 0, 서킷 씬에 `m_RenderPostProcessing` 줄 없음(실행 중 상태는 확인 못 함).
