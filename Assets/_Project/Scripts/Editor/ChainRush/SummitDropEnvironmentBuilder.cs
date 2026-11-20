@@ -172,7 +172,7 @@ namespace ProtoHarness.Editor.ChainRush
                 var transient = new HashSet<Mesh>();
                 foreach (MeshFilter filter in root.GetComponentsInChildren<MeshFilter>(true))
                     if (!EditorUtility.IsPersistent(filter.sharedMesh)) transient.Add(filter.sharedMesh);
-                foreach (Transform group in root.transform) MergeByMaterial(group, group.name.Substring(0, 2));
+                foreach (Transform group in root.transform) MergeByMaterial(group, "SummitDropExterior", group.name.Substring(0, 2));
                 foreach (Mesh mesh in transient) UnityEngine.Object.DestroyImmediate(mesh);
                 Debug.Log($"Summit Drop placed {trees} pines and {rocks} crags ({groundedRocks} with a foot reaching down the slope, longest {longestCragReach:F2} m; {skippedRocks} spots skipped at a drop); terrain follows main road, shortcut, runway and runout.", root);
                 return root;
@@ -870,32 +870,6 @@ namespace ProtoHarness.Editor.ChainRush
                 return part;
             }
 
-            // Same material merge and persistent mesh naming as SkywayEnvironmentBuilder.
-            private static void MergeByMaterial(Transform group, string key)
-            {
-                var byMaterial = new Dictionary<Material, List<CombineInstance>>();
-                foreach (MeshFilter filter in group.GetComponentsInChildren<MeshFilter>(true))
-                {
-                    Material material = filter.GetComponent<MeshRenderer>().sharedMaterial;
-                    if (!byMaterial.TryGetValue(material, out List<CombineInstance> parts)) byMaterial[material] = parts = new List<CombineInstance>();
-                    parts.Add(new CombineInstance { mesh = filter.sharedMesh, transform = group.worldToLocalMatrix * filter.transform.localToWorldMatrix });
-                }
-                for (int i = group.childCount - 1; i >= 0; i--) UnityEngine.Object.DestroyImmediate(group.GetChild(i).gameObject);
-                foreach (var pair in byMaterial)
-                {
-                    var mesh = new Mesh { name = $"SummitDropExterior_{key}_{pair.Key.name}", indexFormat = IndexFormat.UInt32 };
-                    mesh.CombineMeshes(pair.Value.ToArray(), true, true);
-                    mesh.RecalculateBounds();
-                    var part = new GameObject(key + " " + pair.Key.name);
-                    part.transform.SetParent(group, false);
-                    part.AddComponent<MeshFilter>().sharedMesh = mesh;
-                    MeshRenderer renderer = part.AddComponent<MeshRenderer>();
-                    renderer.sharedMaterial = pair.Key;
-                    renderer.shadowCastingMode = ShadowCastingMode.Off;
-                    renderer.receiveShadows = false;
-                    GameObjectUtility.SetStaticEditorFlags(part, StaticEditorFlags.BatchingStatic);
-                }
-            }
         }
     }
 }
