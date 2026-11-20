@@ -150,12 +150,23 @@ namespace ProtoHarness.Editor.ChainRush
             private const string OuterGroup = "15 Outer city";
             private const string VillageGroup = "02 Village and shops";
             private const string ViaductGroup = "14 Flats and billboards by the viaduct";
+            private const string SkylineGroup = "06 Skyline";
+            private const string SkylineKitName = "SkylineTowerKit";
+            private static readonly string[] SkylineBays = { "SkylineCurtain", "SkylineRibbon", "SkylineFin" };
+            // Every skyline tower is a whole number of kit bays wide with this much plain wall at either corner: the
+            // towers' widths (13, 16, 19, 22, 25 m) stay as they were, so the town keeps its places (user 2026-11-20).
+            private const float SkylineCorner = 0.5f;
+            // The spire stands half as big again as the kit's 1.2 x 12 m (user 2026-11-20, judged in the renders).
+            private const float SpireScale = 1.5f;
             // The merged groups' meshes: SkywayExterior_<key>_<material>.asset.
             private const string MeshPrefix = "SkywayExterior";
             // The town house kit (docs/ART_REQUEST_PROPS.md K8, TownHouseAssembly), loaded when the build starts.
             private TownHouseAssembly.Kit townKit;
             // The city tower kit (docs/ART_REQUEST_PROPS.md K9, CityTowerAssembly) for the flats by the viaduct.
             private CityTowerAssembly.Kit towerKit;
+            // The skyline tower kit (docs/ART_REQUEST_PROPS.md K10): three kinds of 3.0 x 3.2 m window bay, a spire and a
+            // roof sign's leg, loaded when the build starts (LoadSkylineKit).
+            private readonly Dictionary<string, Mesh> skylineKit = new Dictionary<string, Mesh>();
             private readonly double length;
             private readonly RoadCorridor corridor;
             private readonly RoadCorridor near;
@@ -272,12 +283,12 @@ namespace ProtoHarness.Editor.ChainRush
                 Transform deck = root.transform.Find(DeckGroup);
                 if (deck == null) throw new InvalidOperationException("Skyway continuation group is missing: " + DeckGroup);
                 Transform land = root.transform.Find(LandGroup), outer = root.transform.Find(OuterGroup), village = root.transform.Find(VillageGroup);
-                Transform viaduct = root.transform.Find(ViaductGroup);
-                if (land == null || outer == null || village == null || viaduct == null)
-                    throw new InvalidOperationException("Skyway land, outer city, village or viaduct flats group is missing.");
-                // The merged land, outer city, village and flats spread round the road, so their bounds always hold it:
-                // vertex by vertex.
-                corridor.ValidateClearance(root, Ground + 0.01f, piers, new[] { deck, land, outer, village, viaduct });
+                Transform viaduct = root.transform.Find(ViaductGroup), skyline = root.transform.Find(SkylineGroup);
+                if (land == null || outer == null || village == null || viaduct == null || skyline == null)
+                    throw new InvalidOperationException("Skyway land, outer city, village, viaduct flats or skyline group is missing.");
+                // The merged land, outer city, village, flats and skyline spread round the road, so their bounds always
+                // hold it: vertex by vertex.
+                corridor.ValidateClearance(root, Ground + 0.01f, piers, new[] { deck, land, outer, village, viaduct, skyline });
             }
 
             internal GameObject Build(Scene scene)
@@ -289,6 +300,7 @@ namespace ProtoHarness.Editor.ChainRush
                 boardFrame = KitMesh("RoadsideKit", "BoardFrame"); boardFace = KitMesh("RoadsideKit", "BoardFace"); boardCap = KitMesh("RoadsideKit", "BoardCap");
                 townKit = TownHouseAssembly.Kit.Load();
                 towerKit = CityTowerAssembly.Kit.Load();
+                LoadSkylineKit();
                 Transform landscape = Group(LandGroup, root.transform);
                 Land(landscape);
 
@@ -296,7 +308,7 @@ namespace ProtoHarness.Editor.ChainRush
                 Transform landmarks = Group("07 Skyway landmarks", root.transform);
                 Landmark(landmarks, new Vector3(-28f, Ground, 28f), Quaternion.Euler(0f, 90f, 0f), "SKYWAY", "GARDEN DISTRICT");
                 Landmark(landmarks, new Vector3(-220f, Ground, -153f), Quaternion.Euler(0f, 180f, 0f), "SKYWAY", "ELEVATED EXPRESS");
-                Transform skyline = Group("06 Skyline", root.transform);
+                Transform skyline = Group(SkylineGroup, root.transform);
                 for (int i = 0; i < 22; i++)
                 {
                     float x = -365f + i * 28f;
@@ -306,6 +318,8 @@ namespace ProtoHarness.Editor.ChainRush
                 }
                 Tower(skyline, new Vector3(-375f, Ground, -80f), 25f, 64f, 22);
                 Tower(skyline, new Vector3(205f, Ground, -90f), 22f, 52f, 23);
+                // The count the merge hides (the merged group keeps no towers).
+                Debug.Log($"Skyway skyline: {skyline.childCount} towers ({SkylineKitName}).");
                 // The existing highway runs on to the horizon past both guards (user 2026-11-02, "맵 외곽쪽이 부족해보인다.
                 // 특히 고가도로쪽"); the town keeps off it.
                 Transform supports = Group(PierGroup, root.transform);
@@ -410,6 +424,7 @@ namespace ProtoHarness.Editor.ChainRush
                 MergeByMaterial(outerCity, MeshPrefix, "Outer");
                 MergeByMaterial(village, MeshPrefix, "Village");
                 MergeByMaterial(viaduct, MeshPrefix, "Viaduct");
+                MergeByMaterial(skyline, MeshPrefix, "Skyline");
                 return root;
             }
 
@@ -989,31 +1004,125 @@ namespace ProtoHarness.Editor.ChainRush
                 }
             }
 
-            // A plaster apartment tower: a dark podium of shops, a glass band on every floor round all four sides, a
-            // cornice and a rooftop water tank or sign.
+            // The skyline kit's meshes, checked like the city tower kit's: every bay inside its 3.0 x 3.2 m bay from an
+            // origin on the wall's face (at most 0.2 m out, the fin 0.4 m), the spire and the sign's leg by their bounds
+            // centre.
+            private void LoadSkylineKit()
+            {
+                const float Slack = 1e-3f;
+                skylineKit.Clear();
+                foreach (string kind in SkylineBays)
+                    foreach (string slot in new[] { "Trim", "Glass" })
+                    {
+                        string name = kind + "_" + slot;
+                        Mesh mesh = KitPiece(SkylineKitName, name);
+                        float reach = kind == "SkylineFin" ? 0.4f : 0.2f;
+                        Bounds b = mesh.bounds;
+                        if (b.min.z < -0.01f || b.max.z > reach || b.min.x < -CityTowerAssembly.BayWidth * 0.5f - Slack || b.max.x > CityTowerAssembly.BayWidth * 0.5f + Slack
+                            || b.min.y < -CityTowerAssembly.UpperStorey * 0.5f - Slack || b.max.y > CityTowerAssembly.UpperStorey * 0.5f + Slack)
+                            throw new InvalidOperationException($"Kit mesh {name} in {SkylineKitName} has bounds {b}, outside its {CityTowerAssembly.BayWidth} x {CityTowerAssembly.UpperStorey} m bay (at most {reach} m out) from an origin on the wall's face; export it with the bay's pivot.");
+                        skylineKit[name] = mesh;
+                    }
+                foreach (string name in new[] { "SkylineSpire", "RoofSignLeg" }) skylineKit[name] = KitMesh(SkylineKitName, name);
+            }
+
+            // A plaster tower seen from all four sides (docs/ART_REQUEST_PROPS.md K10, user 2026-11-20): a dark podium of
+            // shops, then on every face whole kit bays of one kind of window for the whole tower (curtain wall, ribbon
+            // windows or fins) on 3.2 m floors from 4.8 m up, a cornice, and over 50 m the top three floors set back a
+            // bay. On the roof a railing round the edge and a spire (over 55 m, and the two big towers) or a water tank, a
+            // sign on three legs or three plant boxes. The podium, the tower's body and the sign's board stay boxes.
             private void Tower(Transform parent, Vector3 position, float width, float height, int index)
             {
                 if (!corridor.Clear(position, width * 0.75f)) throw new InvalidOperationException("Skyline tower overlaps the reserved track corridor.");
+                int bays = Mathf.RoundToInt((width - SkylineCorner * 2f) / CityTowerAssembly.BayWidth);
+                if (bays < 3 || Mathf.Abs(bays * CityTowerAssembly.BayWidth + SkylineCorner * 2f - width) > 0.01f)
+                    throw new ArgumentException($"A skyline tower is a whole number of {CityTowerAssembly.BayWidth} m bays (at least 3) plus {SkylineCorner} m at either corner wide, not {width} m.", nameof(width));
+                int floors = Mathf.RoundToInt((height - CityTowerAssembly.GroundStorey) / CityTowerAssembly.UpperStorey);
+                bool setback = height > 50f;
+                int lowerFloors = setback ? floors - 3 : floors;
+                if (lowerFloors < 1) throw new ArgumentException($"A skyline tower {height} m high has no floor under its set-back top.", nameof(height));
                 Transform tower = Group("Skyline tower " + index, parent);
                 tower.position = position;
                 Material walls = Pick(index * 73 + 32, cream, pink, apricot, sky, plaster, sage);
                 Box("Podium", tower, new Vector3(0f, 2f, 0f), new Vector3(width + 4f, 4f, width + 4f), ink);
                 Box("Podium canopy", tower, new Vector3(0f, 4.15f, 0f), new Vector3(width + 4.6f, 0.3f, width + 4.6f), Pick(index * 79 + 33, red, signBlue, sage, orange));
-                Box("Tower", tower, new Vector3(0f, height * 0.5f, 0f), new Vector3(width, height, width), walls);
-                for (float y = 6f; y < height - 1.5f; y += 3.2f)
+                string kind = SkylineBays[Mathf.Min(SkylineBays.Length - 1, (int)(Hash(index * 191 + 60) * SkylineBays.Length))];
+                float lowerTop = CityTowerAssembly.GroundStorey + lowerFloors * CityTowerAssembly.UpperStorey;
+                Box("Tower", tower, new Vector3(0f, lowerTop * 0.5f, 0f), new Vector3(width, lowerTop, width), walls);
+                SkylineFacade(tower, kind, bays, width, CityTowerAssembly.GroundStorey, lowerFloors);
+                CityTowerAssembly.TierCornice(towerKit, tower, width, width, lowerTop, plaster);
+                float w = width, top = lowerTop;
+                int topBays = bays;
+                if (setback)
                 {
-                    Box("Window band", tower, new Vector3(0f, y, 0f), new Vector3(width + 0.08f, 1.3f, width * 0.84f), glass);
-                    Box("Window band", tower, new Vector3(0f, y, 0f), new Vector3(width * 0.84f, 1.3f, width + 0.08f), glass);
+                    topBays = bays - 1;
+                    w = width - CityTowerAssembly.BayWidth;
+                    top = lowerTop + 3 * CityTowerAssembly.UpperStorey;
+                    Box("Set-back top", tower, new Vector3(0f, (lowerTop + top) * 0.5f, 0f), new Vector3(w, top - lowerTop, w), walls);
+                    SkylineFacade(tower, kind, topBays, w, lowerTop, 3);
+                    CityTowerAssembly.TierCornice(towerKit, tower, w, w, top, plaster);
                 }
-                Box("Cornice", tower, new Vector3(0f, height + 0.3f, 0f), new Vector3(width + 0.8f, 0.6f, width + 0.8f), plaster);
-                if (index % 2 == 0)
+                // A railing bay over every façade bay, on all four edges of the roof.
+                Mesh rail = towerKit["RoofRail"];
+                for (int face = 0; face < 4; face++)
                 {
-                    Shape("Water tank", tower, new Vector3(width * 0.2f, height + 2f, width * 0.15f), new Vector3(3f, 2.8f, 3f), wood, Cylinder);
-                    for (int leg = 0; leg < 4; leg++)
-                        Box("Tank leg", tower, new Vector3(width * 0.2f + (leg % 2 * 2 - 1) * 1f, height + 0.6f, width * 0.15f + (leg / 2 * 2 - 1) * 1f), new Vector3(0.15f, 1.2f, 0.15f), steel);
+                    Quaternion turn = Quaternion.Euler(0f, face * 90f, 0f);
+                    for (int bay = 0; bay < topBays; bay++)
+                        Piece("Roof railing", tower, turn * new Vector3(SkylineBayX(bay, topBays), top + rail.bounds.extents.y, w * 0.5f - rail.bounds.extents.z), steel, rail)
+                            .transform.localRotation = turn;
                 }
-                else Box("Roof sign", tower, new Vector3(0f, height + 1.6f, -width * 0.3f), new Vector3(width * 0.7f, 2f, 0.2f), Pick(index * 83 + 34, red, yellow, signBlue));
+                if (height > 55f || index >= 22)
+                {
+                    Mesh spire = skylineKit["SkylineSpire"];
+                    Vector3 size = spire.bounds.size * SpireScale;
+                    Shape("Spire", tower, new Vector3(0f, top + size.y * 0.5f, 0f), size, steel, spire);
+                }
+                else
+                {
+                    float r = Hash(index * 197 + 61);
+                    if (r < 0.4f)
+                        Piece("Water tank", tower, new Vector3(w * 0.2f, top + towerKit["WaterTank"].bounds.extents.y, w * 0.15f), wood, towerKit["WaterTank"]);
+                    else if (r < 0.7f)
+                    {
+                        // The board faces -Z; its legs stand behind it, each turned so its upright meets the board's back.
+                        float boardZ = -w * 0.3f;
+                        Box("Roof sign", tower, new Vector3(0f, top + 1.6f, boardZ), new Vector3(w * 0.7f, 2f, 0.2f), Pick(index * 83 + 34, red, yellow, signBlue));
+                        Mesh leg = skylineKit["RoofSignLeg"];
+                        for (int l = -1; l <= 1; l++)
+                            Piece("Roof sign leg", tower, new Vector3(l * w * 0.25f, top + leg.bounds.extents.y, boardZ + 0.1f + leg.bounds.extents.z), steel, leg)
+                                .transform.localRotation = Quaternion.Euler(0f, 180f, 0f);
+                    }
+                    else
+                    {
+                        Mesh unit = towerKit["RoofUnit"];
+                        for (int box = 0; box < 3; box++)
+                            Piece("Roof unit", tower, new Vector3(-w * 0.3f + box * w * 0.3f, top + unit.bounds.extents.y, w * 0.15f), concrete, unit);
+                    }
+                }
                 corridor.Reserve(position, width * 0.75f + 2f);
+            }
+
+            private static float SkylineBayX(int bay, int bays) => (bay - (bays - 1) * 0.5f) * CityTowerAssembly.BayWidth;
+
+            // One kind of skyline bay over floors of a square tower body of width w, from height from, on all four faces:
+            // each face's bays turned out from the centre, 1 cm off the wall so their backs do not flicker against it.
+            private void SkylineFacade(Transform tower, string kind, int bays, float w, float from, int floors)
+            {
+                Mesh trim = skylineKit[kind + "_Trim"], pane = skylineKit[kind + "_Glass"];
+                for (int face = 0; face < 4; face++)
+                {
+                    Quaternion turn = Quaternion.Euler(0f, face * 90f, 0f);
+                    for (int f = 0; f < floors; f++)
+                    {
+                        float at = from + (f + 0.5f) * CityTowerAssembly.UpperStorey;
+                        for (int bay = 0; bay < bays; bay++)
+                        {
+                            Vector3 p = turn * new Vector3(SkylineBayX(bay, bays), at, w * 0.5f + 0.01f);
+                            Piece(kind + " Trim", tower, p, plaster, trim).transform.localRotation = turn;
+                            Piece(kind + " Glass", tower, p, glass, pane).transform.localRotation = turn;
+                        }
+                    }
+                }
             }
 
             private void Landmark(Transform parent, Vector3 position, Quaternion rotation, string title, string subtitle)

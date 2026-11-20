@@ -153,8 +153,8 @@ namespace ProtoHarness.Editor.ChainRush
 
         // A cornice round a tier just under its top, its back on the wall. The front and back pieces run past the sides by
         // the cornice's depth and the side pieces fit between them, so no two pieces share a face. The kit's cornice faces
-        // +Z, so each piece is turned to face out.
-        private static void TierCornice(Kit kit, Transform tower, float w, float d, float top, Material trim)
+        // +Z, so each piece is turned to face out. SKYWAY's skyline towers use it too (docs/ART_REQUEST_PROPS.md K10).
+        public static void TierCornice(Kit kit, Transform tower, float w, float d, float top, Material trim)
         {
             Mesh cornice = kit["TowerCornice"];
             float height = cornice.bounds.size.y, at = top - height * 0.5f, half = CorniceDepth * 0.5f;
