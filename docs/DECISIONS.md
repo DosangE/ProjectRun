@@ -10,6 +10,29 @@
 
 ---
 
+## 2026-11-20 · K8 TownHouseKit FINGER·SKYWAY 반영: 마을집 조립을 공용(`TownHouseAssembly`)으로, 마을마다 재질별 병합, `MergeByMaterial` 한 곳으로 (`feature/k8-finger-skyway-townhouse`)
+
+- **결정 (사용자 2026-11-20)**: §3-2 요청서(대화)의 네 질문 모두 추천안 → "진행하라". ① B3: FINGER 도 PALM·SKYWAY 와 같은 칸, FINGER 다움은 팔레트로(Blender 작업 없음). ② 병합 함수: `ExteriorKit.MergeByMaterial(group, prefix, key)` 하나로 — PALM·SKYWAY·SUMMIT 의 사본 3개를 지우고 FINGER 도 쓴다. ③ 폭·층수는 PALM 규칙(B1 칸에 맞춤): FINGER 7~10.5 m → 3칸 8.1 / 4칸 10.7(9.4 미만이면 3칸), 높이 > 8.5 m 면 3층 10.0 m 아니면 2층 6.8 m, 풀밭 가장자리 뒷줄 14채는 4칸 3층(전 10 m × 9~12 m). SKYWAY 8~13 m → 3·4·5칸(9.4·12 경계), 지금 식 그대로 높이 > 10 이면 3층. ④ FINGER 에 없던 슬롯 재질: Glass = 지금 창 색 `blue`, Metal(`UpperTall` 난간) = 새 팔레트 `M_FingerIron`. SKYWAY 는 Metal = `steel`, Glass = `glass`.
+- **구현**:
+  - `TownHouseAssembly`(새 static class, `Scripts/Editor/ChainRush/`): PALM 의 `LoadTownKit`·`Bay`·`FlowerBox` 와 처마·층 띠·칸·꽃상자 배치를 옮겼다. `Kit.Load()`(칸 원점 검사 그대로), `Gable`·`Chimney`(비탈 중간 + 0.35 m)·`Facade(kit, house, bays, depth, storeys, index, Colours)`, `Width(bays)`·`Height(storeys)`. 해시 시드는 PALM 값 그대로라 세 트랙이 같은 규칙으로 문·1층 종류·위층 종류·층 띠를 고른다. 몸통·지붕 판·밑단·차양·발코니와 색 고르기는 트랙 빌더에 남았다.
+  - PALM `TownHouse`: 몸통·지붕 뒤에 `Gable`·`Chimney`·`Facade` 를 부른다 — 자식 생성 순서를 그대로 지켜 병합 결과가 같다(아래 검증).
+  - FINGER `House`·SKYWAY `TownHouse`: 계단 상자 박공 → 킷 `GableEnd`, 상자 굴뚝 → 킷 `Chimney`(한쪽 고정, 전과 같은 해시), 창·덧문·꽃상자·문·가게 창 상자 → `Facade`. 꽃상자는 PALM 규칙(덧문 창 칸에만)이 되어 FINGER 의 꽃상자 해시는 없어졌다. 발코니는 1층 위(`GroundStorey + 0.2`, 전에는 높이 절반·`height / storeys`). 마을 그룹(`03 Village houses and shops`·`02 Village and shops`)을 `Village` 키로 병합하고 침범 검사가 그 그룹을 정점 단위로 본다. 병합으로 사라지는 채 수를 빌드 로그로 남긴다.
+  - `ExteriorKit.MergeByMaterial`: 세 사본과 같은 코드(이름 접두사만 인자) — STADIUM 주석의 참조도 고쳤다.
+- **측정** (프리팹 `MeshFilter.sharedMesh.vertexCount` 합, 마을 그룹은 이름에 `Village`):
+  - FINGER 렌더러 2,769 → **1,869**(마을 918 → 15), 정점 206,778 → **495,455 (+140%)**(마을 22,032 → 309,636). 채 49 → **48**(길가 34 + 풀밭 가장자리 14).
+  - SKYWAY 렌더러 4,605 → **3,357**(마을 1,261 → 18), 정점 400,880 → **710,366 (+77%)**(마을 30,264 → 341,430). 채 50 → **51**. 외곽 병합 메시 3개(`SkywayExterior_Outer_M_Skyway{Glass,Plaster,Sky}`)도 바뀌었다 — 외곽 건물이 마을이 예약한 자리를 피해 놓이고(`Outskirts` 의 `corridor.Available`), 마을집 폭이 칸에 맞춰 바뀌었다.
+- **검증 (에디터 6000.3.19f1, Unity MCP)**: 컴파일 `*** Tundra build success (1.98 seconds), 2 items updated, 1618 evaluated`, 채 수 로그를 더한 뒤 `*** Tundra build success (1.77 seconds), 2 items updated, 1618 evaluated`(`AssetDatabase.Refresh` 는 컴파일을 걸지 않아 `ImportAsset(ForceUpdate)` 로). 재빌드:
+  - PALM: `Palm Coast buildings: 40 city towers along the road and 35 behind (CityTowerKit), 36 town houses (TownHouseKit).`, `Palm Coast Exterior clearance: nearest renderer bounds 0.97 m outside a road edge (...); 0 parts under the slab; 532770 vertices checked one by one.`, `PalmCoastExterior: 2533 renderers; ...`. 병합 메시 `.asset` 은 git diff 없음. 프리팹은 fileID 만 새로 발급돼 diff 가 났고, fileID 를 지우고 문서를 비교하면 10,716 → 10,716 개가 모두 같았다(scratchpad 비교 스크립트) — HEAD 로 되돌렸다.
+  - SUMMIT: `Summit Drop validation PASS: main road and shortcut clear; 15 pole shafts clear; 38 renderers; 1039404 vertices; decoration physics=0.` 프리팹·병합 메시 git diff 없음.
+  - FINGER: `Finger Lanes village: 34 houses along the road and 14 on the green's edges (TownHouseKit).`, `Finger Lanes Exterior clearance: nearest renderer bounds 0.83 m outside a road edge (at least 0.7 m below 9 m over the road); 0 parts under the slab; 309636 vertices checked one by one.`, `FingerLanesExterior: 1869 renderers; physics=0; runtime scripts=0; road corridor clear.`
+  - SKYWAY: `Skyway village: 51 houses (TownHouseKit).`, `Skyway Exterior clearance: nearest renderer bounds 0.85 m outside a road edge (at least 0.7 m below 9 m over the road); 200 parts under the slab; 532126 vertices checked one by one.`, `SkywayExterior: 3357 renderers; physics=0; runtime scripts=0; road corridor clear.`
+  - EditMode (`!Enemy`) `testcasecount="435" result="Passed" passed="435" failed="0" skipped="0"` (06:03:02Z~06:03:11Z, `test-runs.ps1 -Record`). Console 에러 7건은 모두 그 실행의 `GameSettingsTests`(4)·`TrackLookTests`(3)가 일부러 남기는 로그. PlayMode 는 돌리지 않았다 — 장식만 바꾼 변경(VERIFICATION §4-4, K8·K9 와 같은 판단). 영향 평가: `ExteriorKit`·`TownHouseAssembly`(에디터 전용) → 장식 빌더 4개 → 그 프리팹·병합 메시 → 각 침범 검사·EditMode. 장식 프리팹을 읽는 테스트는 없다(2026-11-11 K1 항목과 같은 근거). 재빌드가 `TrackLook_{FingerLanes,Skyway,SummitDrop}.asset` 에 2026-11-20 조명 필드를 기본값(`ownLight: 0`)으로 직렬화했다 — 동작 같음.
+  - 전후 렌더(같은 카메라 6곳, 서킷 씬의 해·앰비언트, 안개 끔, scratchpad 에만): 칸 창·덧문·처마·층 띠·꽃상자·줄리엣 난간이 들어가고 박공이 매끈해졌다. SKYWAY 그늘면이 어두운 것은 전후가 같다(공용 조명, 2026-11-20 "PALM 트랙 조명과 타워 색" 과 같은 원인).
+- **사용자 플레이 확인**: 플레이 확인을 부탁한 보고에 "확인했다. 좋은데 skyway 마을구간 말고 고가 구간 빌딩들도 적용시켜야하지않을까" → 고가 옆 아파트는 다음 작업(K9 킷)으로.
+- **확인 못 한 것**: 프레임(정점이 FINGER +140%·SKYWAY +77% — K9 방법은 Unity 창을 앞에 두어야 하는데 이번 측정 때 `isApplicationActive=False`), 통로 검사 결과가 바뀐 채(FINGER −1·SKYWAY +1)가 어디인지.
+- **두는 것**: FINGER·SKYWAY 트랙 조명(렌더의 어두운 그늘면 — 필요하면 그 빌더가 `ExteriorAssets.Lighting` 을 넘긴다), 차양·발코니 킷화, `select-tests.ps1` 표.
+- **검토했으나 버린 대안**: 트랙마다 조립 코드 사본(같은 규칙 세 벌), FINGER 에 `MergeByMaterial` 네 번째 사본, FINGER 전용 칸(Blender 작업이 더 들고 같은 마을 디자인이 갈라진다), FINGER 에서 `UpperTall` 빼기(종류가 줄어든다).
+
 ## 2026-11-20 · PALM 복귀 지점이 바다 위: 복귀 S 의 틈 검사를 루프에도, 순서는 틈 → 패드 (`fix/palm-respawn-over-sea`)
 
 - **보고 (사용자 2026-11-19)**: "palm coast에서 부스트존으로 점프구간 넘어간 뒤 역주행으로 낙하가능한 구간으로 떨어지면 재시작 지점이 공중이라 진행 불가하다."

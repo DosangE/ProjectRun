@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.Rendering;
@@ -94,6 +95,40 @@ namespace ProtoHarness.Editor.ChainRush
             renderer.receiveShadows = false;
             GameObjectUtility.SetStaticEditorFlags(shape, StaticEditorFlags.BatchingStatic);
             return shape;
+        }
+
+        // The group's parts become one mesh per material, named <prefix>_<key>_<material> (saved as
+        // Art/Models/<that name>.asset by ExteriorAssets.SavePrefab, a rebuild writing over the same assets and keeping
+        // their GUIDs): thousands of plain parts in a few renderers (user 2026-11-02, "메시로 합치고"). The parts'
+        // transforms are baked in; the group keeps its place. A group merged this way spreads round the road, so the
+        // builder checks it vertex by vertex (RoadCorridor.ValidateClearance).
+        public static void MergeByMaterial(Transform group, string prefix, string key)
+        {
+            if (group == null) throw new ArgumentNullException(nameof(group));
+            if (string.IsNullOrEmpty(prefix)) throw new ArgumentException("A mesh name prefix is required.", nameof(prefix));
+            if (string.IsNullOrEmpty(key)) throw new ArgumentException("A merge key is required.", nameof(key));
+            var byMaterial = new Dictionary<Material, List<CombineInstance>>();
+            foreach (MeshFilter filter in group.GetComponentsInChildren<MeshFilter>(true))
+            {
+                Material material = filter.GetComponent<MeshRenderer>().sharedMaterial;
+                if (!byMaterial.TryGetValue(material, out List<CombineInstance> parts)) byMaterial[material] = parts = new List<CombineInstance>();
+                parts.Add(new CombineInstance { mesh = filter.sharedMesh, transform = group.worldToLocalMatrix * filter.transform.localToWorldMatrix });
+            }
+            for (int i = group.childCount - 1; i >= 0; i--) UnityEngine.Object.DestroyImmediate(group.GetChild(i).gameObject);
+            foreach (KeyValuePair<Material, List<CombineInstance>> pair in byMaterial)
+            {
+                var mesh = new Mesh { name = $"{prefix}_{key}_{pair.Key.name}", indexFormat = IndexFormat.UInt32 };
+                mesh.CombineMeshes(pair.Value.ToArray(), true, true);
+                mesh.RecalculateBounds();
+                var part = new GameObject(key + " " + pair.Key.name);
+                part.transform.SetParent(group, false);
+                part.AddComponent<MeshFilter>().sharedMesh = mesh;
+                MeshRenderer renderer = part.AddComponent<MeshRenderer>();
+                renderer.sharedMaterial = pair.Key;
+                renderer.shadowCastingMode = ShadowCastingMode.Off;
+                renderer.receiveShadows = false;
+                GameObjectUtility.SetStaticEditorFlags(part, StaticEditorFlags.BatchingStatic);
+            }
         }
 
         // Facing forward, level.

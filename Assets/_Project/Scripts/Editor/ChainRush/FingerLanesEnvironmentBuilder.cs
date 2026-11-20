@@ -87,6 +87,10 @@ namespace ProtoHarness.Editor.ChainRush
             // A house's front stands this far off the road's edge, behind the band.
             private const float HouseFront = 4.6f;
             private const double GateS = 2d;
+            private const string VillageGroup = "03 Village houses and shops";
+            // The town house kit (docs/ART_REQUEST_PROPS.md K8, TownHouseAssembly), loaded when the build starts; the
+            // village is merged into one mesh per material, FingerLanesExterior_Village_<material>.asset.
+            private TownHouseAssembly.Kit townKit;
 
             private readonly TrackDefinition definition;
             private readonly Centerline line;
@@ -113,6 +117,8 @@ namespace ProtoHarness.Editor.ChainRush
             private readonly Material lampGreen = Palette("LampGreen", new Color(0.16f, 0.38f, 0.28f));
             private readonly Material violet = Palette("Violet", new Color(0.45f, 0.24f, 0.60f));
             private readonly Material chevron = Palette("Chevron", new Color(0.98f, 0.79f, 0.10f));
+            // The town house kit's railings (UpperTall): wrought iron.
+            private readonly Material iron = Palette("Iron", new Color(0.20f, 0.21f, 0.22f));
             private readonly Material white = Require("M_StadiumSportsWhite.mat");
             private readonly Material dark = Require("M_ArtStadiumInk.mat");
             private readonly Material gold = Require("M_ArtStadiumAmber.mat");
@@ -134,7 +140,13 @@ namespace ProtoHarness.Editor.ChainRush
 
             // Everything above the land is checked, the landscape's hills too (DECISIONS 2026-10-27 후속 1); the tower's
             // overpass and the start gate's beam are above the camera and the runner.
-            internal void ValidateClearance(GameObject root) => corridor.ValidateClearance(root, Ground + 0.09f);
+            internal void ValidateClearance(GameObject root)
+            {
+                Transform village = root.transform.Find(VillageGroup);
+                if (village == null) throw new InvalidOperationException("Finger Lanes village group is missing: " + VillageGroup);
+                // The merged village spreads round the road, so its bounds always hold it: vertex by vertex.
+                corridor.ValidateClearance(root, Ground + 0.09f, null, village);
+            }
 
             internal GameObject Build(Scene scene)
             {
@@ -143,6 +155,7 @@ namespace ProtoHarness.Editor.ChainRush
                 treePlanter = KitMesh("TreeKit", "Planter"); treeTrunk = KitMesh("TreeKit", "TreeTrunk"); treeCrown = KitMesh("TreeKit", "RoundCrown");
                 chevronPanel = KitMesh("RoadsideKit", "ChevronPanel"); chevronArrow = KitMesh("RoadsideKit", "ChevronArrow");
                 boardFrame = KitMesh("RoadsideKit", "BoardFrame"); boardFace = KitMesh("RoadsideKit", "BoardFace"); boardCap = KitMesh("RoadsideKit", "BoardCap");
+                townKit = TownHouseAssembly.Kit.Load();
                 Landscape(Group("01 Landscape below road", root.transform));
                 Landmarks(Group("02 Clock tower and stone bridge", root.transform));
                 StartGate(Group("06 Start gate", root.transform));
@@ -152,7 +165,9 @@ namespace ProtoHarness.Editor.ChainRush
                 Billboards(Group("09 Advertising boards", root.transform));
                 ShortcutFlags(Group("10 Shortcut flags", root.transform));
                 Windmills(Group("11 Windmills", root.transform));
-                Village(Group("03 Village houses and shops", root.transform));
+                Transform village = Group(VillageGroup, root.transform);
+                Village(village);
+                MergeByMaterial(village, "FingerLanesExterior", "Village");
                 Gardens(Group("04 Pocket gardens", root.transform));
                 return root;
             }
@@ -571,7 +586,7 @@ namespace ProtoHarness.Editor.ChainRush
             // bounds toward the road (first build 2026-11-02: margins 0.43-0.67 m), so the corners have boards and trees.
             private void Village(Transform parent)
             {
-                int index = 0;
+                int index = 0, front = 0, behind = 0;
                 for (double s = 9d; s < definition.LapLength; s += 18d)
                 {
                     TrackFrame frame = line.FrameAt(s);
@@ -580,14 +595,18 @@ namespace ProtoHarness.Editor.ChainRush
                     {
                         index++;
                         if (!straight || Hash(index * 5 + 106) < 0.25f) continue;
-                        float width = 7f + Hash(index * 3 + 107) * 3.5f;
+                        // 7 .. 10.5 m wide in whole kit bays, the nearest of 3 or 4 (8.1, 10.7 m), and over 8.5 m high three
+                        // storeys (10.0 m), else two (6.8 m) (docs/ART_REQUEST_PROPS.md K8 B1, user 2026-11-20).
+                        int bays = 7f + Hash(index * 3 + 107) * 3.5f < 9.4f ? 3 : 4;
+                        float width = TownHouseAssembly.Width(bays);
                         float depth = 6.5f + Hash(index * 7 + 108) * 2f;
                         float radius = new Vector2(width, depth).magnitude * 0.5f;
                         Vector3 position = frame.Position + frame.Right * side * (definition.HalfWidthAt(s) + HouseFront + depth * 0.5f);
                         position.y = Ground;
                         if (!corridor.Available(position, radius)) continue;
-                        House(parent, position, Flat(-frame.Right * side), width, depth, 6.5f + Hash(index * 11 + 109) * 3.5f, index);
+                        House(parent, position, Flat(-frame.Right * side), bays, depth, 6.5f + Hash(index * 11 + 109) * 3.5f > 8.5f ? 3 : 2, index);
                         corridor.Reserve(position, radius);
+                        front++;
                     }
                 }
                 // A second, quieter row makes the outside read as a village rather than isolated roadside props.
@@ -595,18 +614,27 @@ namespace ProtoHarness.Editor.ChainRush
                 {
                     Vector3 position = new Vector3(-46f + i * 33f, Ground, i % 2 == 0 ? -112f : 121f);
                     if (!corridor.Available(position, 8f)) continue;
-                    House(parent, position, Quaternion.Euler(0f, i % 2 == 0 ? 0f : 180f, 0f), 10f, 8.5f, 9f + i % 3 * 1.5f, index + i);
+                    // 10 m wide and 9 .. 12 m high before: four bays, three storeys.
+                    House(parent, position, Quaternion.Euler(0f, i % 2 == 0 ? 0f : 180f, 0f), 4, 8.5f, 3, index + i);
                     corridor.Reserve(position, 8f);
+                    behind++;
                 }
+                // The counts the merge hides (the merged village keeps no house groups).
+                Debug.Log($"Finger Lanes village: {front} houses along the road and {behind} on the green's edges ({TownHouseAssembly.KitName}).");
             }
 
-            // SKYWAY's town house in this village's colours: front to local +z, two storeys.
-            private void House(Transform parent, Vector3 position, Quaternion facing, float width, float depth, float height, int index)
+            // SKYWAY's town house in this village's colours, of the town house kit's façade bays (docs/ART_REQUEST_PROPS.md
+            // K8, TownHouseAssembly; user 2026-11-20): front to local +z, two or three storeys, a pitched roof over the kit's
+            // gable, on some a chimney, and a striped awning or a balcony on some.
+            private void House(Transform parent, Vector3 position, Quaternion facing, int bays, float depth, int storeys, int index)
             {
+                float width = TownHouseAssembly.Width(bays);
+                float height = TownHouseAssembly.Height(storeys);
                 Transform house = Group("Village house " + index, parent);
                 house.SetPositionAndRotation(position, facing);
                 Material walls = Pick(index * 3 + 21, cream, apricot, rose, white, blue, cream);
                 Material shutters = Pick(index * 5 + 22, blue, sage, wood, coral);
+                Material trim = walls == white ? cream : white;
                 Box("Stone plinth", house, new Vector3(0f, 0.4f, 0f), new Vector3(width + 0.3f, 0.8f, depth + 0.3f), stone);
                 Box("Plaster walls", house, new Vector3(0f, height * 0.5f, 0f), new Vector3(width, height, depth), walls);
                 float roofKind = Hash(index * 9 + 24);
@@ -619,24 +647,10 @@ namespace ProtoHarness.Editor.ChainRush
                         new Vector3(new Vector2(width * 0.5f, rise).magnitude + 0.5f, 0.3f, depth + 0.7f), roofing);
                     panel.transform.localRotation = Quaternion.Euler(0f, 0f, -side * slope);
                 }
-                for (int tier = 0; tier < 3; tier++)
-                    Box("Gable", house, new Vector3(0f, height + rise * (tier + 0.5f) / 3f, 0f), new Vector3(width * (1f - (tier + 0.5f) / 3f) * 0.95f, rise / 3f, depth * 0.96f), walls);
-                if (Hash(index * 19 + 25) > 0.5f)
-                    Box("Chimney", house, new Vector3(width * 0.28f, height + rise * 0.9f, depth * 0.2f), new Vector3(0.8f, rise * 1.2f, 0.8f), stone);
-                float front = depth * 0.5f + 0.06f;
-                int columns = width > 8.5f ? 3 : 2;
-                for (int col = 0; col < columns; col++)
-                {
-                    float x = (col - (columns - 1) * 0.5f) * width * 0.3f;
-                    float y = height * 0.5f + 1.2f;
-                    // The open shutters are one board behind the glass, showing either side of it.
-                    Box("Shutters", house, new Vector3(x, y, front), new Vector3(2f, 1.5f, 0.08f), shutters);
-                    Box("Window", house, new Vector3(x, y, front + 0.04f), new Vector3(1.1f, 1.4f, 0.08f), blue);
-                    if (Hash(index * 37 + col) > 0.45f)
-                        Box("Flower box", house, new Vector3(x, y - 0.85f, front + 0.2f), new Vector3(1.3f, 0.3f, 0.36f), Pick(index * 41 + col, tulip, marigold, lavender, tulip));
-                }
-                Box("Door", house, new Vector3(-width * 0.22f, 1.3f, front), new Vector3(1.3f, 2.4f, 0.12f), Pick(index * 43 + 26, wood, blue, coral));
-                Box("Shop window", house, new Vector3(width * 0.18f, 1.6f, front), new Vector3(2.4f, 1.5f, 0.12f), blue);
+                TownHouseAssembly.Gable(townKit, house, width, depth, height, rise, walls);
+                if (Hash(index * 19 + 25) > 0.5f) TownHouseAssembly.Chimney(townKit, house, width, depth, height, rise, 1f, stone);
+                TownHouseAssembly.Facade(townKit, house, bays, depth, storeys, index,
+                    new TownHouseAssembly.Colours(trim, blue, shutters, Pick(index * 43 + 26, wood, blue, coral), iron, wood, tulip, marigold, lavender, tulip));
                 float extra = Hash(index * 47 + 27);
                 if (extra < 0.4f)
                 {
@@ -646,8 +660,9 @@ namespace ProtoHarness.Editor.ChainRush
                 }
                 else if (extra < 0.7f)
                 {
-                    Box("Balcony slab", house, new Vector3(0f, height * 0.5f + 0.2f, front + 0.55f), new Vector3(width * 0.5f, 0.2f, 1.1f), stone);
-                    Box("Balcony rail", house, new Vector3(0f, height * 0.5f + 0.75f, front + 1.05f), new Vector3(width * 0.5f, 0.9f, 0.08f), white);
+                    float front = depth * 0.5f + 0.06f;
+                    Box("Balcony slab", house, new Vector3(0f, TownHouseAssembly.GroundStorey + 0.2f, front + 0.55f), new Vector3(width * 0.5f, 0.2f, 1.1f), stone);
+                    Box("Balcony rail", house, new Vector3(0f, TownHouseAssembly.GroundStorey + 0.75f, front + 1.05f), new Vector3(width * 0.5f, 0.9f, 0.08f), white);
                 }
             }
 

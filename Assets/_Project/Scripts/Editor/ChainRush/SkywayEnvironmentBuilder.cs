@@ -148,6 +148,11 @@ namespace ProtoHarness.Editor.ChainRush
             private const string DeckGroup = "09 Highway continuation";
             private const string LandGroup = "01 Landscape";
             private const string OuterGroup = "15 Outer city";
+            private const string VillageGroup = "02 Village and shops";
+            // The merged groups' meshes: SkywayExterior_<key>_<material>.asset.
+            private const string MeshPrefix = "SkywayExterior";
+            // The town house kit (docs/ART_REQUEST_PROPS.md K8, TownHouseAssembly), loaded when the build starts.
+            private TownHouseAssembly.Kit townKit;
             private readonly double length;
             private readonly RoadCorridor corridor;
             private readonly RoadCorridor near;
@@ -263,10 +268,10 @@ namespace ProtoHarness.Editor.ChainRush
                 if (piers == null) throw new InvalidOperationException("Skyway pier group is missing: " + PierGroup);
                 Transform deck = root.transform.Find(DeckGroup);
                 if (deck == null) throw new InvalidOperationException("Skyway continuation group is missing: " + DeckGroup);
-                Transform land = root.transform.Find(LandGroup), outer = root.transform.Find(OuterGroup);
-                if (land == null || outer == null) throw new InvalidOperationException("Skyway land or outer city group is missing.");
-                // The merged land and outer city spread round the road, so their bounds always hold it: vertex by vertex.
-                corridor.ValidateClearance(root, Ground + 0.01f, piers, new[] { deck, land, outer });
+                Transform land = root.transform.Find(LandGroup), outer = root.transform.Find(OuterGroup), village = root.transform.Find(VillageGroup);
+                if (land == null || outer == null || village == null) throw new InvalidOperationException("Skyway land, outer city or village group is missing.");
+                // The merged land, outer city and village spread round the road, so their bounds always hold it: vertex by vertex.
+                corridor.ValidateClearance(root, Ground + 0.01f, piers, new[] { deck, land, outer, village });
             }
 
             internal GameObject Build(Scene scene)
@@ -276,6 +281,7 @@ namespace ProtoHarness.Editor.ChainRush
                 treePlanter = KitMesh("TreeKit", "Planter"); treeTrunk = KitMesh("TreeKit", "TreeTrunk"); treeCrown = KitMesh("TreeKit", "RoundCrown");
                 chevronPanel = KitMesh("RoadsideKit", "ChevronPanel"); chevronArrow = KitMesh("RoadsideKit", "ChevronArrow");
                 boardFrame = KitMesh("RoadsideKit", "BoardFrame"); boardFace = KitMesh("RoadsideKit", "BoardFace"); boardCap = KitMesh("RoadsideKit", "BoardCap");
+                townKit = TownHouseAssembly.Kit.Load();
                 Transform landscape = Group(LandGroup, root.transform);
                 Land(landscape);
 
@@ -312,8 +318,8 @@ namespace ProtoHarness.Editor.ChainRush
                 Lamps(Group("05 Road lamps and banners", root.transform));
                 HighwaySide(Group("14 Flats and billboards by the viaduct", root.transform));
 
-                Transform village = Group("02 Village and shops", root.transform);
-                int index = 0;
+                Transform village = Group(VillageGroup, root.transform);
+                int index = 0, houses = 0;
                 for (float s = 0f; s < length; s += 26f)
                 {
                     TrackFrame f = line.FrameAt(s);
@@ -322,17 +328,25 @@ namespace ProtoHarness.Editor.ChainRush
                         {
                             index++;
                             if (row == 1 && Hash(index * 5 + 1) < 0.4f) continue;
-                            float width = 8f + Hash(index * 3 + 2) * 5f;
+                            // 8 .. 13 m wide in whole kit bays: the nearest of 3, 4 or 5 (8.1, 10.7, 13.3 m)
+                            // (docs/ART_REQUEST_PROPS.md K8 B1, user 2026-11-20).
+                            float wanted = 8f + Hash(index * 3 + 2) * 5f;
+                            int bays = wanted < 9.4f ? 3 : wanted < 12f ? 4 : 5;
+                            float width = TownHouseAssembly.Width(bays);
                             float depth = 8f + Hash(index * 7 + 3) * 3f;
                             float radius = new Vector2(width + 1.6f, depth + 2.4f).magnitude * 0.5f;
                             float out1 = Mathf.Abs(Edge(s, side)) + KeepOut + radius + 2f + row * (radius * 2f + 5f);
                             Vector3 p = f.Position + f.Right * side * out1;
                             p.y = Ground;
                             if (!corridor.Available(p, radius)) continue;
-                            TownHouse(village, p, Flat(-f.Right * side), width, depth, 6.5f + Hash(index * 11 + 4) * 6f, index);
+                            // Over 10 m three storeys (10.0 m), as before, else two (6.8 m).
+                            TownHouse(village, p, Flat(-f.Right * side), bays, depth, 6.5f + Hash(index * 11 + 4) * 6f > 10f ? 3 : 2, index);
                             corridor.Reserve(p, radius);
+                            houses++;
                         }
                 }
+                // The count the merge hides (the merged village keeps no house groups).
+                Debug.Log($"Skyway village: {houses} houses ({TownHouseAssembly.KitName}).");
 
                 Transform gardens = Group("03 Gardens and avenue", root.transform);
                 index = 0;
@@ -384,40 +398,10 @@ namespace ProtoHarness.Editor.ChainRush
                     Box("Pier band", pier, new Vector3(0f, 2.2f, 0f), new Vector3(2.8f, 0.5f, 3f), yellow);
                     Box("Hammerhead cap", pier, new Vector3(0f, height - 0.45f, 0f), new Vector3(half * 2f - 0.8f, 0.9f, 3.4f), steel);
                 }
-                MergeByMaterial(landscape, "Land");
-                MergeByMaterial(outerCity, "Outer");
+                MergeByMaterial(landscape, MeshPrefix, "Land");
+                MergeByMaterial(outerCity, MeshPrefix, "Outer");
+                MergeByMaterial(village, MeshPrefix, "Village");
                 return root;
-            }
-
-            // The land's and the outer city's thousands of plain parts become one mesh per material, saved as
-            // Art/Models/SkywayExterior_<key>_<material>.asset (user 2026-11-02, "메시로 합치고": 10661 renderers, twice
-            // PALM COAST's). The parts' transforms are baked in; the group keeps its place. A rebuild writes the same
-            // assets over, keeping their GUIDs, once the checks pass (ExteriorAssets.SavePrefab).
-            private static void MergeByMaterial(Transform group, string key)
-            {
-                var byMaterial = new Dictionary<Material, List<CombineInstance>>();
-                Matrix4x4 toGroup = group.worldToLocalMatrix;
-                foreach (MeshFilter filter in group.GetComponentsInChildren<MeshFilter>(true))
-                {
-                    Material material = filter.GetComponent<MeshRenderer>().sharedMaterial;
-                    if (!byMaterial.TryGetValue(material, out List<CombineInstance> parts)) byMaterial[material] = parts = new List<CombineInstance>();
-                    parts.Add(new CombineInstance { mesh = filter.sharedMesh, transform = toGroup * filter.transform.localToWorldMatrix });
-                }
-                for (int i = group.childCount - 1; i >= 0; i--) UnityEngine.Object.DestroyImmediate(group.GetChild(i).gameObject);
-                foreach (KeyValuePair<Material, List<CombineInstance>> pair in byMaterial)
-                {
-                    var mesh = new UnityEngine.Mesh { name = $"SkywayExterior_{key}_{pair.Key.name}", indexFormat = UnityEngine.Rendering.IndexFormat.UInt32 };
-                    mesh.CombineMeshes(pair.Value.ToArray(), true, true);
-                    mesh.RecalculateBounds();
-                    var merged = new GameObject(key + " " + pair.Key.name);
-                    merged.transform.SetParent(group, false);
-                    merged.AddComponent<MeshFilter>().sharedMesh = mesh;
-                    MeshRenderer renderer = merged.AddComponent<MeshRenderer>();
-                    renderer.sharedMaterial = pair.Key;
-                    renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-                    renderer.receiveShadows = false;
-                    GameObjectUtility.SetStaticEditorFlags(merged, StaticEditorFlags.BatchingStatic);
-                }
             }
 
             // Pale paving over the whole district with lawn blocks on a 40 m grid, and under the high road a town avenue:
@@ -905,14 +889,18 @@ namespace ProtoHarness.Editor.ChainRush
                 near.Reserve(new Vector3(board.position.x, Ground, board.position.z), width * 0.5f + 1f);
             }
 
-            // A two- or three-storey plaster house: a tiled or slate pitched roof or a flat one with a parapet, shuttered
-            // windows with flower boxes, a door, and a striped awning or a balcony on some (as PALM COAST's town houses).
-            private void TownHouse(Transform parent, Vector3 position, Quaternion facing, float width, float depth, float height, int index)
+            // A two- or three-storey plaster house of the town house kit's façade bays (docs/ART_REQUEST_PROPS.md K8,
+            // TownHouseAssembly; user 2026-11-20): a tiled or slate pitched roof over the kit's gable, on some a chimney, or
+            // a flat one with a parapet, and a striped awning or a balcony on some (as PALM COAST's town houses).
+            private void TownHouse(Transform parent, Vector3 position, Quaternion facing, int bays, float depth, int storeys, int index)
             {
+                float width = TownHouseAssembly.Width(bays);
+                float height = TownHouseAssembly.Height(storeys);
                 Transform house = Group("Village building " + index, parent);
                 house.SetPositionAndRotation(position, facing);
                 Material walls = Pick(index * 3 + 21, cream, pink, apricot, sky, plaster, sage);
                 Material shutters = Pick(index * 5 + 22, signBlue, sage, plaster, tile, wood);
+                Material trim = walls == plaster ? cream : plaster;
                 Box("Plaster walls", house, new Vector3(0f, height * 0.5f, 0f), new Vector3(width, height, depth), walls);
                 Box("Plinth", house, new Vector3(0f, 0.4f, 0f), new Vector3(width + 0.2f, 0.8f, depth + 0.2f), concrete);
                 if (Hash(index * 7 + 23) > 0.3f)
@@ -926,30 +914,16 @@ namespace ProtoHarness.Editor.ChainRush
                             new Vector3(new Vector2(width * 0.5f, rise).magnitude + 0.5f, 0.3f, depth + 0.7f), roofing);
                         panel.transform.localRotation = Quaternion.Euler(0f, 0f, -side * slope);
                     }
-                    for (int tier = 0; tier < 3; tier++)
-                        Box("Gable", house, new Vector3(0f, height + rise * (tier + 0.5f) / 3f, 0f), new Vector3(width * (1f - (tier + 0.5f) / 3f) * 0.95f, rise / 3f, depth * 0.96f), walls);
-                    if (Hash(index * 19 + 25) > 0.5f)
-                        Box("Chimney", house, new Vector3(width * 0.28f, height + rise * 0.9f, depth * 0.2f), new Vector3(0.8f, rise * 1.2f, 0.8f), tile);
+                    TownHouseAssembly.Gable(townKit, house, width, depth, height, rise, walls);
+                    if (Hash(index * 19 + 25) > 0.5f) TownHouseAssembly.Chimney(townKit, house, width, depth, height, rise, 1f, tile);
                 }
                 else
                 {
                     Box("Flat roof", house, new Vector3(0f, height + 0.2f, 0f), new Vector3(width + 0.3f, 0.4f, depth + 0.3f), concrete);
                     Box("Parapet", house, new Vector3(0f, height + 0.7f, depth * 0.5f), new Vector3(width + 0.3f, 0.6f, 0.25f), walls);
                 }
-                int storeys = height > 10f ? 3 : 2;
-                float front = depth * 0.5f + 0.06f;
-                for (int floor = 1; floor < storeys; floor++)
-                    for (int col = -1; col <= 1; col++)
-                    {
-                        float y = floor * height / storeys + 1.1f;
-                        Box("Window", house, new Vector3(col * width * 0.3f, y, front), new Vector3(1.2f, 1.5f, 0.12f), glass);
-                        for (int side = -1; side <= 1; side += 2)
-                            Box("Shutter", house, new Vector3(col * width * 0.3f + side * 0.85f, y, front + 0.04f), new Vector3(0.42f, 1.6f, 0.08f), shutters);
-                        if (Hash(index * 37 + col + floor * 3) > 0.5f)
-                            Box("Flower box", house, new Vector3(col * width * 0.3f, y - 0.9f, front + 0.22f), new Vector3(1.3f, 0.3f, 0.36f), Pick(index * 41 + col, red, pink, yellow, leaf));
-                    }
-                Box("Door", house, new Vector3(-width * 0.22f, 1.3f, front), new Vector3(1.3f, 2.4f, 0.12f), Pick(index * 43 + 26, wood, signBlue, red));
-                Box("Shop window", house, new Vector3(width * 0.18f, 1.6f, front), new Vector3(2.4f, 1.5f, 0.12f), glass);
+                TownHouseAssembly.Facade(townKit, house, bays, depth, storeys, index,
+                    new TownHouseAssembly.Colours(trim, glass, shutters, Pick(index * 43 + 26, wood, signBlue, red), steel, wood, red, pink, yellow, leaf));
                 float extra = Hash(index * 47 + 27);
                 if (extra < 0.45f)
                 {
@@ -959,8 +933,9 @@ namespace ProtoHarness.Editor.ChainRush
                 }
                 else if (extra < 0.75f)
                 {
-                    Box("Balcony slab", house, new Vector3(0f, height / storeys + 0.2f, front + 0.55f), new Vector3(width * 0.5f, 0.2f, 1.1f), concrete);
-                    Box("Balcony rail", house, new Vector3(0f, height / storeys + 0.75f, front + 1.05f), new Vector3(width * 0.5f, 0.9f, 0.08f), plaster);
+                    float front = depth * 0.5f + 0.06f;
+                    Box("Balcony slab", house, new Vector3(0f, TownHouseAssembly.GroundStorey + 0.2f, front + 0.55f), new Vector3(width * 0.5f, 0.2f, 1.1f), concrete);
+                    Box("Balcony rail", house, new Vector3(0f, TownHouseAssembly.GroundStorey + 0.75f, front + 1.05f), new Vector3(width * 0.5f, 0.9f, 0.08f), plaster);
                 }
             }
 
