@@ -113,6 +113,29 @@ namespace ProtoHarness.Tests.EditMode
             Assert.That(look.TryValidate(out string error), Is.True, error);
         }
 
+        [Test]
+        public void TryValidate_OwnLightWithoutIntensity_IsRefused()
+        {
+            LogAssert.Expect(LogType.Error, new System.Text.RegularExpressions.Regex("its own light needs a sun brighter than 0"));
+            TrackLook look = Look(3.6f, 0f, false, false);
+            var data = new SerializedObject(look);
+            data.FindProperty("ownLight").boolValue = true;
+            data.FindProperty("sunIntensity").floatValue = 0f;
+            data.ApplyModifiedPropertiesWithoutUndo();
+            Assert.That(look.TryValidate(out string error), Is.False);
+            StringAssert.Contains("its own light needs a sun brighter than 0", error);
+        }
+
+        [Test]
+        public void TryValidate_NoOwnLight_DoesNotCheckTheSun()
+        {
+            TrackLook look = Look(3.6f, 0f, false, false);
+            var data = new SerializedObject(look);
+            data.FindProperty("sunIntensity").floatValue = 0f;
+            data.ApplyModifiedPropertiesWithoutUndo();
+            Assert.That(look.TryValidate(out string error), Is.True, error);
+        }
+
         private TrackLook Look(float laneWidth, float centreFromHalfWidth, bool doubleCentre, bool solid)
         {
             Shader shader = Shader.Find("Universal Render Pipeline/Lit");

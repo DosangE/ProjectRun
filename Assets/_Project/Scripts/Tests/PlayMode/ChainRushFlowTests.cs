@@ -1650,6 +1650,87 @@ namespace ProtoHarness.Tests.PlayMode
 #endif
         }
 
+        // A track look's own light (user 2026-11-19, PALM's colours under the scene's cold light): the race scene's sun
+        // takes the look's colour and intensity, its direction kept, and the ambient the look's three colours.
+        [UnityTest]
+        public IEnumerator Race_WithATrackLookLight_LightsTheRaceWithIt()
+        {
+            Quaternion sceneSunTurn = default;
+            yield return RaceWithLookLight(true, sun =>
+            {
+                Assert.That(sun.color, Is.EqualTo(LookSun), "The sun is the look's colour.");
+                Assert.That(sun.intensity, Is.EqualTo(1.3f), "The sun is the look's intensity.");
+                Assert.That(RenderSettings.ambientMode, Is.EqualTo(UnityEngine.Rendering.AmbientMode.Trilight));
+                Assert.That(RenderSettings.ambientSkyColor, Is.EqualTo(LookAmbientSky));
+                Assert.That(RenderSettings.ambientEquatorColor, Is.EqualTo(LookAmbientEquator));
+                Assert.That(RenderSettings.ambientGroundColor, Is.EqualTo(LookAmbientGround));
+                sceneSunTurn = sun.transform.rotation;
+            });
+            yield return RaceWithLookLight(false, sun =>
+                Assert.That(Quaternion.Angle(sun.transform.rotation, sceneSunTurn), Is.LessThan(0.01f), "The look's light keeps the scene's sun direction."));
+        }
+
+        // A look without its own light leaves the race scene's sun and ambient as they are, whatever colours it holds.
+        [UnityTest]
+        public IEnumerator Race_WithATrackLookWithoutItsOwnLight_KeepsTheScenesLight()
+        {
+            yield return RaceWithLookLight(false, sun =>
+            {
+                Assert.That(sun.color, Is.Not.EqualTo(LookSun), "The scene's sun keeps its colour.");
+                Assert.That(sun.intensity, Is.Not.EqualTo(1.3f), "The scene's sun keeps its intensity.");
+                Assert.That(RenderSettings.ambientSkyColor, Is.Not.EqualTo(LookAmbientSky), "The scene's ambient stays.");
+            });
+        }
+
+        private static readonly Color LookSun = new Color(0.9f, 0.6f, 0.3f, 1f);
+        private static readonly Color LookAmbientSky = new Color(0.2f, 0.7f, 0.4f, 1f);
+        private static readonly Color LookAmbientEquator = new Color(0.6f, 0.3f, 0.5f, 1f);
+        private static readonly Color LookAmbientGround = new Color(0.1f, 0.2f, 0.6f, 1f);
+
+        // A PALM COAST race with a look holding the light above, its own or not; check reads the race scene's sun.
+        private IEnumerator RaceWithLookLight(bool ownLight, Action<Light> check)
+        {
+#if UNITY_EDITOR
+            var store = TestRecords();
+            TrackDefinition palm = PalmCoast();
+            Shader lit = Shader.Find("Universal Render Pipeline/Lit");
+            Assert.That(lit, Is.Not.Null);
+            var road = new Material(lit) { name = "Test look road" };
+            var rail = new Material(lit) { name = "Test look rail" };
+            TrackLook look = ScriptableObject.CreateInstance<TrackLook>();
+            var data = new SerializedObject(look);
+            data.FindProperty("road").objectReferenceValue = road;
+            data.FindProperty("rail").objectReferenceValue = rail;
+            data.FindProperty("ownLight").boolValue = ownLight;
+            data.FindProperty("sunColor").colorValue = LookSun;
+            data.FindProperty("sunIntensity").floatValue = 1.3f;
+            data.FindProperty("ambientSky").colorValue = LookAmbientSky;
+            data.FindProperty("ambientEquator").colorValue = LookAmbientEquator;
+            data.FindProperty("ambientGround").colorValue = LookAmbientGround;
+            data.ApplyModifiedPropertiesWithoutUndo();
+            try
+            {
+                RaceLaunch.Request(new RaceSetup(palm, "PALM COAST", "", RaceMode.Single, SpeedClass.Fast, runner, look));
+                RaceAssembler assembler = null;
+                yield return Load(RacePath, scene => assembler = Find<RaceAssembler>(scene));
+                assembler.Records = store;
+                assembler.Ghosts = ghosts;
+                Assert.That(RenderSettings.sun, Is.Not.Null, "The race scene has a sun (Lighting > Sun Source).");
+                check(RenderSettings.sun);
+            }
+            finally
+            {
+                store.Clear(palm.name, SpeedClass.Fast);
+                UnityEngine.Object.Destroy(look);
+                UnityEngine.Object.Destroy(road);
+                UnityEngine.Object.Destroy(rail);
+            }
+#else
+            Assert.Fail("This test requires the Unity Editor.");
+            yield break;
+#endif
+        }
+
         // Read every tick directly: no render frame may skip the crossing's immediate speed or the booster's cut.
         [UnityTest]
         public IEnumerator BoostZone_PalmCoastZ1_RaisesSpeedAtOnceAndCutsARunningBooster([Values(false, true)] bool booster,
