@@ -439,9 +439,30 @@ namespace ProtoHarness.Editor.ChainRush
             }
         }
 
-        // The track's road, wall and paint materials, its lanes (CircuitRace.UseLook) and its sky (RaceAssembler), made at
-        // path or set again.
-        public static void BuildLook(string path, Material road, Material rail, Material markings, Material accent, Lanes lanes, Sky sky)
+        // A track's own light (TrackLook's own light): the sun's colour and intensity and the trilight ambient's sky,
+        // horizon and ground colours.
+        public readonly struct Lighting
+        {
+            public readonly Color Sun;
+            public readonly float Intensity;
+            public readonly Color AmbientSky;
+            public readonly Color AmbientEquator;
+            public readonly Color AmbientGround;
+
+            public Lighting(Color sun, float intensity, Color ambientSky, Color ambientEquator, Color ambientGround)
+            {
+                if (!(intensity > 0f)) throw new ArgumentOutOfRangeException(nameof(intensity), intensity, "The sun must be brighter than 0.");
+                Sun = sun;
+                Intensity = intensity;
+                AmbientSky = ambientSky;
+                AmbientEquator = ambientEquator;
+                AmbientGround = ambientGround;
+            }
+        }
+
+        // The track's road, wall and paint materials, its lanes (CircuitRace.UseLook), its sky and, given one, its own
+        // light (RaceAssembler), made at path or set again; without a light the look keeps the race scene's.
+        public static void BuildLook(string path, Material road, Material rail, Material markings, Material accent, Lanes lanes, Sky sky, Lighting? light = null)
         {
             if (sky.Material == null) throw new ArgumentException("Every track's look has a sky (BuildSky).", nameof(sky));
             TrackLook look = AssetDatabase.LoadAssetAtPath<TrackLook>(path);
@@ -463,6 +484,15 @@ namespace ProtoHarness.Editor.ChainRush
             data.FindProperty("horizon").colorValue = sky.Horizon;
             data.FindProperty("fogStart").floatValue = sky.FogStart;
             data.FindProperty("fogEnd").floatValue = sky.FogEnd;
+            data.FindProperty("ownLight").boolValue = light.HasValue;
+            if (light.HasValue)
+            {
+                data.FindProperty("sunColor").colorValue = light.Value.Sun;
+                data.FindProperty("sunIntensity").floatValue = light.Value.Intensity;
+                data.FindProperty("ambientSky").colorValue = light.Value.AmbientSky;
+                data.FindProperty("ambientEquator").colorValue = light.Value.AmbientEquator;
+                data.FindProperty("ambientGround").colorValue = light.Value.AmbientGround;
+            }
             data.ApplyModifiedPropertiesWithoutUndo();
             if (!look.TryValidate(out string error)) throw new InvalidOperationException(error);
             EditorUtility.SetDirty(look);

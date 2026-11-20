@@ -10,6 +10,23 @@
 
 ---
 
+## 2026-11-20 · PALM 트랙 조명과 타워 색: 트랙마다 자기 조명(`TrackLook`), PALM 타워 벽은 건물 색 7개 (`feature/palm-track-light`)
+
+- **원인 (조사, 2026-11-19 ~ 20)**: K9 플레이 피드백 "질감과 파스텔 톤 색상이 묘하게 구린 느낌" 의 원인은 조명이었다. 다섯 트랙이 서킷 씬의 해 하나(`(0.83, 0.93, 1)` × 1.9, `ChainRushCircuit.unity:262-263`)와 단색 앰비언트(`(0.34, 0.38, 0.54)`, `:23,27`)를 함께 쓰고, `RaceAssembler.UseSky` 는 하늘·안개만 바꾼다. 선형 색 공간에서 크림 벽의 그늘면이 슬레이트 블루, 볕 드는 면이 민트빛 흰색, 분홍이 모브가 된다. 서킷 씬의 앰비언트 값은 빌더 코드(`ChainRushSceneBuilder.cs:185` `(0.4, 0.55, 0.62)`)와 다르다(에디터에서 바꾼 값, 이번에 고치지 않음). 질감(텍스처 없는 단색, 매끄러움 0.16)은 비교 렌더에서 영향이 작았다. 후처리는 기본 볼륨의 톤매핑 mode 0, 서킷 씬에 `m_RenderPostProcessing` 줄 없음(실행 중 상태는 확인 못 함).
+- **비교 렌더** (임시 추가 씬에 PALM 장식 프리팹 복제, 메모리 머티리얼만 바꿈, 도로 없음, 높이 3.5 m, 세션 scratchpad 에만 있음): ① 지금 조명 / 따뜻한 조명 / 각각 + 콘크리트 무늬 — 조명만 바꿔도 색이 돌아오고 무늬는 가까운 벽에만 보인다. ② 따뜻한 해 `(1, 0.95, 0.86)` 에 앰비언트 밝기 세 단계(A·B·C). ③ 사용자 "분홍 살구 민트라는 색이 그대로면 원천적으로 색을 바꾸자 빌딩에 어울릴만한 색으로" → 타워 벽 7색 교체 × 조명 2종 — 새 색도 지금 조명에서는 남보라로 칙칙해서 조명과 색을 함께 바꾼다.
+- **결정 (사용자)**: 트랙별 조명 "추천대로"(공용 조명을 바꾸면 다른 네 트랙을 모두 다시 봐야 한다) → 수정 요청서(조명 + 타워 색, 마을집 색 유지) "ㅇㅋ". 조명 값은 후보 B(질문 대신 요청서에 적은 값).
+- **구현**:
+  - `TrackLook`: `ownLight`·`sunColor`·`sunIntensity`·`ambientSky`·`ambientEquator`·`ambientGround` 와 읽기 프로퍼티. `TryValidate` 는 `ownLight` 인데 세기가 0 이하면 거부한다.
+  - `RaceAssembler.UseLight`(`Start`, `UseSky` 다음): `RenderSettings.sun` 의 색·세기, 앰비언트 Trilight 세 색, `DynamicGI.UpdateEnvironment()`. 해 방향은 그대로. 해가 없으면 `LogError(this)` 하고 조명을 바꾸지 않는다. 상대 월드는 그 전에 돌아가므로 부르지 않는다.
+  - `ExteriorAssets.Lighting`(세기 ≤ 0 이면 던진다)·`BuildLook(…, Lighting? light = null)` — 인자가 없으면 `ownLight = false` 로 저장해 다른 트랙 빌더는 그대로다.
+  - `PalmCoastEnvironmentBuilder`: 해 `(1, 0.95, 0.86)` × 1.5, 앰비언트 하늘 `(0.74, 0.80, 0.88)` · 지평선 `(0.70, 0.69, 0.65)` · 땅 `(0.46, 0.42, 0.36)`. 타워 벽 `Pick` 을 새 머티리얼 `M_PalmTower{Limestone, Concrete, Slate, Brick, Sandstone, WarmGrey, OffWhite}`(0.82·0.76·0.64 / 0.70·0.70·0.68 / 0.48·0.53·0.58 / 0.62·0.40·0.31 / 0.76·0.66·0.50 / 0.58·0.56·0.52 / 0.90·0.88·0.83)로 바꿨다 — 순서는 옛 크림·돌·시안·분홍·살구·민트·흰색 자리 그대로. 옛 머티리얼은 마을집·처마·차양·간판이 계속 쓴다.
+  - 재빌드(메뉴 `Rebuild Palm Coast Exterior` 의 함수): 렌더러 2,521 → **2,533**(타워 벽이 처마와 머티리얼을 나눠 쓰지 않게 되어 병합 메시가 갈라짐), 정점 799,899 그대로. 새 머티리얼 7개·병합 메시 14개(meta 는 Unity 발급). 참조가 끊긴 `PalmCoastExterior_{City,Harbour}_M_PalmCream.asset` 2개는 GUID grep 으로 참조 없음을 보고 사용자 승인으로 `.meta` 와 함께 지웠다.
+- **검증 (에디터 6000.3.19f1)**: 컴파일 `*** Tundra build success (7.67 seconds), 29 items updated, 1618 evaluated`. 재빌드 중 Console 에러 없음(남은 `Token refresh failed` 1건은 재빌드 전 AI 패키지 계정 로그). EditMode `TrackLookTests` `testcasecount="10" result="Passed" passed="10" failed="0" skipped="0"` (2026-11-20 03:08:08Z), PlayMode `ChainRushFlowTests.Race_WithATrackLook*` (`!Device !Enemy !NetEndReplay !^Lap$`) `testcasecount="4" result="Passed" passed="4" failed="0" skipped="0"` (03:12:49Z~03:12:55Z) — 새 2건(`Race_WithATrackLookLight_LightsTheRaceWithIt`, `Race_WithATrackLookWithoutItsOwnLight_KeepsTheScenesLight`) + 도로·하늘 2건. 둘 다 `test-runs.ps1 -Record`. 영향 평가: `TrackLook` → `RaceAssembler.UseSky`·`UseLight`, `CircuitRace.UseLook` → `Race_WithATrackLook*`; 장식 빌더 → 재빌드의 침범 검사. 시뮬은 `TrackLook` 을 읽지 않아 지문·Lap 은 돌리지 않았다(VERIFICATION §4-4). 재빌드 뒤 렌더(도시 시작·끝·항구·마을)로 타워 색과 마을집 파스텔을 봤다.
+- **사용자 플레이 확인**: 플레이 확인을 부탁한 보고에 "좋다 ㄱㄱ".
+- **확인 못 한 것**: 실제 레이스 화면에서 앰비언트가 바로 바뀌는지(테스트는 설정값만, 렌더는 임시 씬의 해) — "좋다" 가 플레이로 본 것인지는 답에 없다. 다른 트랙이 그대로인지의 플레이 확인. 마을 바닥이 렌더에서 꽤 붉게 보였다(이번에 바꾸지 않은 색, 전에는 조명 때문에 덜 붉었을 수 있다).
+- **두는 것**: 다른 네 트랙의 조명(지금도 서킷 씬의 차가운 조명 — 필요하면 트랙마다 `Lighting` 을 넘긴다), 서킷 씬 앰비언트와 빌더 코드 값의 어긋남, 타워 벽 질감(무늬), 병합 전 리뷰(Codex 모델 설정 문제는 K8 항목).
+- **검토했으나 버린 대안**: 서킷 씬의 공용 조명을 바꾸기(다섯 트랙이 함께 바뀌어 네 트랙을 다시 맞춰야 한다), 조명만 바꾸고 파스텔 유지(사용자가 색 자체를 바꾸자고 함), 기존 파스텔 머티리얼의 색을 바꾸기(마을집이 같이 바뀐다), 콘크리트 무늬(조명 문제를 풀지 못하고 박스 UV 에서 크기마다 늘어난다).
+
 ## 2026-11-19 · K9 CityTowerKit PALM 반영: 도시 타워 75채를 칸 조립으로, 도시·항구 구간마다 재질별 병합, 뒷줄도 킷 (`feature/k9-palm-citytower`)
 
 - **결정 (사용자 2026-11-19)**: §3-2 요청서(대화)의 추천안에 "ㄱㄱ" → 측정 뒤 뒷줄 "ㅇㅋ". ① 병합: 구간(City·Harbour)마다 재질별 한 메시(K8 과 같은 방식). City 는 랩의 처음(0~0.11)과 끝(0.87~)이 출발선에서 이어져 한 덩어리다. ② 뒷줄: 앞줄과 같이 킷으로 둔다(측정에서 프레임 비용이 보이지 않음 — 아래). 비교하려고 남겼던 옛 상자 타워 함수는 지웠다. ③ `BuildingKit` 5종 랜드마크: 이번에는 넣지 않고 K10 SKYWAY 스카이라인에서 정한다. ④ 간판은 칸마다 끊긴 그대로, 차양은 코드 상자 한 장(FacadeKit 이 Unity 에 없다, K8 과 같은 판단).

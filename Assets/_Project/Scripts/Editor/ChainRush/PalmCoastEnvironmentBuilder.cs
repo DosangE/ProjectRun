@@ -61,7 +61,11 @@ namespace ProtoHarness.Editor.ChainRush
                 Palette("Marking", new Color(0.93f, 0.93f, 0.90f), 0.05f), Palette("Accent", new Color(0.96f, 0.78f, 0.18f), 0.05f),
                 new ExteriorAssets.Lanes(3.6f, 0f, false, false),
                 // The reference's bright beach day: deep blue overhead, a few clouds, a pale sea haze at the horizon.
-                ExteriorAssets.BuildSky("Palm", new Color(0.22f, 0.56f, 0.92f), new Color(0.84f, 0.89f, 0.93f), Color.white, 0.3f, false, 170f, 560f));
+                ExteriorAssets.BuildSky("Palm", new Color(0.22f, 0.56f, 0.92f), new Color(0.84f, 0.89f, 0.93f), Color.white, 0.3f, false, 170f, 560f),
+                // A warm beach sun and a soft trilight ambient (user 2026-11-19, candidate B of three compared renders): the
+                // race scene's cold sun and flat violet ambient turned the town's and the towers' colours lilac and slate.
+                new ExteriorAssets.Lighting(new Color(1f, 0.95f, 0.86f), 1.5f,
+                    new Color(0.74f, 0.80f, 0.88f), new Color(0.70f, 0.69f, 0.65f), new Color(0.46f, 0.42f, 0.36f)));
 
         private static void BuildPrefab()
         {
@@ -149,6 +153,15 @@ namespace ProtoHarness.Editor.ChainRush
             private readonly Material metal = Palette("Metal", new Color(0.52f, 0.54f, 0.56f));
             private readonly Material wood = Palette("Wood", new Color(0.55f, 0.40f, 0.28f));
             private readonly Material tire = Palette("Tire", new Color(0.12f, 0.12f, 0.13f));
+            // The towers' walls (user 2026-11-19, "분홍 살구 민트라는 색이 그대로면 원천적으로 색을 바꾸자 빌딩에 어울릴만한 색으로"):
+            // a city's building colours, apart from the town houses' pastels, which stay.
+            private readonly Material towerLimestone = Palette("TowerLimestone", new Color(0.82f, 0.76f, 0.64f));
+            private readonly Material towerConcrete = Palette("TowerConcrete", new Color(0.70f, 0.70f, 0.68f));
+            private readonly Material towerSlate = Palette("TowerSlate", new Color(0.48f, 0.53f, 0.58f));
+            private readonly Material towerBrick = Palette("TowerBrick", new Color(0.62f, 0.40f, 0.31f));
+            private readonly Material towerSandstone = Palette("TowerSandstone", new Color(0.76f, 0.66f, 0.50f));
+            private readonly Material towerWarmGrey = Palette("TowerWarmGrey", new Color(0.58f, 0.56f, 0.52f));
+            private readonly Material towerOffWhite = Palette("TowerOffWhite", new Color(0.90f, 0.88f, 0.83f));
             private readonly Material dark = ExteriorAssets.Require<Material>(ExteriorAssets.MaterialFolder + "M_ArtStadiumInk.mat");
 
             internal Layout(TrackDefinition definition)
@@ -449,7 +462,7 @@ namespace ProtoHarness.Editor.ChainRush
                     throw new ArgumentException($"A city tower needs at least 2 bays and a floor per tier ({bays} bays, {floors} floors, {tiers} tiers).");
                 Transform tower = Group("City tower " + index, parent);
                 tower.SetPositionAndRotation(position, facing);
-                Material facade = Pick(index * 3 + 1, cream, stone, cyan, pink, apricot, mint, white);
+                Material facade = Pick(index * 3 + 1, towerLimestone, towerConcrete, towerSlate, towerBrick, towerSandstone, towerWarmGrey, towerOffWhite);
                 Material trim = Pick(index * 5 + 2, white, concrete, stone);
                 bool columns = Hash(index * 11 + 4) > 0.5f;
                 bool balconies = !columns && Hash(index * 13 + 5) > 0.45f;

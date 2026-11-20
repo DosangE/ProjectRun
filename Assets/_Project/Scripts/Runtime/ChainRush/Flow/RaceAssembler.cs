@@ -227,6 +227,7 @@ namespace ProtoHarness.ChainRush.Flow
                 return;
             }
             if (setup.Look != null && setup.Look.Sky != null) UseSky(setup.Look);
+            if (setup.Look != null && setup.Look.OwnLight) UseLight(setup.Look);
             if (tutorial == null) ShowGhost();
             if (setup.EnvironmentScene.Length == 0)
             {
@@ -425,6 +426,27 @@ namespace ProtoHarness.ChainRush.Flow
             RenderSettings.fogEndDistance = look.FogEnd;
             viewCamera.clearFlags = CameraClearFlags.Skybox;
             viewCamera.farClipPlane = look.FogEnd;
+        }
+
+        // The track look's own light (user 2026-11-19, PALM's colours under the scene's cold light): the race scene's sun
+        // (Lighting > Sun Source) takes the look's colour and intensity, its direction kept, and the ambient the look's
+        // sky, horizon and ground colours. Set in Start with the sky, so these go with the race scene too. Presentation
+        // only. A race scene with no sun is a broken scene: say so and leave its light as it is.
+        private void UseLight(TrackLook look)
+        {
+            Light sun = RenderSettings.sun;
+            if (sun == null)
+            {
+                Debug.LogError($"{nameof(RaceAssembler)}: {look.name} has its own light but the race scene has no sun (Lighting > Sun Source); the scene's light stays.", this);
+                return;
+            }
+            sun.color = look.SunColor;
+            sun.intensity = look.SunIntensity;
+            RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Trilight;
+            RenderSettings.ambientSkyColor = look.AmbientSky;
+            RenderSettings.ambientEquatorColor = look.AmbientEquator;
+            RenderSettings.ambientGroundColor = look.AmbientGround;
+            DynamicGI.UpdateEnvironment();
         }
 
         // The best run on this track at this speed, whichever runner set it, loaded before the start and again when a race

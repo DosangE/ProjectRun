@@ -45,6 +45,22 @@ namespace ProtoHarness.ChainRush.Race
         [SerializeField] private float fogStart = 150f;
         [Tooltip("Metres from the camera where the fog hides everything; the camera draws no further.")]
         [SerializeField] private float fogEnd = 500f;
+        // The track's own light (user 2026-11-19, PALM "질감과 파스텔 톤 색상이 묘하게 구린 느낌"): the race scene's sun is a
+        // cold blue-white and its ambient a flat violet, which turned Palm Coast's warm colours lilac and slate. A look with
+        // its own light gives the race scene's sun this colour and intensity and the ambient these sky, horizon and ground
+        // colours (RaceAssembler); the sun keeps its direction. A look without keeps the scene's light.
+        [Tooltip("The race takes this look's sun colour and intensity and its ambient colours; otherwise the race scene's light stays.")]
+        [SerializeField] private bool ownLight;
+        [Tooltip("The sun's colour (the race scene's sun, its direction unchanged).")]
+        [SerializeField] private Color sunColor = Color.white;
+        [Tooltip("The sun's intensity; above zero.")]
+        [SerializeField] private float sunIntensity = 1f;
+        [Tooltip("The ambient light from overhead (trilight sky colour).")]
+        [SerializeField] private Color ambientSky = Color.gray;
+        [Tooltip("The ambient light from the sides (trilight equator colour).")]
+        [SerializeField] private Color ambientEquator = Color.gray;
+        [Tooltip("The ambient light from below (trilight ground colour).")]
+        [SerializeField] private Color ambientGround = Color.gray;
         [Tooltip("The track's music loop; empty keeps the race scene's music.")]
         [SerializeField] private AudioClip music;
         [Tooltip("The track's environment loop, mixed with the running wind; empty keeps the scene's ambience.")]
@@ -60,6 +76,12 @@ namespace ProtoHarness.ChainRush.Race
         public Color Horizon => horizon;
         public float FogStart => fogStart;
         public float FogEnd => fogEnd;
+        public bool OwnLight => ownLight;
+        public Color SunColor => sunColor;
+        public float SunIntensity => sunIntensity;
+        public Color AmbientSky => ambientSky;
+        public Color AmbientEquator => ambientEquator;
+        public Color AmbientGround => ambientGround;
         public AudioClip Music => music;
         public AudioClip Ambience => ambience;
 
@@ -81,8 +103,8 @@ namespace ProtoHarness.ChainRush.Race
             return doubleCentre ? Centre.DoubleLine : Centre.Line;
         }
 
-        // Whether both materials are set and the lanes and the sky's fog make sense; CircuitRace.UseLook refuses a look
-        // that is not.
+        // Whether both materials are set and the lanes, the sky's fog and the own light make sense; CircuitRace.UseLook
+        // refuses a look that is not.
         public bool TryValidate(out string error)
         {
             if (road == null || rail == null) error = $"TrackLook '{name}': a road and a rail material are required.";
@@ -90,6 +112,8 @@ namespace ProtoHarness.ChainRush.Race
             else if (!(centreFromHalfWidth >= 0f)) error = $"TrackLook '{name}': the middle line's half width must not be negative, not {centreFromHalfWidth}.";
             else if (sky != null && !(fogStart >= 0f && fogEnd > fogStart))
                 error = $"TrackLook '{name}': the sky's fog must begin at 0 m or further and end past its start, not {fogStart} to {fogEnd} m.";
+            else if (ownLight && !(sunIntensity > 0f))
+                error = $"TrackLook '{name}': its own light needs a sun brighter than 0, not {sunIntensity}.";
             else error = null;
             return error == null;
         }
