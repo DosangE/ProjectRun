@@ -149,10 +149,13 @@ namespace ProtoHarness.Editor.ChainRush
             private const string LandGroup = "01 Landscape";
             private const string OuterGroup = "15 Outer city";
             private const string VillageGroup = "02 Village and shops";
+            private const string ViaductGroup = "14 Flats and billboards by the viaduct";
             // The merged groups' meshes: SkywayExterior_<key>_<material>.asset.
             private const string MeshPrefix = "SkywayExterior";
             // The town house kit (docs/ART_REQUEST_PROPS.md K8, TownHouseAssembly), loaded when the build starts.
             private TownHouseAssembly.Kit townKit;
+            // The city tower kit (docs/ART_REQUEST_PROPS.md K9, CityTowerAssembly) for the flats by the viaduct.
+            private CityTowerAssembly.Kit towerKit;
             private readonly double length;
             private readonly RoadCorridor corridor;
             private readonly RoadCorridor near;
@@ -269,9 +272,12 @@ namespace ProtoHarness.Editor.ChainRush
                 Transform deck = root.transform.Find(DeckGroup);
                 if (deck == null) throw new InvalidOperationException("Skyway continuation group is missing: " + DeckGroup);
                 Transform land = root.transform.Find(LandGroup), outer = root.transform.Find(OuterGroup), village = root.transform.Find(VillageGroup);
-                if (land == null || outer == null || village == null) throw new InvalidOperationException("Skyway land, outer city or village group is missing.");
-                // The merged land, outer city and village spread round the road, so their bounds always hold it: vertex by vertex.
-                corridor.ValidateClearance(root, Ground + 0.01f, piers, new[] { deck, land, outer, village });
+                Transform viaduct = root.transform.Find(ViaductGroup);
+                if (land == null || outer == null || village == null || viaduct == null)
+                    throw new InvalidOperationException("Skyway land, outer city, village or viaduct flats group is missing.");
+                // The merged land, outer city, village and flats spread round the road, so their bounds always hold it:
+                // vertex by vertex.
+                corridor.ValidateClearance(root, Ground + 0.01f, piers, new[] { deck, land, outer, village, viaduct });
             }
 
             internal GameObject Build(Scene scene)
@@ -282,6 +288,7 @@ namespace ProtoHarness.Editor.ChainRush
                 chevronPanel = KitMesh("RoadsideKit", "ChevronPanel"); chevronArrow = KitMesh("RoadsideKit", "ChevronArrow");
                 boardFrame = KitMesh("RoadsideKit", "BoardFrame"); boardFace = KitMesh("RoadsideKit", "BoardFace"); boardCap = KitMesh("RoadsideKit", "BoardCap");
                 townKit = TownHouseAssembly.Kit.Load();
+                towerKit = CityTowerAssembly.Kit.Load();
                 Transform landscape = Group(LandGroup, root.transform);
                 Land(landscape);
 
@@ -316,7 +323,8 @@ namespace ProtoHarness.Editor.ChainRush
                 CornerBoards(Group("12 Corner chevrons", root.transform));
                 Billboards(Group("13 Advertising boards", root.transform));
                 Lamps(Group("05 Road lamps and banners", root.transform));
-                HighwaySide(Group("14 Flats and billboards by the viaduct", root.transform));
+                Transform viaduct = Group(ViaductGroup, root.transform);
+                HighwaySide(viaduct);
 
                 Transform village = Group(VillageGroup, root.transform);
                 int index = 0, houses = 0;
@@ -401,6 +409,7 @@ namespace ProtoHarness.Editor.ChainRush
                 MergeByMaterial(landscape, MeshPrefix, "Land");
                 MergeByMaterial(outerCity, MeshPrefix, "Outer");
                 MergeByMaterial(village, MeshPrefix, "Village");
+                MergeByMaterial(viaduct, MeshPrefix, "Viaduct");
                 return root;
             }
 
@@ -749,11 +758,12 @@ namespace ProtoHarness.Editor.ChainRush
             }
 
             // Beside every high stretch, mid-rise flats taller than the viaduct (from it the plain houses showed only roofs),
-            // and along the highway big billboards on poles turned to the runners on it.
+            // of the city tower kit's façade bays on the side facing the road (CityTowerAssembly, user 2026-11-20), and along
+            // the highway big billboards on poles turned to the runners on it.
             private void HighwaySide(Transform parent)
             {
                 // The billboards first: the flats would take their places.
-                int index = 0;
+                int index = 0, flats = 0;
                 foreach (TrackDefinition.Bay bay in definition.Bays)
                 {
                     if (!bay.StraightDeck) continue;
@@ -776,16 +786,26 @@ namespace ProtoHarness.Editor.ChainRush
                     for (int side = -1; side <= 1; side += 2)
                     {
                         index++;
-                        float width = 14f + Hash(index * 139 + 45) * 6f, depth = 12f + Hash(index * 149 + 46) * 4f;
+                        // 14 .. 20 m wide in whole kit bays: the nearest of 4, 5 or 6 (13.2, 16.2, 19.2 m).
+                        float wanted = 14f + Hash(index * 139 + 45) * 6f;
+                        int bays = wanted < 14.7f ? 4 : wanted < 17.7f ? 5 : 6;
+                        float width = CityTowerAssembly.Width(bays), depth = 12f + Hash(index * 149 + 46) * 4f;
                         float radius = new Vector2(width + 4.6f, depth + 4.6f).magnitude * 0.5f;
                         Vector3 p = f.Position + f.Right * side * (Mathf.Abs(Edge(s, side)) + KeepOut + radius + 1f);
                         p.y = Ground;
                         if (!corridor.Available(p, radius)) continue;
+                        // 6 .. 18 m over the viaduct, in whole floors over the 4.8 m shops (at least three, one per tier).
                         float height = f.Position.y - Ground + 6f + Hash(index * 151 + 47) * 12f;
-                        Apartment(parent, p, Flat(-f.Right * side), width, depth, height, index, Mathf.Clamp((int)((height - 6f) / 3.2f), 2, 8), true);
+                        int floors = Mathf.Max(3, Mathf.RoundToInt((height - CityTowerAssembly.GroundStorey) / CityTowerAssembly.UpperStorey));
+                        CityTowerAssembly.Tower(towerKit, parent, "Apartment block " + index, p, Flat(-f.Right * side), bays, depth, floors, index,
+                            new CityTowerAssembly.Colours(Pick(index * 167 + 50, cream, pink, apricot, sky, plaster, sage), Pick(index * 5 + 2, plaster, concrete, cream),
+                                glass, ink, steel, Pick(index * 19 + 7, plaster, yellow, sky, pink), Pick(index * 173 + 51, red, signBlue, sage, orange), concrete));
                         corridor.Reserve(p, radius);
+                        flats++;
                     }
                 }
+                // The count the merge hides (the merged group keeps no blocks).
+                Debug.Log($"Skyway flats by the viaduct: {flats} ({CityTowerAssembly.KitName}).");
             }
 
             // A 10 x 4.5 m board on two poles, its top over the viaduct, turned toward runners coming along the highway.
