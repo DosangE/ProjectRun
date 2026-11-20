@@ -172,7 +172,10 @@ namespace ProtoHarness.Editor.ChainRush
                 Fork(Group("04 Forest clearing shortcut", root.transform));
                 Tunnel(Group("06 Rock tunnel", root.transform));
                 Village(Group("07 Valley village and finish", root.transform));
-                Forest(Group("08 Irregular pine forest", root.transform));
+                Transform forest = Group("08 Irregular pine forest", root.transform);
+                Forest(forest);
+                // In the same group, so it merges into the forest's meshes and materials (no new renderers or assets).
+                Groves(forest);
                 PoleSpires(Group("10 Rock spires under corner poles", root.transform));
                 // Validate bounds before merging; afterwards they span the whole mountain. A spire's tall bounds swell
                 // toward a road beside it, so 10 is left to the vertex check in ValidateClearance, with 01, 06 and 09.
@@ -285,12 +288,21 @@ namespace ProtoHarness.Editor.ChainRush
             }
 
             // Interpolate the actual terrain triangles so props sit on the saved mesh, even on steep slopes.
+            // Outside the two-metre patch the skirts are 16 m faces (Terrain), split the same way, so a prop there follows them
+            // (the groves reach that far, 2026-11-20; before them nothing stood outside the patch).
+            private const int SkirtStep = 16, SkirtReach = 928;
+
             private float GroundAt(Vector3 point)
             {
-                float x = point.x / GroundStep, z = point.z / GroundStep;
+                if (terrainRight <= terrainLeft) throw new InvalidOperationException("GroundAt before Terrain: the patch bounds are not set.");
+                bool fine = point.x >= terrainLeft && point.x <= terrainRight && point.z >= terrainBottom && point.z <= terrainTop;
+                float step = fine ? GroundStep : SkirtStep;
+                int cells = fine ? 1 : (int)(SkirtStep / GroundStep);
+                float x = point.x / step, z = point.z / step;
                 int ix = Mathf.FloorToInt(x), iz = Mathf.FloorToInt(z);
                 float u = x - ix, v = z - iz;
-                float a = GridHeight(ix, iz), b = GridHeight(ix + 1, iz), c = GridHeight(ix, iz + 1), d = GridHeight(ix + 1, iz + 1);
+                float a = GridHeight(ix * cells, iz * cells), b = GridHeight((ix + 1) * cells, iz * cells);
+                float c = GridHeight(ix * cells, (iz + 1) * cells), d = GridHeight((ix + 1) * cells, (iz + 1) * cells);
                 return u + v <= 1f ? a + (b - a) * u + (c - a) * v : d + (c - d) * (1f - u) + (b - d) * (1f - v);
             }
 
@@ -301,10 +313,10 @@ namespace ProtoHarness.Editor.ChainRush
                 terrainLeft = left; terrainRight = right; terrainBottom = bottom; terrainTop = top;
                 // Two-metre faces close to the road; outer skirts are outside every road's footprint.
                 Patch(parent, "Mountain", left, right, bottom, top, 2, grass);
-                Patch(parent, "West skirt", left - 928, left, bottom - 928, top + 928, 16, earth);
-                Patch(parent, "East skirt", right, right + 928, bottom - 928, top + 928, 16, earth);
-                Patch(parent, "South skirt", left, right, bottom - 928, bottom, 16, earth);
-                Patch(parent, "North skirt", left, right, top, top + 928, 16, earth);
+                Patch(parent, "West skirt", left - SkirtReach, left, bottom - SkirtReach, top + SkirtReach, SkirtStep, earth);
+                Patch(parent, "East skirt", right, right + SkirtReach, bottom - SkirtReach, top + SkirtReach, SkirtStep, earth);
+                Patch(parent, "South skirt", left, right, bottom - SkirtReach, bottom, SkirtStep, earth);
+                Patch(parent, "North skirt", left, right, top, top + SkirtReach, SkirtStep, earth);
             }
 
             private void Patch(Transform parent, string name, int x0, int x1, int z0, int z1, int step, Material material)
@@ -446,16 +458,71 @@ namespace ProtoHarness.Editor.ChainRush
                             float radius = 2.3f + Hash(seed * 19) * 1.6f;
                             float height = (dense ? 16f : 11f) + Hash(seed * 23) * 9f;
                             if (!Place(at, side, 5f + radius * 1.5f + row * 11f + Hash(seed * 29) * 7f, radius, height, out Vector3 p)) continue;
-                            Transform tree = Group("Pine " + seed, parent);
-                            tree.SetPositionAndRotation(p, Quaternion.Euler(0f, Hash(seed * 31) * 360f, 0f));
-                            Shape("Trunk", tree, Vector3.up * height * 0.35f, new Vector3(0.6f, height * 0.7f, 0.6f), wood, pineTrunk);
-                            Material needles = Pick(seed * 37, pineA, pineB, pineC);
-                            for (int tier = 0; tier < 3; tier++)
-                                Shape("Needle crown", tree, Vector3.up * height * (0.36f + tier * 0.20f),
-                                    new Vector3(radius * 2f * (1f - tier * 0.23f), height * 0.46f, radius * 2f * (1f - tier * 0.23f)), needles, pineTier);
+                            Pine(parent, seed, p, radius, height);
                             trees++;
                         }
                     }
+            }
+
+            private void Pine(Transform parent, int seed, Vector3 p, float radius, float height)
+            {
+                Transform tree = Group("Pine " + seed, parent);
+                tree.SetPositionAndRotation(p, Quaternion.Euler(0f, Hash(seed * 31) * 360f, 0f));
+                Shape("Trunk", tree, Vector3.up * height * 0.35f, new Vector3(0.6f, height * 0.7f, 0.6f), wood, pineTrunk);
+                Material needles = Pick(seed * 37, pineA, pineB, pineC);
+                for (int tier = 0; tier < 3; tier++)
+                    Shape("Needle crown", tree, Vector3.up * height * (0.36f + tier * 0.20f),
+                        new Vector3(radius * 2f * (1f - tier * 0.23f), height * 0.46f, radius * 2f * (1f - tier * 0.23f)), needles, pineTier);
+            }
+
+            // The two stretches with a drop on the left (Height's cliffSide, user 2026-11-20 "옆에 낭떠러지인 곳이 너무
+            // 공허해보인다"): Forest leaves their left side bare and plants only within about 50 m of a road, so the valley
+            // floor seen from them was empty. Pine clumps 40-250 m out, where Perlin noise is high, so they read as groves.
+            private static readonly (double From, double To)[] DropStretches = { (0d, 420d), (800d, 1190d) };
+            // First pass (6 tries, threshold 0.5, 10-25 m pines) read as a thin scatter from the road, not as groves: one try
+            // per ~100 m² left pines ~18 m apart inside a clump. More tries over smaller clumps keep the count, packed closer.
+            private const float GroveNear = 40f, GroveFar = 250f, GroveStep = 5f, GroveNoise = 0.012f, GroveThreshold = 0.63f;
+            private const int GroveTries = 24;
+            // The terrain's cliff test (Patch): a face steeper than this is painted rock, so no tree stands on it.
+            private const float GroveSteepest = 0.64f;
+
+            private void Groves(Transform parent)
+            {
+                int planted = 0, tried = 0, sparse = 0, steep = 0, outside = 0, taken = 0;
+                int seed = 3000;
+                foreach (var stretch in DropStretches)
+                    for (double s = stretch.From; s < stretch.To; s += GroveStep)
+                        for (int k = 0; k < GroveTries; k++, seed++)
+                        {
+                            tried++;
+                            double at = s + Hash(seed * 7) * GroveStep;
+                            float offset = Mathf.Lerp(GroveNear, GroveFar, Hash(seed * 11));
+                            TrackFrame f = line.FrameAt(at);
+                            Vector3 spot = f.Position - f.Right * (definition.HalfWidthAt(at) + offset);
+                            // The skirts reach SkirtReach past the patch (Terrain); keep a face's width inside them.
+                            if (spot.x < terrainLeft - SkirtReach + SkirtStep || spot.x > terrainRight + SkirtReach - SkirtStep
+                                || spot.z < terrainBottom - SkirtReach + SkirtStep || spot.z > terrainTop + SkirtReach - SkirtStep) { outside++; continue; }
+                            if (Mathf.PerlinNoise(spot.x * GroveNoise + 41f, spot.z * GroveNoise + 59f) < GroveThreshold) { sparse++; continue; }
+                            if (GroundNormalY(spot) < GroveSteepest) { steep++; continue; }
+                            float radius = 2.4f + Hash(seed * 19) * 2.2f;
+                            float height = 12f + Hash(seed * 23) * 16f;
+                            // Place's pole test only looks at a pole's own heights; a spire (10) reaches from it down to the ground.
+                            bool bySpire = false;
+                            foreach (Vector3 pole in poles)
+                                if (Vector2.Distance(new Vector2(spot.x, spot.z), new Vector2(pole.x, pole.z)) < radius + 6f) bySpire = true;
+                            if (bySpire || !Place(at, -1, offset, radius, height, out Vector3 p)) { taken++; continue; }
+                            Pine(parent, seed, p, radius, height);
+                            planted++;
+                        }
+                trees += planted;
+                Debug.Log($"Summit Drop groves below the drops: {planted} pines from {tried} tries ({sparse} outside a clump, {steep} on rock faces, {outside} beyond the skirts, {taken} by a road, pole or tree).", parent);
+            }
+
+            private float GroundNormalY(Vector3 p)
+            {
+                float dx = GroundAt(p + Vector3.right * GroundStep) - GroundAt(p - Vector3.right * GroundStep);
+                float dz = GroundAt(p + Vector3.forward * GroundStep) - GroundAt(p - Vector3.forward * GroundStep);
+                return new Vector3(-dx, GroundStep * 2f, -dz).normalized.y;
             }
 
             private void RockWalls(Transform parent)
