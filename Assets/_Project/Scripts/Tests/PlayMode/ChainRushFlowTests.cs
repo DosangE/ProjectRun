@@ -1914,6 +1914,70 @@ namespace ProtoHarness.Tests.PlayMode
             }
         }
 
+        // A fall into the sea having last stood just past it (user 2026-11-19: landed, ran back and fell): the backoff from
+        // there lands inside the sea and the last pad is more than respawnPadReach back, yet the runner must come back on
+        // the road before that pad, not above the water where it would fall again and again (RunnerMotor.RespawnOnTrack).
+        [UnityTest, Timeout(120000)]
+        public IEnumerator Respawn_FallJustPastThePalmCoastSea_ComesBackBeforeTheLastPad(
+            [Values(SpeedClass.Normal, SpeedClass.Fast, SpeedClass.VeryFast)] SpeedClass speed)
+        {
+            var store = TestRecords();
+            TrackDefinition palm = PalmCoast();
+            RaceLaunch.Request(new RaceSetup(palm, "PALM COAST", "", RaceMode.Single, speed, runner));
+            RaceAssembler assembler = null;
+            yield return Load(RacePath, scene => assembler = Find<RaceAssembler>(scene));
+            assembler.Records = store;
+            assembler.Ghosts = ghosts;
+            Scene scene = assembler.gameObject.scene;
+            ChainRushGame game = Find<ChainRushGame>(scene);
+            RunnerMotor player = Find<RunnerMotor>(scene);
+            CircuitRace circuit = Find<CircuitRace>(scene);
+            var zones = new System.Collections.Generic.List<double>();
+            game.Track.GetBoostZones(zones);
+            (double seaStart, double seaEnd) = palm.Gaps()[0];
+            const double backoff = 4d, padReach = 50d; // the circuit scene's respawnBackoff and respawnPadReach
+            float scale = Time.timeScale;
+            try
+            {
+                Time.timeScale = 0f;
+                game.StartRun();
+                var bot = new CircuitBot(game, player, player.GetComponent<GrappleController>(), circuit);
+                SimSnapshot now = game.CaptureSnapshot();
+                RacerState.Snapshot racer = now.Racer;
+                racer.LastGroundedS = seaEnd + 1d;
+                racer.Grounded = false;
+                racer.Velocity = Vector3.zero;
+                Assert.That(racer.LastGroundedS - backoff, Is.InRange(seaStart, seaEnd), "precondition: the backoff lands in the sea.");
+                Assert.That(racer.LastGroundedS - backoff - zones[3], Is.GreaterThan(padReach), "precondition: the last pad is out of reach.");
+                CircuitRace.Snapshot past = now.Circuit;
+                past.LastS = seaEnd + 1d;
+                TrackFrame sea = game.Track.FrameAt((seaStart + seaEnd) * 0.5d);
+                game.RestoreSnapshot(new SimSnapshot(now.Tick, racer, sea.Position + Vector3.down * 40f, past));
+                game.StepTick(bot);
+                Assert.That(player.IsRespawning, Is.True, "The runner in the sea comes back.");
+                double back = game.Track.Project(player.transform.position).S;
+                Assert.That(back, Is.EqualTo(zones[3] - backoff).Within(0.5d), "Back before the last pad, not above the sea.");
+                bool crossed = false;
+                for (int more = 0; more < 1000 && game.IsRunning; more++)
+                {
+                    bool held = player.IsRespawning;
+                    game.StepTick(bot);
+                    Assert.That(held || !player.IsRespawning, Is.True, $"It fell again, {more} ticks after coming back.");
+                    if (game.Track.Project(player.transform.position).S >= seaEnd + 20d)
+                    {
+                        crossed = true;
+                        break;
+                    }
+                }
+                Assert.That(crossed, Is.True, "From rest before the last pad that pad carries the runner over the sea.");
+            }
+            finally
+            {
+                Time.timeScale = scale;
+                store.Clear(palm.name, speed);
+            }
+        }
+
         [Test]
         public void SummitDrop_Layout_HasEightHeightStagesOneLapAndTheDesignedFeatures()
         {
