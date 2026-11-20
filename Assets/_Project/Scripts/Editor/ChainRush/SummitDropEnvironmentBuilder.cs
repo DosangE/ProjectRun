@@ -103,6 +103,19 @@ namespace ProtoHarness.Editor.ChainRush
             private Mesh chevronPanel, chevronArrow;
             // The board's front (0.079) plus half the arrow's thickness (0.063).
             private const float ArrowOut = 0.142f;
+            // The valley cabins' kit (docs/ART_REQUEST_PROPS.md K11), loaded when the build starts.
+            private readonly Dictionary<string, Mesh> cabinKit = new Dictionary<string, Mesh>();
+            private const string CabinKitName = "CabinKit";
+            // Cabin sizes (K11): round logs 0.45 thick laid in nine courses from the footing's top at 0.8 m, the side walls
+            // half a course higher; façade bays 2.4 m wide over the whole 4.05 m wall with 0.5 m of logs at each corner;
+            // a 27 degree roof of 0.35 m panels reaching 0.5 m past the side walls; logs 0.3 m past the corners.
+            private const float CabinLog = 0.45f, CabinFloor = 0.8f, CabinBay = 2.4f, CabinCorner = 0.5f, CabinLogOut = 0.3f;
+            private const float CabinPitch = 27f, CabinRoof = 0.35f, CabinEave = 0.5f, CabinChimneyAboveRoof = 1.8f;
+            private const int CabinCourses = 9;
+            private const float CabinWall = CabinCourses * CabinLog;
+            // The porch kit (measured, checked in LoadCabinKit): a 0.2 m step under a 0.2 m deck, the step 0.3 m deep at
+            // the porch's front edge. The porch sits 1 cm up so its deck does not share the footing lip's top face.
+            private const float PorchDeckOverFoot = 0.4f, PorchDeck = 0.2f, PorchStepDepth = 0.3f, PorchLift = 0.01f;
             private Mesh[] crags;
             private Vector3 min = Vector3.positiveInfinity, max = Vector3.negativeInfinity;
             private int terrainLeft, terrainRight, terrainBottom, terrainTop;
@@ -149,6 +162,7 @@ namespace ProtoHarness.Editor.ChainRush
                 pineTier = KitMesh("TreeKit", "PineCrownTier"); pineTrunk = KitMesh("TreeKit", "TreeTrunk");
                 chevronPanel = KitMesh("RoadsideKit", "ChevronPanel"); chevronArrow = KitMesh("RoadsideKit", "ChevronArrow");
                 crags = new[] { KitMesh("RockKit", "CragA"), KitMesh("RockKit", "CragB"), KitMesh("RockKit", "CragC") };
+                LoadCabinKit();
                 Terrain(Group("01 Descending mountain and valley", root.transform));
                 MountainLedges(Group("09 Mountain overhangs below upper road", root.transform));
                 // Reserve the four required corner landmarks before scattering optional scenery.
@@ -701,24 +715,19 @@ namespace ProtoHarness.Editor.ChainRush
 
             private void Village(Transform parent)
             {
+                var built = new List<string>();
                 for (int i = 0; i < 6; i++)
                 {
                     double s = 2148d + i * 19d;
                     int side = i % 2 == 0 ? -1 : 1;
-                    if (!Place(s, side, 17f + Hash(i + 91) * 7f, 7f, 9f, out Vector3 p)) continue;
+                    // 10 m high: a chimney on the ridge of a four-bay cabin tops out at 9.7 m.
+                    if (!Place(s, side, 17f + Hash(i + 91) * 7f, 7f, 10f, out Vector3 p)) continue;
                     Transform hut = Group("Valley cabin " + i, parent);
-                    hut.SetPositionAndRotation(p, Flat(-line.FrameAt(s).Right * side));
-                    Box("Cabin footing", hut, Vector3.up * 0.3f, new Vector3(8.6f, 1f, 7.6f), rockB);
-                    for (int log = 0; log < 9; log++) Box("Log walls", hut, Vector3.up * (0.8f + log * 0.45f), new Vector3(8f + log % 2 * 0.3f, 0.43f, 7f), wood);
-                    for (int sideRoof = -1; sideRoof <= 1; sideRoof += 2)
-                    {
-                        GameObject panel = Box("Pitched timber roof", hut, new Vector3(sideRoof * 2.2f, 5.8f, 0f), new Vector3(5.3f, 0.35f, 8.2f), roof);
-                        panel.transform.localRotation = Quaternion.Euler(0f, 0f, -sideRoof * 27f);
-                    }
-                    Box("Door", hut, new Vector3(0f, 1.7f, -3.56f), new Vector3(1.4f, 2.4f, 0.14f), ink);
-                    for (int w = -1; w <= 1; w += 2) Box("Shuttered window", hut, new Vector3(w * 2.4f, 2.9f, -3.56f), new Vector3(1.3f, 1.2f, 0.16f), cutWood);
-                    Box("Stone chimney", hut, new Vector3(2.3f, 6.1f, 1.8f), new Vector3(0.9f, 3.4f, 1f), rockC);
+                    // The front (local -z) faces the road (user 2026-11-20 "앞면 길 쪽으로 돌려줘"; it used to face away).
+                    hut.SetPositionAndRotation(p, Flat(line.FrameAt(s).Right * side));
+                    built.Add(i + ": " + Cabin(hut, i));
                 }
+                Debug.Log($"Summit Drop valley: {built.Count} cabins ({CabinKitName}) — {string.Join("; ", built)}.", parent);
                 TrackFrame finish = line.FrameAt(definition.LapLength);
                 Transform gate = Group("Timber finish gate", parent);
                 gate.SetPositionAndRotation(finish.Position, Flat(finish.Forward));
@@ -732,6 +741,169 @@ namespace ProtoHarness.Editor.ChainRush
                 Box("Finish beam", gate, new Vector3(0f, 11.2f, 0f), new Vector3(half * 2f + 1.5f, 1.8f, 1.3f), cutWood);
                 // Solid glyphs, as on Palm Coast's arch, with this course's own finish wording.
                 Lettering(gate, "SUMMIT DROP", 15f, 11.2f, -0.72f);
+            }
+
+            // The cabin kit's meshes, checked where their origins lie: a bay's pieces share the bay's origin (middle of its
+            // width and height, on the wall's face, standing out to +z), the porch's two pieces the middle of the porch,
+            // the rest their bounds centre (KitMesh). A re-export with another pivot would stand a bay off the wall.
+            private void LoadCabinKit()
+            {
+                cabinKit.Clear();
+                foreach (string name in new[] { "CabinWindow_Trim", "CabinWindow_Glass", "CabinWindow_Accent", "CabinDoor_Trim", "CabinDoor_Accent" })
+                {
+                    Mesh mesh = KitPiece(CabinKitName, name);
+                    Bounds b = mesh.bounds;
+                    // Every piece starts at the wall (the glass 3 cm out): a piece standing further off would float in
+                    // front of its frame although it stays inside the bay (Codex review 2026-11-20).
+                    if (b.min.z < -0.01f || b.min.z > 0.035f || b.max.z > 0.3f || b.min.x < -CabinBay * 0.5f - 0.01f || b.max.x > CabinBay * 0.5f + 0.01f
+                        || b.min.y < -CabinWall * 0.5f - 0.01f || b.max.y > CabinWall * 0.5f + 0.01f)
+                        throw new InvalidOperationException($"Kit mesh {name} in {CabinKitName} has bounds {b}, outside its {CabinBay} x {CabinWall} m bay or off the wall's face from the bay's origin; export it with the bay's pivot.");
+                    cabinKit[name] = mesh;
+                }
+                Mesh porchTrim = KitPiece(CabinKitName, "CabinPorch_Trim"), porchRoof = KitPiece(CabinKitName, "CabinPorch_Roof");
+                Bounds porch = porchTrim.bounds;
+                porch.Encapsulate(porchRoof.bounds);
+                if (porch.center.sqrMagnitude > 1e-4f || Vector3.Distance(porch.size, new Vector3(CabinBay, 3f, 1.8f)) > 0.02f)
+                    throw new InvalidOperationException($"Kit porch in {CabinKitName} spans {porch}; it should be {CabinBay} x 3 x 1.8 m round its origin.");
+                // The step and the deck the footings below are cut to: only the step reaches the porch's foot, at its
+                // front edge (+z in the kit), and the deck's top is PorchDeckOverFoot up.
+                float foot = porch.min.y, deckTop = foot + PorchDeckOverFoot;
+                bool deckFound = false;
+                foreach (Vector3 v in porchTrim.vertices)
+                {
+                    if (v.y < foot + 0.01f && v.z < porch.max.z - PorchStepDepth - 0.01f)
+                        throw new InvalidOperationException($"Kit porch in {CabinKitName} reaches its foot at z {v.z:F2}, behind its {PorchStepDepth} m step; the porch footings would not fit it.");
+                    if (Mathf.Abs(v.y - deckTop) < 0.01f) deckFound = true;
+                }
+                if (!deckFound)
+                    throw new InvalidOperationException($"Kit porch in {CabinKitName} has no deck top {PorchDeckOverFoot} m over its foot; the deck would not meet the cabin's floor.");
+                cabinKit["CabinPorch_Trim"] = porchTrim;
+                cabinKit["CabinPorch_Roof"] = porchRoof;
+                foreach (string name in new[] { "CabinLog", "CabinGable", "RoofRidge", "StoneChimney", "WoodPile_Wood", "WoodPile_Ends" })
+                    cabinKit[name] = KitMesh(CabinKitName, name);
+            }
+
+            // One valley cabin of the kit (K11), its front to local -z (toward the road). Per cabin: three or four
+            // bays with the door in the middle bay or the next, 6.4-8.0 m deep, a side window or none, a porch or none, the
+            // chimney on the left or right slope or on the ridge at the back, a wood pile by one side or none. The footing
+            // and the roof panels are boxes (their sizes differ per cabin). Returns what it chose, for the build log.
+            private string Cabin(Transform hut, int index)
+            {
+                int seed = 700 + index * 11;
+                int bays = Hash(seed) < 0.5f ? 3 : 4;
+                float width = bays * CabinBay + 2f * CabinCorner;
+                float depth = 6.4f + Hash(seed + 1) * 1.6f;
+                int middle = (bays - 1) / 2;
+                int door = Hash(seed + 2) < 0.5f ? middle : middle + 1;
+                int sideWindow = Hash(seed + 3) < 0.5f ? 0 : Hash(seed + 4) < 0.5f ? -1 : 1;
+                bool porch = Hash(seed + 5) < 0.5f;
+                int chimney = Mathf.Min(2, (int)(Hash(seed + 6) * 3f));
+                int pile = Hash(seed + 7) < 0.5f ? 0 : Hash(seed + 8) < 0.5f ? -1 : 1;
+
+                Box("Cabin footing", hut, Vector3.up * (CabinFloor - 0.5f), new Vector3(width + 0.4f, 1f, depth + 0.4f), rockB);
+                // Front and back logs run the width, side logs the depth, each 0.3 m past the corner; the side walls sit half
+                // a course up, so the logs cross in turn at every corner, with a sill under the side walls' lowest logs.
+                Mesh log = cabinKit["CabinLog"];
+                for (int course = 0; course < CabinCourses; course++)
+                {
+                    float y = CabinFloor + (course + 0.5f) * CabinLog;
+                    for (int end = -1; end <= 1; end += 2)
+                    {
+                        Shape("Log", hut, new Vector3(0f, y, end * (depth - CabinLog) * 0.5f), new Vector3(width + 2f * CabinLogOut, CabinLog, CabinLog), wood, log);
+                        // 1 cm short of the roof panels' ends at each end: the top side logs reach into the panels, and
+                        // ends in the panels' end planes would flicker (reviewer 2026-11-20).
+                        GameObject sideLog = Shape("Log", hut, new Vector3(end * (width - CabinLog) * 0.5f, y + CabinLog * 0.5f, 0f), new Vector3(depth + 2f * CabinLogOut - 0.02f, CabinLog, CabinLog), wood, log);
+                        sideLog.transform.localRotation = Quaternion.Euler(0f, 90f, 0f);
+                    }
+                }
+                for (int end = -1; end <= 1; end += 2)
+                    Box("Side wall sill", hut, new Vector3(end * (width - CabinLog) * 0.5f, CabinFloor + CabinLog * 0.25f, 0f), new Vector3(CabinLog, CabinLog * 0.5f, depth), rockB);
+
+                // The gable fills the front and back walls up to the ridge; the panels' undersides meet on its apex and
+                // stop there, so they do not overlap (a filler under the ridge closes the notch between their upper ends).
+                float rad = CabinPitch * Mathf.Deg2Rad, cos = Mathf.Cos(rad), sin = Mathf.Sin(rad), pitch = Mathf.Tan(rad);
+                float wallTop = CabinFloor + CabinWall, rise = width * 0.5f * pitch, apex = wallTop + rise;
+                float top = apex + CabinRoof / cos, slope = (width * 0.5f + CabinEave) / cos, roofLength = depth + 2f * CabinLogOut;
+                Shape("Gable", hut, new Vector3(0f, wallTop + rise * 0.5f, 0f), new Vector3(width, rise, depth), wood, cabinKit["CabinGable"]);
+                for (int sideRoof = -1; sideRoof <= 1; sideRoof += 2)
+                {
+                    var centre = new Vector3(sideRoof * (slope * 0.5f * cos + CabinRoof * 0.5f * sin), apex - slope * 0.5f * sin + CabinRoof * 0.5f * cos, 0f);
+                    GameObject panel = Box("Pitched timber roof", hut, centre, new Vector3(slope, CabinRoof, roofLength), roof);
+                    panel.transform.localRotation = Quaternion.Euler(0f, 0f, -sideRoof * CabinPitch);
+                }
+                // 1 cm short of the panels' ends, so no face lies in their end planes.
+                Box("Ridge filler", hut, new Vector3(0f, (apex + top) * 0.5f, 0f), new Vector3(2f * CabinRoof * sin, top - apex, roofLength - 0.02f), roof);
+                Mesh ridgeMesh = cabinKit["RoofRidge"];
+                Vector3 ridgeSize = ridgeMesh.bounds.size;
+                // The ridge's underside is a V at the roof's pitch, its apex this far over the mesh's middle.
+                float ridgeUnder = -ridgeSize.y * 0.5f + ridgeSize.z * 0.5f * pitch;
+                GameObject ridge = Shape("Roof ridge", hut, new Vector3(0f, top - ridgeUnder, 0f), new Vector3(roofLength, ridgeSize.y, ridgeSize.z), roof, ridgeMesh);
+                ridge.transform.localRotation = Quaternion.Euler(0f, 90f, 0f);
+
+                float frontZ = -depth * 0.5f, bayY = CabinFloor + CabinWall * 0.5f, doorX = 0f;
+                for (int b = 0; b < bays; b++)
+                {
+                    // Turned to face -z, so bay 0 is on the cabin's +x side.
+                    float x = width * 0.5f - CabinCorner - (b + 0.5f) * CabinBay;
+                    if (b == door) doorX = x;
+                    CabinFacadeBay(hut, b == door ? "CabinDoor" : "CabinWindow", new Vector3(x, bayY, frontZ), Quaternion.Euler(0f, 180f, 0f));
+                }
+                if (sideWindow != 0)
+                    CabinFacadeBay(hut, "CabinWindow", new Vector3(sideWindow * width * 0.5f, bayY + CabinLog * 0.5f, 0f), Quaternion.Euler(0f, sideWindow * 90f, 0f));
+                if (porch)
+                {
+                    // Its wall side (-z in the kit) against the front, the deck level with the bays' floor (1 cm over it).
+                    Mesh porchTrim = cabinKit["CabinPorch_Trim"];
+                    Bounds porchBounds = porchTrim.bounds;
+                    porchBounds.Encapsulate(cabinKit["CabinPorch_Roof"].bounds);
+                    float deckTop = CabinFloor + PorchLift, porchDepth = porchBounds.size.z;
+                    Vector3 at = new Vector3(doorX, deckTop - PorchDeckOverFoot - porchBounds.min.y, frontZ - porchDepth * 0.5f);
+                    Piece("Porch", hut, at, cutWood, porchTrim).transform.localRotation = Quaternion.Euler(0f, 180f, 0f);
+                    Piece("Porch roof", hut, at, roof, cabinKit["CabinPorch_Roof"]).transform.localRotation = Quaternion.Euler(0f, 180f, 0f);
+                    // The cabin stands on the ground at its middle; on a slope the porch would hang over it (Codex review
+                    // 2026-11-20: up to 1.4 m), so stone footings reach down under the deck and under the step.
+                    PorchFooting(hut, doorX, frontZ, frontZ - porchDepth + PorchStepDepth, deckTop - PorchDeck);
+                    PorchFooting(hut, doorX, frontZ - porchDepth + PorchStepDepth, frontZ - porchDepth, deckTop - PorchDeckOverFoot);
+                }
+
+                Mesh chimneyMesh = cabinKit["StoneChimney"];
+                float chimneyX = chimney == 2 ? 0f : (chimney == 0 ? -0.25f : 0.25f) * width;
+                float chimneyZ = chimney == 2 ? depth * 0.5f - 1f : depth * 0.25f;
+                float roofOver = top - Mathf.Abs(chimneyX) * pitch;
+                Piece("Stone chimney", hut, new Vector3(chimneyX, roofOver + CabinChimneyAboveRoof - chimneyMesh.bounds.extents.y, chimneyZ), rockC, chimneyMesh);
+
+                if (pile != 0)
+                {
+                    // On the ground beside the footing (its top is 0.8 m up, too high to lean on), along the side wall.
+                    Mesh pileWood = cabinKit["WoodPile_Wood"];
+                    var at = new Vector3(pile * (width * 0.5f + 0.2f + pileWood.bounds.extents.z + 0.05f), 0f, (Hash(seed + 9) < 0.5f ? -0.25f : 0.25f) * depth);
+                    at.y = GroundAt(hut.TransformPoint(at)) - hut.position.y + pileWood.bounds.extents.y - 0.05f;
+                    Piece("Wood pile", hut, at, wood, pileWood).transform.localRotation = Quaternion.Euler(0f, 90f, 0f);
+                    Piece("Wood pile ends", hut, at, cutWood, cabinKit["WoodPile_Ends"]).transform.localRotation = Quaternion.Euler(0f, 90f, 0f);
+                }
+                string chimneySpot = chimney == 0 ? "left" : chimney == 1 ? "right" : "ridge";
+                return $"{bays} bays x {depth:F1} m, door bay {door}, side window {sideWindow}, porch {(porch ? "yes" : "no")}, chimney {chimneySpot}, wood pile {pile}";
+            }
+
+            // A stone footing under part of a porch (z from near to far in front of the cabin), from its top down 0.1 m into
+            // the lowest ground at its corners. None where the ground already reaches the top.
+            private void PorchFooting(Transform hut, float x, float near, float far, float top)
+            {
+                float lowest = float.PositiveInfinity;
+                for (int cx = -1; cx <= 1; cx += 2)
+                    foreach (float z in new[] { near, far })
+                        lowest = Mathf.Min(lowest, GroundAt(hut.TransformPoint(new Vector3(x + cx * CabinBay * 0.5f, 0f, z))) - hut.position.y);
+                float bottom = lowest - 0.1f;
+                if (top - bottom < 0.05f) return;
+                Box("Porch footing", hut, new Vector3(x, (top + bottom) * 0.5f, (near + far) * 0.5f), new Vector3(CabinBay, top - bottom, Mathf.Abs(near - far)), rockB);
+            }
+
+            // A façade bay of the cabin kit: its Trim, Glass and Accent pieces (those it has) at one origin.
+            private void CabinFacadeBay(Transform hut, string bay, Vector3 origin, Quaternion facing)
+            {
+                foreach (var (slot, colour) in new[] { ("_Trim", cutWood), ("_Glass", ink), ("_Accent", cutWood) })
+                    if (cabinKit.TryGetValue(bay + slot, out Mesh mesh))
+                        Piece(bay + slot, hut, origin, colour, mesh).transform.localRotation = facing;
             }
 
             private void Lettering(Transform parent, string words, float width, float y, float z)
