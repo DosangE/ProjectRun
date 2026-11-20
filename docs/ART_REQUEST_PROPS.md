@@ -350,6 +350,7 @@ SKYWAY 팔레트 (`SkywayEnvironmentBuilder.cs:175-199`, 시안 확인용): 몸�
 - **시안 결정 (사용자 "추천대로")**: ① 칸 Trim 색 `plaster`(어두운 색은 `sky` 몸통에서 차이가 작았다). ② 50 m 넘는 타워는 꼭대기 3층을 한 칸 줄인 들인 단(코드 몸통 + 처마 둘) — 실루엣이 달라지고 칸 수가 준다. ③ 첨탑 메시는 그대로, 굵기는 Unity 반영 렌더를 보고 균일 스케일(예: ×1.5)로 정한다. ④ Fin 유리 폭 2.25 그대로. 스카이라인이 파래지는 것(커튼월 비율)은 Unity 반영 렌더에서 다시 본다.
 - **FBX (같은 "ㄱㄱ")**: `art-src/SkylineTowerKit/SkylineTowerKit.fbx` — `SkylineTowerKit` 컬렉션 8개만, 2절 FBX 설정 그대로. 부품 렌더 자리(x 0~19)에서 내보냈다(메시 원점은 칸 원점·bounds 가운데 그대로). 다시 가져와 이름 8개·슬롯(`M_Trim`·`M_Glass`·`M_Metal`, 파일 안에 `.001` 없음)·삼각형·원점 기준 범위가 시안과 같음을 확인했다(`blender-artist`, 파일 문자열 grep 은 메인이 다시 봄). Unity 에서 맞는지는 아직이다.
 - `.blend` 에 같이 저장된 것: 열린 세션의 `Scene`, K9 FBX 가져오기로 생긴 `PreviewSK_Src_*`·`M_Trim.001` 등, 렌더용 `Preview_*`·카메라·해·바닥. 다시 저장 때 생긴 `SkylineTowerKit.blend1` 은 `.gitignore:24` 로 무시된다.
+- **SKYWAY Unity 반영 (2026-11-20, 사용자 "추천대로 ㄱㄱ")**: 폭 그대로(모서리 민벽 0.5), 첨탑 ×1.5, 창 종류 1/3씩, `06 Skyline` 재질별 병합. 확정한 값·측정은 `DECISIONS.md` 2026-11-20 "K10 SkylineTowerKit SKYWAY 반영".
 
 ## 4. 트랙 고유 소품 (2차, 트랙마다 따로 요청서)
 
