@@ -10,6 +10,36 @@
 
 ---
 
+## 2026-11-21 · SUMMIT 장식 보충 3단계: K12 Unity 반영 — 길가 소품 631개·정상 표지 5개, 덤불 잎 결 `Grain.Leaf` (`feature/summit-roadside-props`)
+
+- **결정 (사용자 2026-11-21 HANDOFF "다음작업" → 요청서(대화) H1~H7·배치안 "ㄱㄱ" → 정상 표지 실패 보고에 A "추천대로" → 플레이 "보인더 커밋푸쉬 병합")**: K12 `RoadsideNatureKit` 14개를 SUMMIT 에 놓았다. 새 그룹 `11 Roadside props and summit markers` 에 넣고 재질별로 병합했다. 그룹을 따로 둔 이유는 기존 그룹 01~10 의 병합 메시가 그대로 남아 전후 비교가 깔끔해서다. 대가로 렌더러가 7개 는다.
+- **H1~H7 (K12 "3단계에서 정할 것" ①~⑦)**:
+  - H1 풀은 새 색 `Grass (0.45, 0.47, 0.25)` 다(`Moss` = 땅 색이라 묻혔다).
+  - H2 통나무는 긴 축을 땅의 등고선 방향(`Cross(normal, up)`)으로 놓는다. 평지에서는 방향이 아무쪽이다.
+  - H3 묻힘은 종류별 기본값 0.06~0.12 m × 스케일에, 밑면 반폭 × 경사를 더한 값이다. 높이의 45% 를 넘지 않는다.
+  - H4 덤불 잎 결은 `ExteriorAssets.Grain.Leaf` 다. 고정 시드 Voronoi 14칸/1 m 타일, 1.8배 늘림·25° 회전, 칸마다 밝기, 칸 가장자리 어둡게, 노이즈 휨으로 그리고, `Surface(..., 1f, 0.05f)` 로 입힌다. 열거형 맨 뒤에 붙였고 `default` 는 이제 던진다 — 기존 결 3종 PNG 는 다시 만들어도 바이트가 같다(git status).
+  - H5 덤불 각은 플레이로 본다.
+  - H6 이정표는 시안 조립 그대로다(꼭대기 아래 0.3·0.75 m, 판 2장, 하나는 180°). 판 끝은 메시 −x 다(Unity 에서 꼭짓점으로 확인).
+  - H7 조명은 트랙 조명 그대로다.
+- **길가** (`Roadside`): 한 바퀴 S 10 ~ 결승 + 55 m 를 7 m 마다 양쪽에 1~3개 묶음으로 놓는다. 비율은 풀 35·돌 25·덤불 25·그루터기 8·통나무 7 %, 스케일 0.7~1.3, 돌은 경사 쪽으로 반만 기울인다. 터널(1840–1920), 틈 ±12 m, 결승 ±10 m 는 뺀다. 가장 마지막에 놓아(`PoleSpires` 뒤) 기존 소나무·바위·표지·오두막 자리는 그대로다.
+- **거리를 요청서와 다르게 놓았다**: 요청서는 가장자리 밖 1.5~4.5 m 였다. 그런데 가장자리 4 m 안의 땅이 도로 면보다 약 1.38 m 낮다(`Height` 의 `- RoadThickness - 0.18`). 그래서 침범 여유(1.8 m + 반지름 × 1.45 + 0.2) 밖 0~5 m 에 놓았다 — 결과적으로 약 2.6~8 m 다.
+- **놓는 자리 검사** (`SmallSpot`): 도로와 이미 예약된 자리, 봉과 그 아래 바위 기둥(반지름 + 9 m)을 피한다. 땅이 도로 슬래브 바닥보다 0.6 m 넘게 낮으면(낭떠러지, 아래 도로 위 턱) 빼고, `normal.y` < 0.7(약 45°)이면 뺀다.
+- **정상 표지 — 고정 S 가 세 번 실패 (§4-5, 거기서 멈추고 보고)**: 처음에는 돌무더기 S 24·150·310, 이정표 62·236 을 오른쪽에 놓았다. S150 은 ±0 → ±16 → ±40 m 로 넓혀도 실패했다. 원문은 `Summit cairn has no clear placement at S150` 이고, 거절 이유는 `ground 26.2~102.1 m under the slab`(S 110~190 오른쪽도 낭떠러지이거나 아래 지그재그 위 턱)과 `by a road` 였다. 사용자가 A 를 골랐다. 그래서 0–420 을 4 m 마다 양쪽으로 훑어 빈자리를 모으고, 그 범위에 돌무더기·이정표·돌무더기·이정표·돌무더기를 고르게(60 m 이상 간격) 나눈다. 5개가 안 되면 빌드가 던진다. 결과 원문: `cairn S4R, sign S212R, cairn S272R, sign S332R, cairn S420R; 62 free of 210 spots scanned (refused: 111 drop, 22 taken, 1 by a pole, 14 by a road)`.
+- **두 조각 소품**: `FallenLog_Ends`·`Stump_Top` 은 원점이 Bark 와 같고 bounds 가운데가 아니다. 그래서 `KitPiece` 로 읽고, Bark bounds 안에 있는지 검사한다(벗어나면 다른 원점으로 내보낸 것이라 던진다).
+- **측정**: 정점 1,151,950 → **1,242,944 (+7.9%)**, 렌더러 38 → **45**(`11` 의 재질 7종). 재빌드 로그 원문: `Summit Drop roadside: 215 grass tufts, 187 stones, 159 bushes, 52 stumps, 18 fallen logs from 1271 tries (640 by a road, pole, drop, steep ground or something already there).`, `11 Roadside props and summit markers clearance: nearest renderer bounds 1.87 m outside a road edge`, `Summit Drop validation PASS: main road and shortcut clear; 15 pole shafts clear; 45 renderers; 1242944 vertices; decoration physics=0.`
+- **임포트**: `RoadsideNatureKit.fbx` 는 `.meta` 없이 복사해 Unity 가 만들었다(GUID `33f3a4579a8885c40b950792c347133f`). 메시는 14개, bounds·삼각형은 요청서와 같고, UV 는 덤불 2개만 있다(BushA UV −0.30~1.28, BushB 0.01~0.96).
+- **렌더** (프리뷰 씬, 도로·가드레일·안개 없음, scratchpad 에만): `s*_before/after.png` 9곳, `bush*_4m/15m.png`. 덤불은 4 m 에서 잎 무늬로 덤불로 읽히고, 15 m 에서는 작은 초록 덩어리다. 풀은 땅보다 노랗게 보인다.
+- **검증**: 컴파일 `Tundra build success (8.45 seconds)`. 영향 평가 — 바뀐 것은 편집기 전용 장식 빌더와 `ExteriorAssets` 결 → 읽는 곳은 `SummitDropExterior.prefab` 뿐이다(다른 트랙의 결 PNG 는 바이트가 같다) → 빌더 침범 검사(위 PASS) + EditMode `TrackDefinitionTests.SummitDrop_*` 3건. 시뮬에 닿지 않아 Lap·지문은 돌리지 않았다. `select-tests.ps1` 은 "전체" 로 판정했는데, 커밋하지 않는 에디터 버전 차이 때문이다. `Assets/` 줄은 모두 "PlayMode 없음, 지문 없음" 이었다. 결과 `testcasecount="3" result="Passed" passed="3" failed="0" skipped="0"`(08:48:51Z, `test-runs.ps1 -Record` 로 남김). 그 뒤 `Assets/` 는 바뀌지 않았다.
+- **사용자 플레이 확인**: "보인더 커밋푸쉬 병합".
+- **확인 못 한 것**:
+  - 출발선 프레임 — 탐침(scratchpad `frame_probe.cs`)은 준비했지만 사용자가 측정 없이 병합을 골라 재지 않았다.
+  - 덤불 각(H5)·풀 색·소품 크기와 밀도·이정표 방향 — 플레이 답이 "보인더" 뿐이라 이것들은 답에 없다.
+  - 병합 전 Codex·`unity-reviewer` 리뷰는 돌리지 않았다(사용자가 바로 병합을 지시).
+- **검토했으나 버린 대안**:
+  - 기존 `08` 그룹에 넣기 — 렌더러는 덜 늘지만 08 병합 메시 전부가 바뀌어 전후 비교가 흐려진다.
+  - 정상 표지를 출발선 0–60 m 에 모으기(B) — 0–420 전체에 흩는 그림이 아니다.
+  - 고정 S 를 손으로 다시 고르기 — 지형이 바뀌면 또 깨진다.
+
 ## 2026-11-21 · SUMMIT 장식 보충 2단계: K12 `RoadsideNatureKit` 시안·FBX, 덤불만 잎 무늬 텍스처(A1 예외) (`docs/art-k12-roadside-kit`)
 
 - **결정 (사용자 2026-11-21 HANDOFF 다음 작업 K12 "ㄱㄱ" → 요청서 G1~G3 "추천대로 ㄱㄱ" → 덤불 다섯 판 → "사진 속 두번째 괜찮아보이네 커밋 병합 ㄱㄱ")**: 길가 소품·정상 표지 14개(덤불 2·풀 2·돌 3·쓰러진 통나무 2조각·그루터기 2조각·돌무더기·이정표 기둥·화살 판)를 새 킷으로 만들고 FBX 까지 냈다. 요청서·결과는 `docs/ART_REQUEST_PROPS.md` K12. G1 이정표 글자 없음, G2 변형 수 덤불 2·풀 2·돌 3, G3 시안 조명 흰 해 1 + 회색 0.5 환경광·SUMMIT 팔레트.

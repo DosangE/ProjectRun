@@ -117,6 +117,14 @@ namespace ProtoHarness.Editor.ChainRush
             // the porch's front edge. The porch sits 1 cm up so its deck does not share the footing lip's top face.
             private const float PorchDeckOverFoot = 0.4f, PorchDeck = 0.2f, PorchStepDepth = 0.3f, PorchLift = 0.01f;
             private Mesh[] crags;
+            // The roadside props and summit markers' kit (docs/ART_REQUEST_PROPS.md K12), loaded when the build starts.
+            private const string RoadsideKitName = "RoadsideNatureKit";
+            private Mesh[] bushes, tufts, stones;
+            private Mesh logBark, logEnds, stumpBark, stumpTop, cairn, trailPost, trailBoard;
+            // K12 ④: only the bushes carry UVs (1 = 1 m), so only they take a texture, one tile a metre.
+            private readonly Material leaf = ExteriorAssets.Surface("Summit", "Leaf", new Color(0.16f, 0.29f, 0.18f), ExteriorAssets.Grain.Leaf, 1f, 0.05f);
+            // K12 ①: Moss is the ground's own colour, so a tuft in it vanished; a drier yellow-green stands out.
+            private readonly Material tuft = Palette("Grass", new Color(0.45f, 0.47f, 0.25f));
             private Vector3 min = Vector3.positiveInfinity, max = Vector3.negativeInfinity;
             private int terrainLeft, terrainRight, terrainBottom, terrainTop;
             private int trees, rocks, groundedRocks, skippedRocks;
@@ -129,7 +137,7 @@ namespace ProtoHarness.Editor.ChainRush
                 gaps = definition.Gaps();
                 if (!definition.IsOpenCourse || gaps.Count != 1 || definition.Shortcuts.Count != 1)
                     throw new InvalidOperationException("Summit Drop layout changed: expected an open course, one gap and one shortcut.");
-                corridor = new RoadCorridor(definition, line, 0.5d, 1.8f);
+                corridor = new RoadCorridor(definition, line, 0.5d, CorridorKeepOut);
                 line.GetPoles(poles);
                 for (double s = -definition.StartRunway; s < definition.LapLength + definition.FinishRunout; s += 4d)
                     AddSample(line.FrameAt(s), definition.HalfWidthAt(Math.Max(0d, Math.Min(definition.LapLength, s))));
@@ -163,6 +171,7 @@ namespace ProtoHarness.Editor.ChainRush
                 chevronPanel = KitMesh("RoadsideKit", "ChevronPanel"); chevronArrow = KitMesh("RoadsideKit", "ChevronArrow");
                 crags = new[] { KitMesh("RockKit", "CragA"), KitMesh("RockKit", "CragB"), KitMesh("RockKit", "CragC") };
                 LoadCabinKit();
+                LoadRoadsideKit();
                 Terrain(Group("01 Descending mountain and valley", root.transform));
                 MountainLedges(Group("09 Mountain overhangs below upper road", root.transform));
                 // Reserve the four required corner landmarks before scattering optional scenery.
@@ -177,6 +186,10 @@ namespace ProtoHarness.Editor.ChainRush
                 // In the same group, so it merges into the forest's meshes and materials (no new renderers or assets).
                 Groves(forest);
                 PoleSpires(Group("10 Rock spires under corner poles", root.transform));
+                // Last, so every pine, crag, sign and cabin keeps its spot and the small props take what is left.
+                Transform roadside = Group("11 Roadside props and summit markers", root.transform);
+                SummitMarkers(roadside);
+                Roadside(roadside);
                 // Validate bounds before merging; afterwards they span the whole mountain. A spire's tall bounds swell
                 // toward a road beside it, so 10 is left to the vertex check in ValidateClearance, with 01, 06 and 09.
                 // So are 02 and 05 (05's zigzag boards with its crags): a tilted crag whose foot follows the slope has
@@ -518,12 +531,248 @@ namespace ProtoHarness.Editor.ChainRush
                 Debug.Log($"Summit Drop groves below the drops: {planted} pines from {tried} tries ({sparse} outside a clump, {steep} on rock faces, {outside} beyond the skirts, {taken} by a road, pole or tree).", parent);
             }
 
-            private float GroundNormalY(Vector3 p)
+            private float GroundNormalY(Vector3 p) => GroundNormal(p).y;
+
+            private Vector3 GroundNormal(Vector3 p)
             {
                 float dx = GroundAt(p + Vector3.right * GroundStep) - GroundAt(p - Vector3.right * GroundStep);
                 float dz = GroundAt(p + Vector3.forward * GroundStep) - GroundAt(p - Vector3.forward * GroundStep);
-                return new Vector3(-dx, GroundStep * 2f, -dz).normalized.y;
+                return new Vector3(-dx, GroundStep * 2f, -dz).normalized;
             }
+
+            private void LoadRoadsideKit()
+            {
+                bushes = new[] { KitMesh(RoadsideKitName, "BushA"), KitMesh(RoadsideKitName, "BushB") };
+                tufts = new[] { KitMesh(RoadsideKitName, "GrassTuftA"), KitMesh(RoadsideKitName, "GrassTuftB") };
+                stones = new[] { KitMesh(RoadsideKitName, "StoneA"), KitMesh(RoadsideKitName, "StoneB"), KitMesh(RoadsideKitName, "StoneC") };
+                logBark = KitMesh(RoadsideKitName, "FallenLog_Bark");
+                stumpBark = KitMesh(RoadsideKitName, "Stump_Bark");
+                cairn = KitMesh(RoadsideKitName, "Cairn");
+                trailPost = KitMesh(RoadsideKitName, "TrailPost");
+                trailBoard = KitMesh(RoadsideKitName, "TrailBoard");
+                // A log's ends and a stump's cut top share the bark's origin (K12: the two pieces' joint bounds centre), so
+                // they are placed by origin with the bark; one outside the bark's bounds was exported from another origin.
+                logEnds = KitPiece(RoadsideKitName, "FallenLog_Ends");
+                stumpTop = KitPiece(RoadsideKitName, "Stump_Top");
+                foreach ((Mesh piece, Mesh bark) in new[] { (logEnds, logBark), (stumpTop, stumpBark) })
+                {
+                    Bounds outer = bark.bounds;
+                    outer.Expand(0.02f);
+                    if (!outer.Contains(piece.bounds.min) || !outer.Contains(piece.bounds.max))
+                        throw new InvalidOperationException($"Kit mesh {piece.name} in {RoadsideKitName}.fbx lies outside {bark.name} ({piece.bounds} in {bark.bounds}); export the two pieces from their joint bounds centre.");
+                }
+            }
+
+            // Small props along the whole road (user 2026-11-20 ① "길가 전 구간의 작은 소품", docs/ART_REQUEST_PROPS.md K12):
+            // clumps of one to three every RoadsideStep on both sides, from just past the road's keep-out to RoadsideSpread
+            // beyond it. Not in the tunnel, over the gap or at the finish gate; nowhere the ground drops away (PlaceSmall).
+            private const float RoadsideStep = 7f, RoadsideSpread = 5f;
+            private const double RoadsideFrom = 10d, TunnelFrom = 1840d, TunnelTo = 1920d, GapMargin = 12d, FinishMargin = 10d;
+
+            private void Roadside(Transform parent)
+            {
+                var placed = new int[5];
+                int tried = 0, taken = 0, seed = 5000;
+                double gapStart = gaps[0].Start, gapEnd = gaps[0].End;
+                for (double s = RoadsideFrom; s < definition.LapLength + definition.FinishRunout - 5d; s += RoadsideStep)
+                {
+                    if (s >= TunnelFrom && s < TunnelTo || s > gapStart - GapMargin && s < gapEnd + GapMargin
+                        || Math.Abs(s - definition.LapLength) < FinishMargin) continue;
+                    for (int side = -1; side <= 1; side += 2)
+                    {
+                        int clump = 1 + Mathf.Min(2, (int)(Hash(seed * 3) * 3f));
+                        for (int k = 0; k < clump; k++, seed++)
+                        {
+                            tried++;
+                            double at = s + (Hash(seed * 5) - 0.5f) * RoadsideStep;
+                            float pick = Hash(seed * 11);
+                            int kind = pick < 0.35f ? 0 : pick < 0.60f ? 1 : pick < 0.85f ? 2 : pick < 0.93f ? 3 : 4;
+                            if (RoadsideProp(parent, kind, at, side, seed)) placed[kind]++;
+                            else taken++;
+                        }
+                    }
+                }
+                Debug.Log($"Summit Drop roadside: {placed[0]} grass tufts, {placed[1]} stones, {placed[2]} bushes, {placed[3]} stumps, {placed[4]} fallen logs from {tried} tries ({taken} by a road, pole, drop, steep ground or something already there).", parent);
+            }
+
+            // K12 ③: a prop's base goes this far under the ground (the bushes' open bottom must not show), plus its
+            // footprint's half-width times the ground's slope, so its downhill edge does not float either.
+            private static readonly float[] RoadsideSink = { 0.06f, 0.08f, 0.12f, 0.06f, 0.10f };
+
+            private bool RoadsideProp(Transform parent, int kind, double at, int side, int seed)
+            {
+                Mesh mesh = kind switch
+                {
+                    0 => tufts[Mathf.Min(tufts.Length - 1, (int)(Hash(seed * 13) * tufts.Length))],
+                    1 => stones[Mathf.Min(stones.Length - 1, (int)(Hash(seed * 13) * stones.Length))],
+                    2 => bushes[Mathf.Min(bushes.Length - 1, (int)(Hash(seed * 13) * bushes.Length))],
+                    3 => stumpBark,
+                    _ => logBark
+                };
+                // K12: the kit is at real size; a copy varies by 0.7-1.3.
+                float scale = 0.7f + Hash(seed * 17) * 0.6f;
+                Vector3 size = mesh.bounds.size * scale;
+                float radius = Mathf.Max(size.x, size.z) * 0.5f;
+                float offset = CorridorKeepOut + radius * 1.45f + 0.2f + Hash(seed * 19) * RoadsideSpread;
+                if (!PlaceSmall(at, side, offset, radius, out Vector3 p, out Vector3 normal)) return false;
+                // K12 ②: a log lies along the slope's level line, so both ends touch; across the slope only its thickness
+                // rises. On level ground it lies any way.
+                Vector3 level = Vector3.Cross(normal, Vector3.up);
+                Quaternion turn = kind == 4 && level.sqrMagnitude > 1e-4f
+                    ? Quaternion.LookRotation(Vector3.Cross(level.normalized, Vector3.up)) * Quaternion.Euler(0f, Hash(seed * 23) < 0.5f ? 0f : 180f, 0f)
+                    : Quaternion.Euler(0f, Hash(seed * 23) * 360f, 0f);
+                // Stones settle half-way toward the slope; plants and wood stand upright.
+                if (kind == 1) turn = Quaternion.FromToRotation(Vector3.up, Vector3.Slerp(Vector3.up, normal, 0.5f)) * turn;
+                float foot = kind == 4 ? size.y * 0.5f : radius;
+                float slope = Mathf.Sqrt(Mathf.Max(0f, 1f - normal.y * normal.y)) / normal.y;
+                float sink = Mathf.Min(RoadsideSink[kind] * scale + foot * slope, size.y * 0.45f);
+                Transform prop = Group(RoadsideNames[kind] + " " + seed, parent);
+                prop.SetPositionAndRotation(p + Vector3.up * (size.y * 0.5f - sink), turn);
+                prop.localScale = Vector3.one * scale;
+                switch (kind)
+                {
+                    case 0: Piece("Tuft", prop, Vector3.zero, tuft, mesh); break;
+                    case 1: Piece("Stone", prop, Vector3.zero, Pick(seed * 29, rockA, rockB, rockC), mesh); break;
+                    case 2: Piece("Bush", prop, Vector3.zero, leaf, mesh); break;
+                    case 3: Piece("Bark", prop, Vector3.zero, wood, stumpBark); Piece("Cut top", prop, Vector3.zero, cutWood, stumpTop); break;
+                    default: Piece("Bark", prop, Vector3.zero, wood, logBark); Piece("Cut ends", prop, Vector3.zero, cutWood, logEnds); break;
+                }
+                return true;
+            }
+
+            private static readonly string[] RoadsideNames = { "Grass tuft", "Stone", "Bush", "Stump", "Fallen log" };
+            // The corridor's keep-out past a road's edge.
+            private const float CorridorKeepOut = 1.8f;
+            // Ground this far under the road's slab is a drop or under a ledge's shoulder (MountainLedges): a prop there
+            // would be out of sight. Steeper than RoadsideSteepest (about 45 degrees) a prop would cling to a face.
+            private const float RoadsideBelowSlab = 0.6f, RoadsideSteepest = 0.7f;
+
+            // Where a small prop of footprint radius stands at (s, side, offset): clear of every road, reserved spot and
+            // pole (with the spire under it, 10), on ground neither dropping away nor too steep. p is on the ground there;
+            // the spot is reserved.
+            private bool PlaceSmall(double s, int side, float offset, float radius, out Vector3 p, out Vector3 normal)
+                => SmallSpot(s, side, offset, radius, true, out p, out normal) == null;
+
+            // PlaceSmall, saying why a spot was turned down (null when it is free); reserve false only looks.
+            private string SmallSpot(double s, int side, float offset, float radius, bool reserve, out Vector3 p, out Vector3 normal)
+            {
+                TrackFrame f = line.FrameAt(s);
+                p = f.Position + f.Right * side * (definition.HalfWidthAt(s) + offset);
+                normal = Vector3.up;
+                if (!corridor.Clear(p, radius * 1.45f)) return "by a road";
+                if (!corridor.Available(p, radius * 1.45f)) return "taken";
+                foreach (Vector3 pole in poles)
+                    if (Vector2.Distance(new Vector2(p.x, p.z), new Vector2(pole.x, pole.z)) < radius + PoleRadius + 6f) return "by a pole";
+                float ground = GroundAt(p);
+                float below = f.Position.y - definition.RoadThickness - ground;
+                if (below > RoadsideBelowSlab) return "drop";
+                normal = GroundNormal(p);
+                if (normal.y < RoadsideSteepest) return "steep";
+                p.y = ground;
+                if (reserve) corridor.Reserve(p, radius * 1.15f);
+                return null;
+            }
+
+            // The summit start's markers (user 2026-11-20 ② "정상 출발 구간", K12): cairns and trail signs over the first
+            // 420 m. Fixed S failed there: S 110-190 drops away on the right too, or is a ledge over the lower zigzag
+            // (2026-11-21, ground 26-102 m under the slab). So the stretch is scanned every MarkerScan on both sides for
+            // free spots, and the markers spread over them evenly, at least MarkerSpacing apart. Each is a landmark: fewer
+            // free spots than markers fails the build.
+            private const double MarkerFrom = 4d, MarkerTo = 420d, MarkerScan = 4d, MarkerSpacing = 60d;
+            private static readonly float[] MarkerOffsets = { 0.4f, 1f, 2f, 3f };
+            // Cairn, sign, cairn, sign, cairn, down the road.
+            private static readonly bool[] MarkerIsSign = { false, true, false, true, false };
+            // K12 ⑥ (the mock-up's assembly): two boards on the post's road face, 0.3 and 0.75 m under its top, one
+            // pointing on down the road and one back; a board's tip is its -x end.
+            private const float BoardBelowTop1 = 0.3f, BoardBelowTop2 = 0.75f, BoardReach = 0.4f, PostSink = 0.3f;
+
+            private void SummitMarkers(Transform parent)
+            {
+                // The sign's footprint is the larger, so a spot free for it is free for a cairn.
+                float signRadius = trailBoard.bounds.size.x * 0.5f + BoardReach;
+                Vector3 heap = cairn.bounds.size;
+                float cairnRadius = Mathf.Max(heap.x, heap.z) * 0.5f;
+                if (cairnRadius > signRadius) throw new InvalidOperationException("The cairn's footprint outgrew the trail sign's; scan with the larger.");
+                var spots = new List<(double S, int Side, float Offset)>();
+                var refused = new Dictionary<string, int>();
+                for (double s = MarkerFrom; s <= MarkerTo; s += MarkerScan)
+                    for (int side = 1; side >= -1; side -= 2)
+                    {
+                        string why = null;
+                        foreach (float extra in MarkerOffsets)
+                        {
+                            float offset = CorridorKeepOut + signRadius * 1.45f + extra;
+                            why = SmallSpot(s, side, offset, signRadius, false, out _, out _);
+                            if (why != null) continue;
+                            spots.Add((s, side, offset));
+                            break;
+                        }
+                        if (why != null) refused[why] = refused.TryGetValue(why, out int n) ? n + 1 : 1;
+                    }
+                var chosen = new List<(double S, int Side, float Offset)>();
+                if (spots.Count != 0)
+                {
+                    double first = spots[0].S, last = spots[spots.Count - 1].S;
+                    for (int i = 0; i < MarkerIsSign.Length; i++)
+                    {
+                        double target = first + (last - first) * i / (MarkerIsSign.Length - 1);
+                        (double S, int Side, float Offset)? best = null;
+                        foreach (var spot in spots)
+                        {
+                            bool apart = true;
+                            foreach (var taken in chosen) apart &= Math.Abs(taken.S - spot.S) >= MarkerSpacing;
+                            if (apart && (best == null || Math.Abs(spot.S - target) < Math.Abs(best.Value.S - target))) best = spot;
+                        }
+                        if (best != null) chosen.Add(best.Value);
+                    }
+                }
+                var reasons = new List<string>();
+                foreach (KeyValuePair<string, int> pair in refused) reasons.Add(pair.Value + " " + pair.Key);
+                string scan = $"{spots.Count} free of {(int)((MarkerTo - MarkerFrom) / MarkerScan + 1) * 2} spots scanned (refused: {string.Join(", ", reasons)})";
+                if (chosen.Count < MarkerIsSign.Length)
+                    throw new InvalidOperationException($"Summit markers: only {chosen.Count} of {MarkerIsSign.Length} placeable {MarkerSpacing} m apart over S{MarkerFrom}-{MarkerTo}; {scan}.");
+                chosen.Sort((a, b) => a.S.CompareTo(b.S));
+                var placed = new List<string>();
+                for (int i = 0; i < chosen.Count; i++)
+                {
+                    (double s, int side, float offset) = chosen[i];
+                    bool sign = MarkerIsSign[i];
+                    if (!PlaceSmall(s, side, offset, sign ? signRadius : cairnRadius, out Vector3 p, out Vector3 normal))
+                        throw new InvalidOperationException($"Summit marker {i} lost its scanned spot at S{s:F0}.");
+                    if (sign) TrailSign(parent, i, s, side, p);
+                    else Cairn(parent, i, p, normal);
+                    placed.Add($"{(sign ? "sign" : "cairn")} S{s:F0}{(side > 0 ? "R" : "L")}");
+                }
+                Debug.Log($"Summit Drop summit markers ({RoadsideKitName}): {string.Join(", ", placed)}; {scan}.", parent);
+            }
+
+            private void Cairn(Transform parent, int index, Vector3 p, Vector3 normal)
+            {
+                Vector3 size = cairn.bounds.size;
+                float slope = Mathf.Sqrt(Mathf.Max(0f, 1f - normal.y * normal.y)) / normal.y;
+                float sink = Mathf.Min(0.12f + size.x * 0.5f * slope, size.y * 0.3f);
+                Transform heap = Group("Summit cairn " + index, parent);
+                heap.SetPositionAndRotation(p + Vector3.up * (size.y * 0.5f - sink), Quaternion.Euler(0f, Hash(index * 61 + 7) * 360f, 0f));
+                Piece("Cairn", heap, Vector3.zero, rockA, cairn);
+            }
+
+            private void TrailSign(Transform parent, int index, double s, int side, Vector3 p)
+            {
+                TrackFrame f = line.FrameAt(s);
+                Transform sign = Group("Summit trail sign " + index, parent);
+                // Local +z faces the road; down the road is +x on the right side, -x on the left.
+                sign.SetPositionAndRotation(p, Flat(-f.Right * side));
+                float post = trailPost.bounds.size.y, half = trailPost.bounds.size.z * 0.5f + trailBoard.bounds.size.z * 0.5f;
+                Piece("Post", sign, Vector3.up * (post * 0.5f - PostSink), wood, trailPost);
+                float top = post - PostSink;
+                // The tip is -x; a board turned about its normal (z) points +x (K12: the board reads the same upside down).
+                Quaternion pointPlusX = Quaternion.Euler(0f, 0f, 180f);
+                Piece("Board on", sign, new Vector3(BoardReach * side, top - BoardBelowTop1, half), cutWood, trailBoard)
+                    .transform.localRotation = side > 0 ? pointPlusX : Quaternion.identity;
+                Piece("Board back", sign, new Vector3(-BoardReach * side, top - BoardBelowTop2, half), cutWood, trailBoard)
+                    .transform.localRotation = side > 0 ? Quaternion.identity : pointPlusX;
+            }
+
 
             private void RockWalls(Transform parent)
             {
