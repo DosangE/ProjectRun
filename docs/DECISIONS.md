@@ -31,8 +31,12 @@
 - **렌더** (프리뷰 씬, 도로·가드레일·안개 없음, scratchpad 에만): `s*_before/after.png` 9곳, `bush*_4m/15m.png`. 덤불은 4 m 에서 잎 무늬로 덤불로 읽히고, 15 m 에서는 작은 초록 덩어리다. 풀은 땅보다 노랗게 보인다.
 - **검증**: 컴파일 `Tundra build success (8.45 seconds)`. 영향 평가 — 바뀐 것은 편집기 전용 장식 빌더와 `ExteriorAssets` 결 → 읽는 곳은 `SummitDropExterior.prefab` 뿐이다(다른 트랙의 결 PNG 는 바이트가 같다) → 빌더 침범 검사(위 PASS) + EditMode `TrackDefinitionTests.SummitDrop_*` 3건. 시뮬에 닿지 않아 Lap·지문은 돌리지 않았다. `select-tests.ps1` 은 "전체" 로 판정했는데, 커밋하지 않는 에디터 버전 차이 때문이다. `Assets/` 줄은 모두 "PlayMode 없음, 지문 없음" 이었다. 결과 `testcasecount="3" result="Passed" passed="3" failed="0" skipped="0"`(08:48:51Z, `test-runs.ps1 -Record` 로 남김). 그 뒤 `Assets/` 는 바뀌지 않았다.
 - **사용자 플레이 확인**: "보인더 커밋푸쉬 병합".
+- **프레임 (병합 뒤 2026-11-21 `docs/summit-frame-after-k12`, 사용자 HANDOFF "다음작업" → 추천 A "추천대로 ㄱㄱ")**: 2026-11-20 "트랙별 프레임 측정" 과 같은 방법이다. 에디터 6000.3.19f1, 이 PC, 타임어택 SUMMIT 출발선, 탐침은 로비에서 붙였다. 이번 판 탐침은 Game 뷰 해상도도 남긴다. 결과 원문: `[FrameProbe] ChainRushTrackSummitDrop done: statsFrame 3.99 ms (p90 6.65 / p99 10.42), dt 3.95 (5.62 / 11.93), render 2.08, batches 679, SetPass 56, screen vertices 2726154, camera moved 0.0 m, game view 841x473` (19:04:21 현지 시각, 창 포커스 잃음 0회).
+  - p99 가 16.7 ms 아래다.
+  - 화면 정점은 1단계 뒤 2,328,412 → **2,726,154 (+17%)** 다. 프리팹 정점이 +7.9% 인 것보다 많이 늘었는데, 길가 소품이 출발선 가까이 몰려 화면에 들어오는 몫이 크기 때문으로 본다 — 확인은 못 했다.
+  - 배치 679 는 2026-11-20 측정(666)과 비슷하고, 1단계 뒤 측정(274)과는 다르다. 274 가 나온 때의 해상도·창 상태는 기록이 없어서 그 차이는 여전히 설명하지 못한다. 해상도는 이번부터 남는다.
+  - 이 방법의 잡음은 약 1 ms 다. 그래서 statsFrame 3.99 ms 를 앞의 두 값(5.01·2.53)과 비교해 순위로 읽지 않는다.
 - **확인 못 한 것**:
-  - 출발선 프레임 — 탐침(scratchpad `frame_probe.cs`)은 준비했지만 사용자가 측정 없이 병합을 골라 재지 않았다.
   - 덤불 각(H5)·풀 색·소품 크기와 밀도·이정표 방향 — 플레이 답이 "보인더" 뿐이라 이것들은 답에 없다.
   - 병합 전 Codex·`unity-reviewer` 리뷰는 돌리지 않았다(사용자가 바로 병합을 지시).
 - **검토했으나 버린 대안**:
