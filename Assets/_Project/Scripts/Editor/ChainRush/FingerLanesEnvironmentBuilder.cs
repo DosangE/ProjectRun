@@ -88,6 +88,7 @@ namespace ProtoHarness.Editor.ChainRush
             private const float HouseFront = 4.6f;
             private const double GateS = 2d;
             private const string VillageGroup = "03 Village houses and shops";
+            private const string CornerGroup = "12 Corner groves";
             // The town house kit (docs/ART_REQUEST_PROPS.md K8, TownHouseAssembly), loaded when the build starts; the
             // village is merged into one mesh per material, FingerLanesExterior_Village_<material>.asset.
             private TownHouseAssembly.Kit townKit;
@@ -144,8 +145,10 @@ namespace ProtoHarness.Editor.ChainRush
             {
                 Transform village = root.transform.Find(VillageGroup);
                 if (village == null) throw new InvalidOperationException("Finger Lanes village group is missing: " + VillageGroup);
-                // The merged village spreads round the road, so its bounds always hold it: vertex by vertex.
-                corridor.ValidateClearance(root, Ground + 0.09f, null, village);
+                Transform corners = root.transform.Find(CornerGroup);
+                if (corners == null) throw new InvalidOperationException("Finger Lanes corner group is missing: " + CornerGroup);
+                // The merged village and corner groves spread round the road, so their bounds always hold it: vertex by vertex.
+                corridor.ValidateClearance(root, Ground + 0.09f, null, new[] { village, corners });
             }
 
             internal GameObject Build(Scene scene)
@@ -169,6 +172,10 @@ namespace ProtoHarness.Editor.ChainRush
                 Village(village);
                 MergeByMaterial(village, "FingerLanesExterior", "Village");
                 Gardens(Group("04 Pocket gardens", root.transform));
+                // Last, so every place laid before it stays where it was.
+                Transform corners = Group(CornerGroup, root.transform);
+                CornerGroves(corners);
+                MergeByMaterial(corners, "FingerLanesExterior", "Corner");
                 return root;
             }
 
@@ -200,9 +207,93 @@ namespace ProtoHarness.Editor.ChainRush
                 for (int i = 0; i < 9; i++)
                 {
                     float x = -92f + i * 67f;
-                    Shape("Distant rounded hill", parent, new Vector3(x, -10f, 158f + i % 2 * 25f), new Vector3(100f, 42f + i % 3 * 9f, 65f), sage, Sphere);
-                    Shape("Distant rounded hill", parent, new Vector3(x, -13f, -172f - i % 2 * 18f), new Vector3(95f, 40f + i % 3 * 8f, 60f), sage, Sphere);
+                    Hill(parent, new Vector3(x, -10f, 158f + i % 2 * 25f), new Vector3(100f, 42f + i % 3 * 9f, 65f), i * 2);
+                    Hill(parent, new Vector3(x, -13f, -172f - i % 2 * 18f), new Vector3(95f, 40f + i % 3 * 8f, 60f), i * 2 + 1);
                 }
+                // A larger, further row at the land's edge, so the ridges overlap; the track's fog (160-520 m) pales it.
+                for (int i = 0; i < 8; i++)
+                {
+                    float x = -60f + i * 70f + (Hash(i * 7 + 1301) - 0.5f) * 20f;
+                    for (int side = -1; side <= 1; side += 2)
+                        Shape("Far rounded hill", parent, new Vector3(x, -16f, side * (205f + Hash(i * 5 + side + 1302) * 12f)),
+                            new Vector3(125f + Hash(i * 3 + side + 1303) * 30f, 70f + Hash(i * 11 + side + 1304) * 24f, 80f), (i + (side > 0 ? 1 : 0)) % 2 == 0 ? hedge : sage, Sphere);
+                }
+            }
+
+            // One distant hill as before, its colour alternating, with one or two smaller shoulders of the other green half
+            // sunk to one side or both: a ridge line instead of a row of identical domes (survey 2026-11-21, user "1_3").
+            private void Hill(Transform parent, Vector3 centre, Vector3 size, int index)
+            {
+                Material main = index % 4 < 2 ? sage : hedge;
+                Material other = main == sage ? hedge : sage;
+                Shape("Distant rounded hill", parent, centre, size, main, Sphere);
+                int shoulders = Hash(index * 13 + 1311) < 0.5f ? 1 : 2;
+                float first = Hash(index * 17 + 1312) < 0.5f ? -1f : 1f;
+                for (int k = 0; k < shoulders; k++)
+                {
+                    float scale = 0.5f + Hash(index * 19 + k + 1313) * 0.3f;
+                    float side = k == 0 ? first : -first;
+                    var at = new Vector3(centre.x + side * (30f + Hash(index * 23 + k + 1314) * 15f), centre.y - size.y * (1f - scale) * 0.3f,
+                        centre.z + (Hash(index * 29 + k + 1315) - 0.5f) * 30f);
+                    Shape("Hill shoulder", parent, at, new Vector3(size.x * scale, size.y * scale, size.z * scale), other, Sphere);
+                }
+            }
+
+            // The outsides of the hairpins and the two right-angle corners were bare lawn behind the chevron boards (survey
+            // 2026-11-21, 11 of 30 runner-view shots; user "1_3", "추천대로"): a band of round trees following the bend, a
+            // staggered second row, and up to three town houses further out with their fronts to the corner. A spot taken
+            // by a road or anything laid before is skipped.
+            private void CornerGroves(Transform parent)
+            {
+                double s0 = 0d;
+                int corner = 0, trees = 0, houses = 0, refused = 0;
+                foreach (TrackDefinition.Segment segment in definition.Segments)
+                {
+                    double start = s0;
+                    s0 += segment.Length;
+                    if (!segment.IsArc || Mathf.Abs(segment.Degrees) < 90f) continue;
+                    // The outside of a right turn (positive degrees) is the left, as in Corners.
+                    int outside = segment.Degrees > 0f ? -1 : 1;
+                    float turn = Mathf.Abs(segment.Degrees) * Mathf.Deg2Rad;
+                    float radius = segment.Length / turn;
+                    for (int row = 0; row < 2; row++)
+                    {
+                        // Beyond the chevron boards (2.8 m out): 8.5 m, then 16 m, a tree every 9 m along the row's own arc.
+                        float offset = row == 0 ? 8.5f : 16f;
+                        float arc = turn * (radius + definition.RoadHalfWidth + offset);
+                        int count = Mathf.Max(2, Mathf.RoundToInt(arc / 9f));
+                        for (int k = 0; k < count; k++)
+                        {
+                            int seed = corner * 100 + row * 50 + k;
+                            if (Hash(seed * 3 + 1321) < 0.25f) continue;
+                            double s = start + segment.Length * (k + (row == 0 ? 0.5d : 1d)) / (count + (row == 0 ? 0d : 1d));
+                            Vector3 position = BandPoint(s, outside, definition.HalfWidthAt(s) + offset + (Hash(seed * 5 + 1322) - 0.5f) * 3f);
+                            if (!corridor.Available(position, 2.6f)) { refused++; continue; }
+                            Tree(parent, position, 5f + Hash(seed * 7 + 1323) * 3f);
+                            corridor.Reserve(position, 2.6f);
+                            trees++;
+                        }
+                    }
+                    for (int k = 0; k < 3; k++)
+                    {
+                        int seed = corner * 10 + k;
+                        if (Hash(seed * 11 + 1331) < 0.25f) continue;
+                        double s = start + segment.Length * (0.2d + k * 0.3d);
+                        int bays = Hash(seed * 13 + 1332) < 0.5f ? 3 : 4;
+                        float width = TownHouseAssembly.Width(bays);
+                        float depth = 6.5f + Hash(seed * 17 + 1333) * 2f;
+                        float reach = new Vector2(width, depth).magnitude * 0.5f;
+                        TrackFrame frame = line.FrameAt(s);
+                        Vector3 position = BandPoint(s, outside, definition.HalfWidthAt(s) + 22f + depth * 0.5f + Hash(seed * 19 + 1334) * 6f);
+                        if (!corridor.Available(position, reach)) { refused++; continue; }
+                        House(parent, position, Flat(-frame.Right * outside), bays, depth, Hash(seed * 23 + 1335) < 0.5f ? 2 : 3, 500 + seed);
+                        corridor.Reserve(position, reach);
+                        houses++;
+                    }
+                    corner++;
+                }
+                // The counts the merge hides.
+                Debug.Log($"Finger Lanes corner groves: {trees} trees and {houses} houses round {corner} corners ({refused} spots taken by a road or something laid before).");
             }
 
             private void Landmarks(Transform parent)
