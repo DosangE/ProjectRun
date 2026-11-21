@@ -10,6 +10,28 @@
 
 ---
 
+## 2026-11-21 · FINGER 장식 보충 1단계: 헤어핀·직각 코너 바깥에 나무 158그루·집 15채, 언덕 능선 (`feature/finger-decor-fill`)
+
+- **결정 (사용자 2026-11-21 HANDOFF 2절 8번 "다른 트랙의 장식 보충" → B 트랙 "FINGER ㄱㄱ" → 조사 후보 ①~④ 중 "1_3 ㄱㄱ" → 요청서(대화) F1·F2 "추천대로 ㄱㄱ" → 전후 렌더 보고에 "커밋 병합")**: ① 코너 바깥 빈 잔디, ③ 단조로운 배경 언덕을 기존 킷만으로 채웠다. F1 코너 집 넣음, F2 먼 언덕 둘째 줄 넣음.
+- **조사 방법 (러너 시점)**: 도로는 플레이 때 `CircuitRace.cs:235` 가 원점 0 에 깐다. 그래서 프리뷰 씬이 아니라 플레이 중(타임어택 FINGER 출발선)에 `Camera.main` 을 복사한 임시 카메라 하나로 중심선 50 m 마다 1280×720 을 찍고 카메라를 지웠다(`Unity_RunCommand`, 게임 카메라·씬·에셋은 그대로). 30장 중 약 11장에서 헤어핀 바깥이 화살표판 1~2개와 나무 1그루뿐인 평평한 초록이었다. 집은 직선 옆에만 놓도록 되어 있어서다(`Village` 의 `straight`). 다른 후보 ② 손가락 사이 안쪽 땅, ④ 무늬 없는 잔디는 이번에 하지 않았다.
+- **코너 측정 (읽기 전용)**: 45° 이상 코너 11곳 중 90° 이상 9곳(헤어핀 R25·180° 7곳 #1·3·5·7·9·11·13, R30·90° 2곳 #20·33)이 대상이다. 바깥으로 다른 도로까지 북쪽 끝·직각 코너는 80 m 넘게, 남쪽 끝은 22~70 m(한가운데가 남쪽 귀환 도로에 가장 가깝다).
+- **구현** (`FingerLanesEnvironmentBuilder.cs`):
+  - `CornerGroves` — `Build` 맨 끝(정원 뒤)에서 불러 기존 자리를 하나도 바꾸지 않는다. 화살표판(2.8 m) 뒤 8.5 m·16 m 두 줄에 호 길이 9 m 마다 TreeKit 둥근 나무(높이 5~8 m, 25% 해시로 거름, ±1.5 m 흔들기)를 심는다. 22 m + 깊이/2 + 0~6 m 에 집 후보 3자리(호의 0.2·0.5·0.8)를 두고 25% 를 거른 뒤 `corridor.Available` 를 통과하면 기존 `House`(K8 칸 조립, 3/4칸·2/3층, 색 인덱스 500 + …)로 앞면을 코너 쪽으로 짓는다.
+  - 새 그룹 `12 Corner groves` 를 `MergeByMaterial(…, "Corner")` 로 병합하고 침범 검사에 정점 단위로 넣었다(`ValidateClearance` 의 그룹 목록).
+  - `Hill` — 기존 언덕 18개의 자리·크기는 그대로, 색은 두 개씩 `sage`/`hedge` 번갈아, 언덕마다 다른 초록의 어깨 구 1~2개(0.5~0.8배, 좌우 30~45 m, 반쯤 묻힘). 땅 가장자리(z ±205~217)에 먼 언덕 8 × 2개(폭 125~155, 높이 70~94). 새 재질 없음.
+- **새 파일**: 빌더가 만든 병합 메시 `Assets/_Project/Art/Models/FingerLanesExterior_Corner_<재질>.asset` 14개(`.meta` 는 Unity). 새 스크립트·재질·킷 없음.
+- **측정**: 프리팹 렌더러 1,869 → **1,927**(+58: `01` 35 → 79, `12` 14), 정점 495,455 → **769,847 (+55%)**(`12` 255,076, `01` 8,310 → 27,626). 요청서 셈(+15만~20만)보다 많다 — 나무를 약 100그루로 셈했는데 158그루다. 출발선 프레임(11-20 방법, 타임어택, Game 뷰 841×473): 원문 `[FrameProbe] ChainRushTrackFingerLanes done: statsFrame 2.03 ms (p90 6.78 / p99 8.22), dt 4.20 (4.87 / 6.82), render 1.52, batches 396, SetPass 53, screen vertices 1295610, camera moved 0.0 m, game view 841x473`. 11-20 측정(3.87 ms, 배치 369, 화면 정점 773,344)은 해상도 기록이 없어 순위로 읽지 않는다. p99 는 16.7 ms 아래다.
+- **재빌드 로그 원문**: `Finger Lanes village: 34 houses along the road and 14 on the green's edges (TownHouseKit).`, `Finger Lanes corner groves: 158 trees and 15 houses round 9 corners (42 spots taken by a road or something laid before).`, `Finger Lanes Exterior clearance: nearest renderer bounds 0.83 m outside a road edge (at least 0.7 m below 9 m over the road); 0 parts under the slab; 564712 vertices checked one by one.`, `FingerLanesExterior: 1927 renderers; physics=0; runtime scripts=0; road corridor clear.` 마을 병합 메시는 git 에서 바뀌지 않았다.
+- **검증 (에디터 6000.3.19f1, Unity MCP)**: 컴파일 `*** Tundra build success (9.54 seconds), 7 items updated, 1618 evaluated`(`ProtoHarness.Editor.dll` 19:16:11 > 빌더 수정 19:15:50), Console 에러 0. 영향 평가 — 바뀐 것은 편집기 전용 장식 빌더 → 읽는 곳은 `FingerLanesExterior.prefab` 과 그 병합 메시뿐 → FINGER 장식 프리팹 전용 테스트는 없어 빌더 침범 검사(위) + EditMode 전체. 시뮬·주행에 닿지 않아 Lap·지문은 돌리지 않았다(VERIFICATION §4-4 "장식 빌더"). EditMode (`!Enemy`) `testcasecount="435" result="Passed" passed="435" failed="0" skipped="0"`(10:17:17Z~10:17:26Z, `test-runs.ps1 -Record`), Console 에러 7건은 그 실행의 `GameSettingsTests`(4)·`TrackLookTests`(3) 의도 로그.
+- **전후 렌더** (같은 30자리, scratchpad `finger_survey/`·`finger_survey_after/compare_0~2.png` 에만): 헤어핀 바깥에 나무 띠와 집, 배경이 겹친 능선. 
+- **사용자 확인**: 전후 렌더 보고에 "커밋 병합". 플레이로 한 바퀴 돌았는지는 답에 없다.
+- **확인 못 한 것·두는 것**:
+  - s300(헤어핀 #5 직전)에서 코너 집 하나의 민벽 옆면(연한 하늘색 벽·파란 지붕)이 상자처럼 크게 보인다 — K8 집은 앞면에만 칸이 있다.
+  - 나무가 고른 간격의 줄이라 가로수처럼 읽힐 수 있다.
+  - 병합 전 Codex·`unity-reviewer` 리뷰는 돌리지 않았다(사용자가 바로 병합을 지시).
+  - ② 손가락 사이 안쪽 땅, ④ 잔디 질감, 45° 코너 2곳.
+- **검토했으나 버린 대안**: 코너 집을 기존 `03` 마을 그룹에 넣기(렌더러는 덜 늘지만 마을 병합 메시 전부가 바뀌어 전후 비교가 흐려진다 — SUMMIT 3단계와 같은 판단), 나무만 두기(멀리서 점으로 읽힌다 — SUMMIT 1단계 ①), 언덕용 새 재질(기존 `hedge` 로 충분), 프리뷰 씬 렌더(도로·가드레일이 없어 러너 화면이 아니다).
+
 ## 2026-11-21 · SUMMIT 장식 보충 3단계: K12 Unity 반영 — 길가 소품 631개·정상 표지 5개, 덤불 잎 결 `Grain.Leaf` (`feature/summit-roadside-props`)
 
 - **결정 (사용자 2026-11-21 HANDOFF "다음작업" → 요청서(대화) H1~H7·배치안 "ㄱㄱ" → 정상 표지 실패 보고에 A "추천대로" → 플레이 "보인더 커밋푸쉬 병합")**: K12 `RoadsideNatureKit` 14개를 SUMMIT 에 놓았다. 새 그룹 `11 Roadside props and summit markers` 에 넣고 재질별로 병합했다. 그룹을 따로 둔 이유는 기존 그룹 01~10 의 병합 메시가 그대로 남아 전후 비교가 깔끔해서다. 대가로 렌더러가 7개 는다.
