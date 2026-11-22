@@ -65,7 +65,11 @@ namespace ProtoHarness.Editor.ChainRush
                 ExteriorAssets.Palette("Skyway", "Marking", new Color(0.93f, 0.93f, 0.90f), 0.05f),
                 ExteriorAssets.Palette("Skyway", "Accent", new Color(0.96f, 0.78f, 0.18f), 0.05f),
                 new ExteriorAssets.Lanes(3.6f, 14f, true, false),
-                ExteriorAssets.BuildSky("Skyway", new Color(0.33f, 0.55f, 0.86f), new Color(0.80f, 0.85f, 0.91f), new Color(0.98f, 0.98f, 0.97f), 0.5f, false, 180f, 620f));
+                ExteriorAssets.BuildSky("Skyway", new Color(0.33f, 0.55f, 0.86f), new Color(0.80f, 0.85f, 0.91f), new Color(0.98f, 0.98f, 0.97f), 0.5f, false, 180f, 620f),
+                // A clear city day, a little less warm than PALM's (user 2026-11-22, candidate B of three compared renders):
+                // the race scene's cold sun and flat violet ambient turned the shaded faces navy and violet.
+                new ExteriorAssets.Lighting(new Color(1f, 0.97f, 0.92f), 1.4f,
+                    new Color(0.70f, 0.77f, 0.86f), new Color(0.68f, 0.68f, 0.67f), new Color(0.42f, 0.41f, 0.39f)));
 
         private static Material Require(string name) => ExteriorAssets.Require<Material>(ExteriorAssets.MaterialFolder + name);
 
@@ -151,6 +155,11 @@ namespace ProtoHarness.Editor.ChainRush
             private const string VillageGroup = "02 Village and shops";
             private const string ViaductGroup = "14 Flats and billboards by the viaduct";
             private const string SkylineGroup = "06 Skyline";
+            private const string StreetGroup = "16 Ground streets";
+            // The streets run on the lawn blocks' 40 m grid (Land), filling the 6 m between two blocks; a block-long run is
+            // laid in StreetPieces pieces so each can be refused on its own, and only within StreetReach of the road.
+            private const float StreetGrid = 40f, StreetWidth = 6f, StreetReach = 200f;
+            private const int StreetPieces = 8;
             private const string SkylineKitName = "SkylineTowerKit";
             private static readonly string[] SkylineBays = { "SkylineCurtain", "SkylineRibbon", "SkylineFin" };
             // Every skyline tower is a whole number of kit bays wide with this much plain wall at either corner: the
@@ -178,7 +187,8 @@ namespace ProtoHarness.Editor.ChainRush
             private readonly Material mint = Require("M_ArtStadiumMint.mat");
             private readonly Material amber = Require("M_ArtStadiumAmber.mat");
             private readonly Material concrete = Require("M_StadiumSportsConcrete.mat");
-            private readonly Material paving = Palette("Paving", new Color(0.80f, 0.77f, 0.72f));
+            // A step darker than 0.80, 0.77, 0.72, which read as glaring cream under the track's own light (user 2026-11-22).
+            private readonly Material paving = Palette("Paving", new Color(0.70f, 0.68f, 0.64f));
             private readonly Material lawn = Palette("Lawn", new Color(0.48f, 0.66f, 0.36f));
             private readonly Material asphalt = Palette("Asphalt", new Color(0.30f, 0.31f, 0.33f));
             private readonly Material sidewalk = Palette("Sidewalk", new Color(0.86f, 0.72f, 0.66f));
@@ -284,11 +294,12 @@ namespace ProtoHarness.Editor.ChainRush
                 if (deck == null) throw new InvalidOperationException("Skyway continuation group is missing: " + DeckGroup);
                 Transform land = root.transform.Find(LandGroup), outer = root.transform.Find(OuterGroup), village = root.transform.Find(VillageGroup);
                 Transform viaduct = root.transform.Find(ViaductGroup), skyline = root.transform.Find(SkylineGroup);
-                if (land == null || outer == null || village == null || viaduct == null || skyline == null)
-                    throw new InvalidOperationException("Skyway land, outer city, village, viaduct flats or skyline group is missing.");
-                // The merged land, outer city, village, flats and skyline spread round the road, so their bounds always
-                // hold it: vertex by vertex.
-                corridor.ValidateClearance(root, Ground + 0.01f, piers, new[] { deck, land, outer, village, viaduct, skyline });
+                Transform streets = root.transform.Find(StreetGroup);
+                if (land == null || outer == null || village == null || viaduct == null || skyline == null || streets == null)
+                    throw new InvalidOperationException("Skyway land, outer city, village, viaduct flats, skyline or street group is missing.");
+                // The merged land, outer city, village, flats, skyline and streets spread round the road, so their bounds
+                // always hold it: vertex by vertex.
+                corridor.ValidateClearance(root, Ground + 0.01f, piers, new[] { deck, land, outer, village, viaduct, skyline, streets });
             }
 
             internal GameObject Build(Scene scene)
@@ -420,12 +431,71 @@ namespace ProtoHarness.Editor.ChainRush
                     Box("Pier band", pier, new Vector3(0f, 2.2f, 0f), new Vector3(2.8f, 0.5f, 3f), yellow);
                     Box("Hammerhead cap", pier, new Vector3(0f, height - 0.45f, 0f), new Vector3(half * 2f - 0.8f, 0.9f, 3.4f), steel);
                 }
+                // Last, so every place before stays as it was.
+                Transform streets = Group(StreetGroup, root.transform);
+                GroundStreets(streets);
                 MergeByMaterial(landscape, MeshPrefix, "Land");
                 MergeByMaterial(outerCity, MeshPrefix, "Outer");
                 MergeByMaterial(village, MeshPrefix, "Village");
                 MergeByMaterial(viaduct, MeshPrefix, "Viaduct");
                 MergeByMaterial(skyline, MeshPrefix, "Skyline");
+                MergeByMaterial(streets, MeshPrefix, "Streets");
                 return root;
+            }
+
+            // Streets on the lawn blocks' grid, where the road looks down on bare pale paving (user 2026-11-22, the SKYWAY
+            // survey): 6 m of asphalt in the gap between two blocks, a dashed middle line and now and then a parked car.
+            // Piece by piece only where nothing stands (corridor.Available), so a street stops short of a house or the road;
+            // the pieces reserve nothing, as nothing is placed after them. Flat like the avenue (at most 0.09 m above the
+            // land), so the clearance check passes them anywhere outside the road.
+            private void GroundStreets(Transform parent)
+            {
+                var road = new List<Vector3>();
+                for (double s = 0d; s < length; s += 10d) road.Add(line.FrameAt(s).Position);
+                float west = -85f - FoundationX * 0.5f, south = -55f - FoundationZ * 0.5f;
+                float run = (StreetGrid - StreetWidth) / StreetPieces;
+                int pieces = 0, cars = 0, refused = 0, index = 0;
+                for (float x = west + StreetGrid; x <= west + FoundationX - StreetGrid; x += StreetGrid)
+                    for (float z = south + StreetGrid; z <= south + FoundationZ - StreetGrid; z += StreetGrid)
+                    {
+                        // The crossing, then the block-long runs east and north of it.
+                        Lay(new Vector3(x, Ground, z), Vector3.forward, StreetWidth, false);
+                        for (int k = 0; k < StreetPieces; k++)
+                        {
+                            float along = StreetWidth * 0.5f + (k + 0.5f) * run;
+                            Lay(new Vector3(x + along, Ground, z), Vector3.right, run, true);
+                            Lay(new Vector3(x, Ground, z + along), Vector3.forward, run, true);
+                        }
+                    }
+                // The count the merge hides (the merged group keeps no pieces).
+                Debug.Log($"Skyway ground streets: {pieces} pieces and {cars} parked cars within {StreetReach} m of the road ({refused} pieces refused by a road or something already there).");
+
+                void Lay(Vector3 centre, Vector3 forward, float pieceLength, bool isRun)
+                {
+                    float radius = new Vector2(StreetWidth, pieceLength).magnitude * 0.5f;
+                    bool near = false;
+                    foreach (Vector3 p in road)
+                    {
+                        float dx = centre.x - p.x, dz = centre.z - p.z;
+                        if (dx * dx + dz * dz < StreetReach * StreetReach) { near = true; break; }
+                    }
+                    if (!near) return;
+                    if (!corridor.Available(centre, radius)) { refused++; return; }
+                    pieces++;
+                    Transform at = Group("Street piece", parent);
+                    at.SetPositionAndRotation(centre, Quaternion.LookRotation(forward));
+                    Box("Street asphalt", at, new Vector3(0f, 0.045f, 0f), new Vector3(StreetWidth, 0.03f, pieceLength), asphalt);
+                    if (!isRun) return;
+                    Box("Street dash", at, new Vector3(0f, 0.075f, 0f), new Vector3(0.18f, 0.03f, pieceLength * 0.5f), paint);
+                    index++;
+                    if (Hash(index * 37 + 11) > 0.18f) return;
+                    int side = Hash(index * 41 + 12) < 0.5f ? -1 : 1;
+                    Transform car = Group("Parked car", at);
+                    car.localPosition = new Vector3(side * 1.9f, 0f, 0f);
+                    car.localRotation = Quaternion.Euler(0f, side < 0 ? 180f : 0f, 0f);
+                    Car(car, index + 9000);
+                    cars++;
+                }
             }
 
             // Pale paving over the whole district with lawn blocks on a 40 m grid, and under the high road a town avenue:

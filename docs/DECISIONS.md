@@ -10,6 +10,32 @@
 
 ---
 
+## 2026-11-22 · SKYWAY 장식 보충 1단계: 트랙 조명(B) + 지상 거리 2,573조각·주차된 차 438대 + 포장 한 단계 어둡게 (`feature/skyway-decor-fill`)
+
+- **결정 (사용자 2026-11-22 HANDOFF "다음작업 후보" → 추천 "SKYWAY 장식 보충 + 트랙 조명" "추천대로 ㄱㄱ" → 조사 후보 ①~④ 중 추천 ③+① "추천대로만 ㄱㄱ, 다른 작업 없다" → 요청서(대화) "ㄱㄱ" → 조명 비교에 "B ㄱㄱ" → 전후 렌더·프레임 보고에 "ㄱㄱ"(Q2 포장 어둡게 포함으로 받음) → "플레이 확인했다 커밋 병합 ㄱㄱ")**: SKYWAY 그늘면의 남색·보라를 트랙 조명으로 고치고, 도로에서 내려다보이는 흰 포장 바닥을 지상 거리로 채웠다. D:/PCUBE 에 같은 작업은 없다(사용자 "다른 작업 없다").
+- **조사 방법 (FINGER 1단계와 같음)**: 타임어택 SKYWAY 출발 대기 중 게임 카메라를 복사한 임시 카메라로 중심선 50 m 마다 1280×720 32장(랩 1,599.4 m). 카메라 오프셋은 출발선(S 0) 프레임 기준으로 재서 자리마다 같게 둔다 — 출발 대기여야 맞는다. 후보: ① 빈 포장 바닥(32장 중 약 12장 — 1,500×1,200 m 포장 상자 한 장에 40 m 격자의 약 55% 만 잔디, `Land`) ② 잔디 블록이 비어 있음 ③ 그늘면 남색·보라(서킷 씬의 차가운 해·Flat 앰비언트 — PALM 과 같은 원인) ④ 고가 옆 아파트 민벽 옆면. 고속도로 직선 s450~800 은 충분해서 뺐다.
+- **조명 비교**: 플레이 중 `RenderSettings`·해만 바꿔 s100·300·1050·1450 을 지금 / A(PALM 값) / B 로 찍고 되돌렸다(원래 값 `3;0.83,0.93,1;1.9;0.34,0.38,0.54;…` 로 복원 확인). 둘 다 남색을 풀지만 A 는 포장이 모래색이라 PALM 과 겹친다 → **B**: 해 `(1, 0.97, 0.92)` × 1.4, 앰비언트 하늘 `(0.70, 0.77, 0.86)` · 지평선 `(0.68, 0.68, 0.67)` · 땅 `(0.42, 0.41, 0.39)`.
+- **구현** (`SkywayEnvironmentBuilder.cs`):
+  - `BuildLook` 이 `ExteriorAssets.Lighting` 을 넘긴다(PALM 과 같은 길). `TrackLook_Skyway.asset` 은 `ownLight: true`.
+  - `GroundStreets` — `Build` 맨 끝(병합 직전)에서 불러 기존 자리를 하나도 바꾸지 않는다. 잔디 블록과 같은 40 m 격자선 위, 블록 사이 6 m 틈에 아스팔트 6 m(땅 위 0.06 m, 고가 아래 대로와 같은 높이 규칙) + 가운데 점선, 교차점 한 조각 + 블록 한 칸을 8조각(4.25 m)으로. 조각마다 `corridor.Available` 를 통과해야 놓고 예약은 하지 않는다(뒤에 놓는 것이 없다). 도로 중심선 10 m 표본에서 200 m 안쪽만. 18% 조각에 기존 `Car`(한쪽 ±1.9 m). 새 그룹 `16 Ground streets` 를 `MergeByMaterial(…, "Streets")` 로 병합하고 침범 검사(정점 단위) 목록에 넣었다.
+  - 포장 `Paving` `(0.80, 0.77, 0.72)` → `(0.70, 0.68, 0.64)` — B 조명 아래에서 크림색으로 떴다(Q2).
+- **새 파일**: 빌더가 만든 병합 메시 `Assets/_Project/Art/Models/SkywayExterior_Streets_<재질>.asset` 10개(`.meta` 는 Unity). 새 스크립트·재질·킷 없음. 기존 병합 메시는 git 에서 바뀌지 않았다.
+- **측정**: 프리팹 렌더러 2,036 → **2,046**, 정점 964,126 → **1,332,790 (+38%)** — 거리 그룹 368,664 중 바퀴(`M_SkywayTire`) 217,248(59%, 차 438대 × 바퀴 4 원기둥), 아스팔트 61,752, 점선 58,128.
+- **프레임** (11-20 방법·탐침, 타임어택 SKYWAY 출발선, 에디터 6000.3.19f1, 이 PC): 거리 켬 `[FrameProbe] ChainRushTrackSkyway done: statsFrame 7.81 ms (p90 10.33 / p99 12.06), dt 7.54 (10.07 / 11.03), render 5.62, batches 497, SetPass 85, screen vertices 2465779, camera moved 0.0 m, game view 841x473`. 같은 플레이에서 `16 Ground streets` 만 끈 측정 `statsFrame 9.40 ms (p90 13.65 / p99 16.90), dt 9.44 (13.26 / 15.02), render 7.10, batches 479, SetPass 85, screen vertices 1728459, …, game view 841x473`. 거리의 프레임 비용은 잡음 안이다. 끈 화면 정점이 11-20 측정(1,728,248)과 거의 같은데 프레임은 4.43 → 9.40 ms 다 — 이번 변경 밖의 PC 상태 차이로 보이며 원인은 확인 못 했다. 그래서 바퀴는 줄이지 않았다.
+- **재빌드 로그 원문**: `Skyway ground streets: 2573 pieces and 438 parked cars within 200 m of the road (2847 pieces refused by a road or something already there).`, `Skyway Exterior clearance: nearest renderer bounds 0.85 m outside a road edge (at least 0.7 m below 9 m over the road); 200 parts under the slab; 1188450 vertices checked one by one.`, `SkywayExterior: 2046 renderers; physics=0; runtime scripts=0; road corridor clear.`
+- **검증 (에디터 6000.3.19f1, Unity MCP)**: 컴파일 `*** Tundra build success (11.04 seconds), 13 items updated, 1618 evaluated`(조명·거리), 포장 뒤 `*** Tundra build success (4.95 seconds), 7 items updated, 1618 evaluated`, Console 에러 0(경고는 리로드 때 `Deleting invalid font reference.`). 영향 평가 — 바뀐 것은 편집기 전용 SKYWAY 장식 빌더와 `TrackLook_Skyway.asset` → 읽는 곳은 SKYWAY 장식 프리팹·병합 메시, `RaceAssembler.UseLight` → 빌더 침범 검사(위) + EditMode `TrackLookTests` + PlayMode `Race_SkywayHighway_*`(`TrackLook_Skyway` 를 읽는다, `ChainRushFlowTests.cs:982-989`)·`Race_WithATrackLook*`. 시뮬에 닿지 않아 Lap·지문은 돌리지 않았다(VERIFICATION §4-4 "장식 빌더").
+  - EditMode `TrackLookTests` (`!Enemy`) `testcasecount="10" result="Passed" passed="10" failed="0" skipped="0"` (05:18:26Z), 포장 뒤 다시 같은 값 (05:29:07Z).
+  - PlayMode (`!Device !Enemy !NetEndReplay !^Lap$`) `testcasecount="6" result="Passed" passed="6" failed="0" skipped="0"` (05:19:02Z~05:19:11Z). 그 뒤 포장 색·재빌드 프리팹·빌더가 바뀌어(`test-runs.ps1 -Last -Passed` 판정) 커밋 `0dfb37c` 에서 같은 선택을 다시 돌렸다: `testcasecount="6" result="Passed" passed="6" failed="0" skipped="0"` (05:32:19Z~05:32:27Z). 첫 실행 중 Console 에러 `RaceAssembler: tick 1197 came after 1464; this run will keep no ghost.` 는 롤백 테스트가 `LogAssert.Expect` 로 기대하는 것(`ChainRushFlowTests.cs:1077`).
+  - 세 실행 모두 `test-runs.ps1 -Record`.
+- **전후 렌더** (같은 32자리, scratchpad `skyway_survey/`·`skyway_survey_after/compare_0~7.png` 에만): 조명으로 s300 빌딩 남색 → 회청 유리·벽돌 기둥, 파스텔이 제 색. 거리는 중간 거리(s50·1400~1500)에서 격자·차로 읽힌다. 포장 색 변경 뒤 렌더는 찍지 않았다(사용자 플레이로 봄).
+- **사용자 플레이 확인**: "플레이 확인했다".
+- **확인 못 한 것·두는 것**:
+  - 도로 바로 옆 빈 포장(s100 양쪽, s200·1050 왼쪽, s1100 오른쪽, s1550) — 침범 여유와 집·나무 예약에 막혀 거리 조각이 못 들어간다(거부 2,847). 인도·화단 띠나 공원 소품이 필요하다.
+  - ② 잔디 블록 채우기, ④ 아파트 옆면 칸, 바퀴 정점(가: 차 비율 8%, 나: 거리 전용 상자 바퀴 차).
+  - 11-20 대비 프레임이 느린 원인.
+  - 병합 전 Codex·`unity-reviewer` 리뷰는 돌리지 않았다(사용자가 바로 병합을 지시).
+- **검토했으나 버린 대안**: 조명 A(PALM 값 — 포장이 모래색, PALM 과 겹침), 서킷 공용 조명 바꾸기(다른 트랙을 다시 봐야 함 — PALM 때와 같은 판단), 거리를 기존 `01 Landscape` 에 넣기(그 병합 메시 전부가 바뀌어 전후 비교가 흐려짐), 포장 전체에 거리(1,500×1,200 m — 보이지 않는 곳에 정점), 거리 조각을 예약(옆 조각이 서로 막힌다), 포장 텍스처(상자 하나라 UV 가 1,500 m 로 늘어난다).
+
 ## 2026-11-22 · 부스터 표시·이펙트 강화: 슬롯은 키우고 숨 쉬게, 꼬리는 겹으로, 바람 선 12개 첫 터짐, 가장자리 띠는 부스터 동안 (`feature/fx-booster-look`)
 
 - **결정 (사용자 2026-11-22, HANDOFF 2절 8번 "UI 디자인 전반 개선"·"부스터 이펙트 개선" → 범위 "HUD 부스터 표시, 러너 부스터 이펙트, 화면 쪽 속도 효과" → 피드백 "1. 슬롯 미미하다 2. 꼬리와 바람선 둘다. 현재는 이펙트가 너무 심심하다 3. 민트 띠가 나오는데 이게 보이는 시간을 좀 더 늘리고 화면상 더 잘보이게" → 요청서(대화) "ㄱㄱ" → 플레이 "부스터 슬롯 그림이 이상하다 … 이 모양이 추후에 깨진다" → 고친 뒤 "우선 괜찮다")**: 표현 계층만 바꿨다. 시뮬은 그대로다. 수치는 모두 `FeedbackLook` 상수다.
