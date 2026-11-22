@@ -20,8 +20,24 @@ namespace ProtoHarness.ChainRush.Visuals
         public const float EdgeTargetScale = 0.8f;
         public const float ArrowGap = 8f;
         public const float BoostRingTime = 0.3f;
+        // The screen's mint edges (user 2026-11-22 "보이는 시간을 좀 더 늘리고 화면상 더 잘보이게"): a burst over BoostFlashTime
+        // when a booster fires, then held at BoostEdgeHold of it while the booster lasts, gone BoostEdgeFadeTime after it.
         public const float BoostFlashTime = 0.4f;
+        public const float BoostEdgeHold = 0.55f;
+        public const float BoostEdgeFadeTime = 0.3f;
+        public const int BoostEdgeLayers = 7;
+        public const float BoostEdgeLayerWidth = 16f;
+        public const float BoostEdgeAlpha = 0.55f;
+        public const int BoostEdgeStreaks = 12;
+        public const float BoostEdgeStreakCycle = 0.45f;
         public const float GaugeBurstTime = 0.4f;
+        // The HUD's booster slots (user 2026-11-22 "슬롯 미미하다"): a filled slot breathes every SlotBreathPeriod seconds, a
+        // slot just filled comes in SlotGainScale times its size, white, settling over SlotGainTime, and a spent one bursts
+        // SlotSpendSpread px out.
+        public const float SlotBreathPeriod = 0.8f;
+        public const float SlotGainTime = 0.3f;
+        public const float SlotGainScale = 1.4f;
+        public const float SlotSpendSpread = 30f;
         public const float HookRingTime = 0.3f;
         public const float BracketTightenTime = 0.25f;
         public const float BracketStartScale = 1.6f;
@@ -47,19 +63,28 @@ namespace ProtoHarness.ChainRush.Visuals
         public const float SwingTailAfter = 0.4f;
         public const float SwingTailTime = 0.25f;
         public const float SwingTailWidth = 0.12f;
+        // Under a booster (user 2026-11-22 "이펙트가 너무 심심하다") the tail is layered: a white core down its middle and a thin
+        // tail of its colour off each shoulder, CoreTailWidth and ShoulderTailWidth wide, ShoulderTailSide metres to either
+        // side and ShoulderTailHeight up from the runner's root. Each keeps the booster tail's length.
         public const float BoostTailTime = 0.25f;
-        public const float BoostTailWidth = 0.25f;
-        public const float SwingBoostTailWidth = 0.325f;
+        public const float BoostTailWidth = 0.4f;
+        public const float SwingBoostTailWidth = 0.5f;
+        public const float CoreTailWidth = 0.1f;
+        public const float CoreTailAlpha = 0.75f;
+        public const float ShoulderTailWidth = 0.08f;
+        public const float ShoulderTailSide = 0.35f;
+        public const float ShoulderTailHeight = 0.3f;
         public const float TailGlow = 1.2f;
-        // The white wind lines: a mirrored pair starts every WindLineEvery seconds and lives WindLineTime, from WindLineAhead
-        // metres ahead of the runner, WindLineRadius round a centre WindLineHeight up, reaching WindLineReach metres back.
+        // The white wind lines: every line at once as a booster starts, then a mirrored pair every WindLineEvery seconds,
+        // each living WindLineTime, from WindLineAhead metres ahead of the runner, WindLineRadius round a centre
+        // WindLineHeight up, reaching WindLineReach metres back.
         public const float WindLineEvery = 0.07f;
         public const float WindLineTime = 0.28f;
         public const float WindLineAhead = 0.8f;
         public const float WindLineHeight = 0.4f;
         public const float WindLineRadius = 0.5f;
-        public const float WindLineReach = 5f;
-        public const float WindLineWidth = 0.14f;
+        public const float WindLineReach = 7f;
+        public const float WindLineWidth = 0.2f;
         public const float WindLineAlpha = 0.85f;
         // The speed the HUD shows is km/h (user 2026-11-06); the simulation stays in m/s.
         public const float KmhPerMetrePerSecond = 3.6f;
@@ -104,6 +129,17 @@ namespace ProtoHarness.ChainRush.Visuals
             => Mathf.Sin(since * (Mathf.PI * 6f / MissShakeTime)) * MissShakeSize * Fade(since, MissShakeTime);
 
         public static float Kmh(float metresPerSecond) => metresPerSecond * KmhPerMetrePerSecond;
+
+        // How strong the screen's mint edges are: 1 as a booster fires, easing to BoostEdgeHold while it lasts, and from
+        // there to 0 over BoostEdgeFadeTime once it is over (sinceEnd, negative while it lasts or before any). A booster cut
+        // inside its burst still lets the burst finish.
+        public static float BoostEdge(float sinceBoost, bool boosting, float sinceEnd)
+        {
+            float burst = Fade(sinceBoost, BoostFlashTime);
+            if (sinceBoost < 0f) return 0f;
+            float hold = boosting ? BoostEdgeHold : BoostEdgeHold * Fade(sinceEnd, BoostEdgeFadeTime);
+            return Mathf.Max(burst, hold);
+        }
 
         // A cue's size against its resting size, life seconds after which it is gone: CueStartScale when it appears, slowing
         // into 1, and down to nothing as its time runs out.

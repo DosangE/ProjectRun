@@ -10,7 +10,7 @@ namespace ProtoHarness.ChainRush.Tutorial
     {
         public enum Kind { Goal, Drive, Turn, Reverse, Pole, Rope, Gauge, Boost }
 
-        public static void Draw(Kind kind, Rect area, GUIStyle keys, GUIStyle small, GUIStyle item, Color goalColor)
+        public static void Draw(Kind kind, Rect area, GUIStyle keys, GUIStyle small, Color goalColor)
         {
             NightUi.Block(area, NightUi.Background);
             Matrix4x4 previous = GUI.matrix;
@@ -18,6 +18,8 @@ namespace ProtoHarness.ChainRush.Tutorial
             GUI.matrix = previous * Matrix4x4.TRS(
                 new Vector3(area.center.x - 500f * scale, area.center.y - 130f * scale, 0f),
                 Quaternion.identity, new Vector3(scale, scale, 1f));
+            // The briefing can be read while the game waits, so its gauge breathes on the unscaled clock.
+            float breath = ChainRushHud.SlotBreath(Time.unscaledTime);
             switch (kind)
             {
                 case Kind.Goal:
@@ -80,8 +82,8 @@ namespace ProtoHarness.ChainRush.Tutorial
                     Swing(new Vector2(205, 130));
                     Key(325, 190, 150, "SHIFT", keys);
                     ChainRushHud.DrawArrow(new Vector2(380, 130), Vector2.right, NightUi.Accent);
-                    ChainRushHud.DrawBoostGauge(510, 62, 0.65f, 0f, -1, small, item);
-                    ChainRushHud.DrawBoostGauge(510, 154, 1f, 0f, -1, small, item);
+                    ChainRushHud.DrawBoostGauge(510, 62, 0.65f, 0f, -1, 0f, -1, breath, small);
+                    ChainRushHud.DrawBoostGauge(510, 154, 1f, 0f, -1, 0f, -1, breath, small);
                     GUI.Label(new Rect(510, 222, 430, 28), "스윙 → 게이지 → ▶▶ 한 칸", small);
                     break;
                 case Kind.Boost:
@@ -92,7 +94,7 @@ namespace ProtoHarness.ChainRush.Tutorial
                     Runner(new Vector2(630, 100));
                     for (int i = 0; i < 4; i++)
                         NightUi.Block(new Rect(540, 70 + i * 20, 65, 3), NightUi.Accent);
-                    ChainRushHud.DrawBoostGauge(510, 180, 1f, 0f, -1, small, item);
+                    ChainRushHud.DrawBoostGauge(510, 180, 1f, 0f, -1, 0f, -1, breath, small);
                     GUI.Label(new Rect(100, 194, 370, 28), "↑ 를 떼면 부스터 중단", small);
                     break;
                 default: throw new ArgumentOutOfRangeException(nameof(kind), kind, "TutorialFigures: unknown figure.");
