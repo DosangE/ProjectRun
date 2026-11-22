@@ -25,7 +25,7 @@
   - 컴파일 `*** Tundra build success (23.78 seconds), 29 items updated, 1618 evaluated`, Console Error 0(경고는 기존 `RaceServer.cs` CS0105 하나).
   - EditMode `testcasecount="24" result="Passed" passed="24" failed="0" skipped="0"` (2026-11-22 04:01:02Z~04:01:03Z).
   - PlayMode (위 목록) `testcasecount="95" result="Passed" passed="95" failed="0" skipped="0"` (04:01:40Z~04:04:01Z).
-  - 슬롯 도형으로 바꾼 뒤 컴파일 `*** Tundra build success (6.34 seconds)`, PlayMode (`ChainRushTests`·`ChainRushTutorialTests`·`ChainRushBotRaceTests`·Flow HUD 6묶음) `testcasecount="71" result="Passed" passed="71" failed="0" skipped="0"` (04:23:41Z~04:25:27Z). 그 뒤 `Assets/` 변경 없음.
+  - 슬롯 도형으로 바꾼 뒤 컴파일 `*** Tundra build success (6.34 seconds)`, PlayMode (`ChainRushTests`·`ChainRushTutorialTests`·`ChainRushBotRaceTests`·Flow HUD 6묶음) `testcasecount="71" result="Passed" passed="71" failed="0" skipped="0"` (04:23:41Z~04:25:27Z). 그 두 파일을 읽는 EditMode `TutorialCourseTests` `testcasecount="17" result="Passed" passed="17" failed="0" skipped="0"` (04:40:35Z, 커밋 `3f57c74` 위). 그 뒤 `Assets/` 변경 없음(커밋하지 않은 7개는 테스트가 다시 쓴 `M_PalmTower*.mat`).
 - **사용자 플레이 확인 (2026-11-22)**: "우선 괜찮다".
 - **확인 못 한 것**: 튜토리얼 게이지 페이지의 큰 슬롯 배치(좌표로만 확인), 플레이어 빌드에서의 겹 꼬리, 프레임 비용(꼬리 3 → 6개, 선 8 → 12개 — `SpeedTrails` 는 `ChainRushHud.Awake` 가 붙이는 `ControlFeedback` 에만 있다, `ChainRushHud.cs:210`; 봇전 상대 복사본에도 HUD 가 살아 있는지는 확인 못 했다).
 - **후속 (사용자 같은 말, "추후 작업으로 기록")**: 바람 선에 살짝의 디테일, 스윙 가능할 때의 사각형(봉 표시) 조금 더 크게, 다인원(봇전·멀티)의 드래프트(앞선 러너 뒤에 2 s 있으면 잠시 가속), 순위별 속도 보정. HANDOFF 2절 8번에 넣었다.
