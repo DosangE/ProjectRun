@@ -10,6 +10,29 @@
 
 ---
 
+## 2026-11-22 · 몸싸움 전략: 접촉이 스윙을 끊으면 0.5 s 봉을 걸지 못한다 — 시뮬 규칙, 모든 러너 (`feature/swing-contact-cooldown`)
+
+- **결정 (사용자 2026-11-21 HANDOFF 2절 8번 "몸싸움 전략 — 스윙 시도 쿨타임" → 요청서(대화) S1~S5 "추천대로 진행" → 플레이 "잘 적용됐다" → 2026-11-22 "접촉 때만 / 모든 시도" 질문에 "추천대로")**: S1 시뮬 규칙(플레이어·봇 같음), S2 접촉으로 스윙이 **끊긴 때만**, S3 길이 0.5 s(25틱, 봇의 `BotTuning.ContactRehookTicks` 와 같은 값), S4 봇 컨트롤러의 기다림은 그대로 둔다, S5 쿨타임 동안 봉 표시를 회색(`Muted`)·최소 채움으로.
+- **왜 접촉 때만인가 (모든 스윙 시도가 아니라)**: 막으려던 것은 "부딪혀 끊겨도 바로 다시 걸면 몸싸움이 무의미" 하나다. 봉이 없을 때 누르기는 아무것도 하지 않고 비용도 없다(`RunnerMotor.cs:561-568`) — 연타로 얻는 것이 없다. 모든 시도에 걸면 봉이 닿기 직전 이르게 누른 한 번이 0.5 s 를 잠가 코너 하나를 잃고, 연속 코너에서 놓자마자 다음 봉을 거는 것도 막힐 수 있으며(코너 사이 시간은 재지 않았다), 봇 규칙도 함께 바뀐다.
+- **구현**:
+  - `RacerState` — 필드 `hookCooldownTicks`, `Snapshot.HookCooldownTicks`, `ref int HookCooldownTicks`. `Reset`·`Capture`·`Restore` 에 넣었다.
+  - `RunnerMotor` — `ContactRehookTicks = Ticks.FromSeconds(0.5f)`(`:177`). `ApplyContact` 가 스윙 중이었을 때만 쿨타임을 건다(`:704`, `SwingTicks = 0` 앞). `Step` 이 틱마다 하나씩 줄이고(`:284`), `TryHookPole` 이 그동안 걸지 않는다(`:568`). 복귀(`Respawn`)는 0 으로(`:539`). 접촉 뒤 1~24번째 틱은 막히고 25번째 틱에 건다. HUD 용 `IsHookCoolingDown`(`:173`).
+  - `Net/SimSnapshotCodec` — 새 필드 쓰기·읽기 한 줄씩(`RespawnHoldTicks` 다음). 스냅샷 바이트가 4바이트 길어진다.
+  - `ChainRushHud.DrawPoleCandidate` — 스윙 중이 아니고 쿨타임이면 `Muted`·`FeedbackLook.TargetFillMin`(`:502-504`).
+- **테스트**: `ChainRushContactTests.Contact_BrokenSwing_HooksNoPoleForHalfASecond_ThenHooks_AndAContactWithoutASwingStartsNoWait`(`:218`) — 스윙 없는 접촉은 기다림이 없고, 끊긴 스윙은 1~24틱 안 걸리고 25틱째 건다. 고치기 전 실행은 `No hook 1 ticks after the break … Expected: False But was: True` 로 실패했다(10:30:01Z, `testcasecount="1" result="Failed(Child)"`).
+- **영향 평가**: 바뀐 것은 러너 상태·접촉·봉 걸기·스냅샷 코덱 → 읽는 곳은 접촉(`RaceField`), 리플레이·롤백(스냅샷), Net 보정(코덱), 봇(`RaceBot` 의 끊김 감지), 순위·HUD → `ChainRushContactTests`·`ChainRushReplayTests`·`ChainRushRollbackTests`·`RaceBotTests`·`ChainRushBotRaceTests`·`ChainRushFlowTests`·`NetReconcileTests`·`NetRemoteTests`·`RaceOrderTests`·`RaceStandingsTests`·`RaceStandingsTextTests` + 서킷 지문 + EditMode 전체. **Lap 테스트는 돌리지 않았다** — 혼자 달리는 판에는 접촉이 없어 쿨타임이 걸리지 않고, 서킷 지문이 그대로인 것으로 확인했다.
+- **검증 (에디터 6000.3.19f1, Unity MCP, 모두 `test-runs.ps1 -Record`)**:
+  - PlayMode (위 11개 클래스) `testcasecount="137" result="Passed" passed="137" failed="0" skipped="0"` (2026-11-21 10:32:23Z~10:36:03Z). 서킷 지문 `0xEF92FB76BFD1D767`(1700틱) 그대로, 프리셋 해시 `0x4B9A912753168093`·`0x6114B46DFECECB90` 이 이 문서의 기존 값과 같다.
+  - 봇 레이스 리플레이 해시가 바뀌었다: Stadium `0x69338C2718691296`, SummitDrop `0x15F5E0EB48DCE00F`. 진단으로 `ContactRehookTicks = 0` 을 잠시 넣어 돌린 PlayMode `ChainRushReplayTests` 2건 `testcasecount="2" result="Passed" passed="2" failed="0"` (10:37:33Z, 진단용 코드 — 되돌린 뒤 컴파일 `Tundra build success (2.45 seconds)`)에서 Stadium `0x25213E870B131B5A`, SummitDrop 는 위와 같았다. 순위·결승 틱·끊김·접촉 수(Stadium 0번 3위 3054틱 끊김 1 접촉 7, 1번 1위 2988틱 끊김 0 접촉 4)는 두 실행이 같다. 그래서 쿨타임 유무의 차이는 `FieldTrace` 가 묶는 새 상태 바이트뿐이고 **봇의 움직임은 바뀌지 않았다**(S4 의 가정 — 봇이 이미 25틱 기다린다). 11-19 기록값과의 차이는 그 사이 dev 의 다른 변경(PALM 복귀 수정 등)에서 왔다.
+  - EditMode (`!Enemy`) `testcasecount="435" result="Passed" passed="435" failed="0" skipped="0"` (10:39:20Z~10:39:29Z).
+- **사용자 플레이 확인 (2026-11-22)**: "잘 적용됐다".
+- **확인 못 한 것·두는 것**:
+  - 같은 코너에서 스윙을 놓았다가 바로 다시 걸어 이득(줄 길이·속도 새로 잡기)이 있는지 — 있으면 "모든 시도" 쿨타임을 다시 본다.
+  - 봇의 `BotTuning.ContactRehookTicks`(`RaceBot.cs:114`)는 이제 시뮬 규칙과 겹친다. 같은 25틱이라 동작 차이는 없고, 지우면 봇 튜닝 인자·`BotTuningTests` 가 바뀌어 이번에 두었다.
+  - 병합 전 Codex·`unity-reviewer` 리뷰는 돌리지 않았다.
+  - Net 레이스(M7 까지 보류)는 돌리지 않았다. 코덱은 `NetReconcileTests`·`NetRemoteTests` 로 보았다.
+- **검토했으나 버린 대안**: 모든 스윙 시도에 0.5 s(위 이유), 봇만 기다리는 지금 상태 유지(플레이어는 바로 다시 걸 수 있어 몸싸움이 한쪽에만 걸린다).
+
 ## 2026-11-21 · FINGER 장식 보충 1단계: 헤어핀·직각 코너 바깥에 나무 158그루·집 15채, 언덕 능선 (`feature/finger-decor-fill`)
 
 - **결정 (사용자 2026-11-21 HANDOFF 2절 8번 "다른 트랙의 장식 보충" → B 트랙 "FINGER ㄱㄱ" → 조사 후보 ①~④ 중 "1_3 ㄱㄱ" → 요청서(대화) F1·F2 "추천대로 ㄱㄱ" → 전후 렌더 보고에 "커밋 병합")**: ① 코너 바깥 빈 잔디, ③ 단조로운 배경 언덕을 기존 킷만으로 채웠다. F1 코너 집 넣음, F2 먼 언덕 둘째 줄 넣음.

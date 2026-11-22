@@ -499,6 +499,13 @@ namespace ProtoHarness.ChainRush
             float flash = FeedbackLook.Fade(since, swinging ? FeedbackLook.HookRingTime : FeedbackLook.PoleEnterTime);
             Color color = Color.Lerp(Mint, Color.white, flash);
             float fill = swinging ? 0f : Mathf.Lerp(FeedbackLook.TargetFillMin, FeedbackLook.TargetFillMax, FeedbackLook.Pulse(since));
+            // Just after a contact broke the swing the pole cannot be hooked yet (RunnerMotor.ContactRehookTicks): its mark
+            // goes grey and stops pulsing, so a press that hooks nothing does not read as a lost key (user 2026-11-21, S5).
+            if (!swinging && player.IsHookCoolingDown)
+            {
+                color = Muted;
+                fill = FeedbackLook.TargetFillMin;
+            }
             DrawPinnedTarget(SwingLook.PoleBite(pole), size, color, fill, width, height, scale);
         }
 
