@@ -10,6 +10,26 @@
 
 ---
 
+## 2026-11-22 · 부스터 표시·이펙트 강화: 슬롯은 키우고 숨 쉬게, 꼬리는 겹으로, 바람 선 12개 첫 터짐, 가장자리 띠는 부스터 동안 (`feature/fx-booster-look`)
+
+- **결정 (사용자 2026-11-22, HANDOFF 2절 8번 "UI 디자인 전반 개선"·"부스터 이펙트 개선" → 범위 "HUD 부스터 표시, 러너 부스터 이펙트, 화면 쪽 속도 효과" → 피드백 "1. 슬롯 미미하다 2. 꼬리와 바람선 둘다. 현재는 이펙트가 너무 심심하다 3. 민트 띠가 나오는데 이게 보이는 시간을 좀 더 늘리고 화면상 더 잘보이게" → 요청서(대화) "ㄱㄱ" → 플레이 "부스터 슬롯 그림이 이상하다 … 이 모양이 추후에 깨진다" → 고친 뒤 "우선 괜찮다")**: 표현 계층만 바꿨다. 시뮬은 그대로다. 수치는 모두 `FeedbackLook` 상수다.
+  - **슬롯** (`ChainRushHud.DrawBoostGauge`): 48 → 64 px(안쪽 50), 찬 슬롯은 민트 테두리가 0.8 s 주기로 숨 쉬고(MAX 면 흰색 쪽으로), 새로 찬 칸은 1.4배·흰색에서 0.3 s 에 제자리로, 쓸 때 퍼짐 12 → 30 px. 칸이 찬 순간은 `ControlFeedback.SinceSlotGained`·`GainedSlot`(게이지 정수 부분이 오를 때, 런 첫 프레임은 그대로 받는다).
+  - **슬롯 표시는 도형**: `▶▶` 글자(OS 동적 폰트)가 "추후에 깨진다" — `DrawBoostMark` 가 `DrawArrow` 처럼 1 px 막대로 삼각형 둘을 그린다. 글자 스타일 인자는 `DrawBoostGauge`·`TutorialFigures.Draw` 에서 뺐다. 깨지는 순간 자체는 재현하지 않았다.
+  - **꼬리** (`SpeedTrails`): 부스터 0.25 → 0.4, 스윙 + 부스터 금색 0.325 → 0.5, 부스터 계열(부스터·스윙 + 부스터·부스트존)에 흰 심 꼬리(0.1)와 양 어깨 꼬리(0.08, 옆 0.35 m·위 0.3 m)를 겹친다. 길이 0.25 s 는 그대로(2026-11-06 "0.5 s 는 길다"). 머티리얼이 URP Lit 이라 정점 색 그라데이션을 못 써서 겹으로 했다(`ControlFeedback.cs:95`).
+  - **바람 선**: 8 → 12개(대칭 6쌍), 길이 5 → 7 m, 굵기 0.14 → 0.2, 부스터가 켜지는 순간 12개를 한꺼번에, 이후 0.07 s 마다 한 쌍.
+  - **가장자리 띠** (`DrawBoostFlash`, `FeedbackLook.BoostEdge`): 0.4 s 고정 → 처음 0.4 s 터짐, 부스터가 켜진 동안 0.55 유지(`ControlFeedback.Boosting`, 그래플 강화 포함), 끝나면 0.3 s 에 사라짐. 폭 60 → 112 px(7겹 × 16), 최대 알파 0.3 → 0.55, 흐르는 선 7 → 12줄(띠가 보이는 동안 계속). 좌우만 — 가운데 시야는 비운다.
+- **버린 대안**: 파티클 줄기·소닉붐 고리·몸 잔상(2026-11-06 에 버린 것), 러너 몸 발광(러너 머티리얼을 건드리면 고스트·로비 프리뷰가 엮인다 — 원하면 다음 단계), 새 셰이더·머티리얼 에셋·포스트 프로세싱.
+- **테스트 사양 변경 (요청서에서 승인)**: `ChainRushTests.ChainRushHud_BoosterSlotSpent_FlashesThenFades` → `…_FlashesHoldsWhileItLastsThenFades`(0.45 s 뒤 0 → 부스터 동안 유지, 끝나고 0.3 s 뒤 0). 새 테스트: `ChainRushHud_BoostEdge_BurstsThenHoldsThenFades`, `ControlFeedback_GaugeSlotFills_IsNoticedNamingTheSlot`, `SpeedTrails_BoosterStart_ShootsEveryWindLineAndLayersTheTail`.
+- **영향 평가**: `FeedbackLook`·`ControlFeedback`·`SpeedTrails`·`ChainRushHud`·`TutorialFigures`(표현, 시뮬 참조 없음) → HUD·튜토리얼 그림·러너 이펙트 → `ChainRushTests`·`ChainRushPresentationTests`·`ChainRushInputSourceTests`·`ChainRushTutorialTests`·`ChainRushCornerSwingTests.SpeedTrails_`·`ChainRushBotRaceTests`·`ChainRushFlowTests` HUD 6묶음(`select-tests.ps1` 의 `ChainRushHud.cs` 줄) + EditMode `SpeedTrailsTests`·`TutorialCourseTests`. 서킷 지문·Lap 은 돌리지 않았다(시뮬 무변경). 도구의 "전체" 는 에디터 버전 차이 파일 때문이다.
+- **검증 (에디터 6000.3.19f1, Unity MCP, 모두 `test-runs.ps1 -Record`)**:
+  - 컴파일 `*** Tundra build success (23.78 seconds), 29 items updated, 1618 evaluated`, Console Error 0(경고는 기존 `RaceServer.cs` CS0105 하나).
+  - EditMode `testcasecount="24" result="Passed" passed="24" failed="0" skipped="0"` (2026-11-22 04:01:02Z~04:01:03Z).
+  - PlayMode (위 목록) `testcasecount="95" result="Passed" passed="95" failed="0" skipped="0"` (04:01:40Z~04:04:01Z).
+  - 슬롯 도형으로 바꾼 뒤 컴파일 `*** Tundra build success (6.34 seconds)`, PlayMode (`ChainRushTests`·`ChainRushTutorialTests`·`ChainRushBotRaceTests`·Flow HUD 6묶음) `testcasecount="71" result="Passed" passed="71" failed="0" skipped="0"` (04:23:41Z~04:25:27Z). 그 뒤 `Assets/` 변경 없음.
+- **사용자 플레이 확인 (2026-11-22)**: "우선 괜찮다".
+- **확인 못 한 것**: 튜토리얼 게이지 페이지의 큰 슬롯 배치(좌표로만 확인), 플레이어 빌드에서의 겹 꼬리, 프레임 비용(꼬리 3 → 6개, 선 8 → 12개 — `SpeedTrails` 는 `ChainRushHud.Awake` 가 붙이는 `ControlFeedback` 에만 있다, `ChainRushHud.cs:210`; 봇전 상대 복사본에도 HUD 가 살아 있는지는 확인 못 했다).
+- **후속 (사용자 같은 말, "추후 작업으로 기록")**: 바람 선에 살짝의 디테일, 스윙 가능할 때의 사각형(봉 표시) 조금 더 크게, 다인원(봇전·멀티)의 드래프트(앞선 러너 뒤에 2 s 있으면 잠시 가속), 순위별 속도 보정. HANDOFF 2절 8번에 넣었다.
+
 ## 2026-11-22 · 몸싸움 전략: 접촉이 스윙을 끊으면 0.5 s 봉을 걸지 못한다 — 시뮬 규칙, 모든 러너 (`feature/swing-contact-cooldown`)
 
 - **결정 (사용자 2026-11-21 HANDOFF 2절 8번 "몸싸움 전략 — 스윙 시도 쿨타임" → 요청서(대화) S1~S5 "추천대로 진행" → 플레이 "잘 적용됐다" → 2026-11-22 "접촉 때만 / 모든 시도" 질문에 "추천대로")**: S1 시뮬 규칙(플레이어·봇 같음), S2 접촉으로 스윙이 **끊긴 때만**, S3 길이 0.5 s(25틱, 봇의 `BotTuning.ContactRehookTicks` 와 같은 값), S4 봇 컨트롤러의 기다림은 그대로 둔다, S5 쿨타임 동안 봉 표시를 회색(`Muted`)·최소 채움으로.

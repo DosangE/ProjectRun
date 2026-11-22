@@ -12,6 +12,8 @@ namespace ProtoHarness.ChainRush.Visuals
     // pointed at both ends, shot in mirrored pairs from all round the runner and fanning back ("여러 방향으로"), read from
     // the user's reference clip. Loose particle streaks were too irregular and sonic rings too round and too many. All of
     // it hangs on the runner's root, so it does not depend on the runner's temporary model (DECISIONS 2026-11-06).
+    // Under a booster the tail is layered, a white core and a thin tail off each shoulder, and the wind lines all shoot
+    // out at once as it starts (user 2026-11-22 "이펙트가 너무 심심하다").
     public sealed class SpeedTrails : IDisposable
     {
         public enum Style { None, Swing, Booster, SwingBooster, BoostZone }
@@ -21,16 +23,21 @@ namespace ProtoHarness.ChainRush.Visuals
         private const float WeakestLine = 0.05f;
         // Each line's direction round the runner, in degrees from its right over the top to its left, none into the road,
         // and how far it fans out from straight back. Line i mirrors line Length - 1 - i. Fixed, so the lines stay regular.
-        private static readonly float[] LineAround = { -10f, 20f, 50f, 75f, 105f, 130f, 160f, 190f };
-        private static readonly float[] LineFan = { 30f, 20f, 30f, 20f, 20f, 30f, 20f, 30f };
+        private static readonly float[] LineAround = { -10f, 10f, 30f, 50f, 70f, 85f, 95f, 110f, 130f, 150f, 170f, 190f };
+        private static readonly float[] LineFan = { 30f, 20f, 30f, 20f, 30f, 20f, 20f, 30f, 20f, 30f, 20f, 30f };
         // The order the mirrored pairs fire in, each named by its first line, so the wave jumps about the runner.
-        private static readonly int[] PairOrder = { 0, 3, 1, 2 };
+        private static readonly int[] PairOrder = { 0, 3, 5, 1, 4, 2 };
         private static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
         private static readonly int EmissionColorId = Shader.PropertyToID("_EmissionColor");
         private readonly Transform runner;
         private readonly TrailRenderer boostTail;
         private readonly TrailRenderer swingTail;
         private readonly TrailRenderer swingBoostTail;
+        // The booster's layers (Booster, SwingBooster, BoostZone): a white core and a tail off each shoulder.
+        private readonly TrailRenderer coreTail;
+        private readonly TrailRenderer leftTail;
+        private readonly TrailRenderer rightTail;
+        private bool wasWindy;
         private readonly LineRenderer[] lines = new LineRenderer[LineAround.Length];
         private readonly float[] lineBornAt = new float[LineAround.Length];
         private readonly Vector3[] points = new Vector3[LinePoints];
@@ -43,14 +50,20 @@ namespace ProtoHarness.ChainRush.Visuals
         public bool BoostTailEmitting => boostTail != null && boostTail.emitting;
         public bool SwingTailEmitting => swingTail != null && swingTail.emitting;
         public bool SwingBoostTailEmitting => swingBoostTail != null && swingBoostTail.emitting;
+        // The core and both shoulder tails, which go together.
+        public bool LayerTailsEmitting => coreTail != null && coreTail.emitting && leftTail.emitting && rightTail.emitting;
+        public static int WindLineCount => LineAround.Length;
 
-        public bool WindLinesShown
+        public bool WindLinesShown => WindLinesOn > 0;
+
+        public int WindLinesOn
         {
             get
             {
+                int on = 0;
                 for (int i = 0; i < lines.Length; i++)
-                    if (lines[i] != null && lines[i].enabled) return true;
-                return false;
+                    if (lines[i] != null && lines[i].enabled) on++;
+                return on;
             }
         }
 
@@ -77,6 +90,9 @@ namespace ProtoHarness.ChainRush.Visuals
             Color bothColor = FeedbackLook.SwingBoostGold;
             bothColor.a = 0.8f;
             SetTint(swingBoostTail, bothColor, FeedbackLook.TailGlow);
+            coreTail = MakeTail("Boost trail core", material, FeedbackLook.CoreTailWidth, FeedbackLook.BoostTailTime);
+            leftTail = MakeTail("Boost trail left", material, FeedbackLook.ShoulderTailWidth, FeedbackLook.BoostTailTime);
+            rightTail = MakeTail("Boost trail right", material, FeedbackLook.ShoulderTailWidth, FeedbackLook.BoostTailTime);
             // Pointed at both ends, fullest a little behind the leading tip.
             var spindle = new AnimationCurve(new Keyframe(0f, 0f), new Keyframe(0.35f, 1f), new Keyframe(1f, 0f));
             for (int i = 0; i < lines.Length; i++) lines[i] = MakeLine(i, material, spindle);
@@ -126,23 +142,48 @@ namespace ProtoHarness.ChainRush.Visuals
             bool both = style == Style.SwingBooster;
             bool boost = zone || style == Style.Booster;
             float strength = zone ? padShare : 1f;
+            bool windy = boost || both;
             boostTail.enabled = swingTail.enabled = swingBoostTail.enabled = true;
+            coreTail.enabled = leftTail.enabled = rightTail.enabled = true;
             boostTail.emitting = boost;
             swingTail.emitting = style == Style.Swing;
             swingBoostTail.emitting = both;
+            coreTail.emitting = leftTail.emitting = rightTail.emitting = windy;
+            Vector3 right = Vector3.Cross(Vector3.up, forward);
+            Vector3 shoulder = runner.position + Vector3.up * FeedbackLook.ShoulderTailHeight;
+            leftTail.transform.position = shoulder - right * FeedbackLook.ShoulderTailSide;
+            rightTail.transform.position = shoulder + right * FeedbackLook.ShoulderTailSide;
+            float tailTime = FeedbackLook.BoostTailTime * Mathf.Lerp(0.5f, 1f, strength);
+            Color tailColor = both ? FeedbackLook.SwingBoostGold : zone ? FeedbackLook.BoostZoneGreen : NightUi.Accent;
+            tailColor.a = Mathf.Lerp(0.25f, 0.6f, strength);
             if (boost)
             {
-                Color tailColor = zone ? FeedbackLook.BoostZoneGreen : NightUi.Accent;
-                boostTail.time = FeedbackLook.BoostTailTime * Mathf.Lerp(0.5f, 1f, strength);
-                tailColor.a = Mathf.Lerp(0.25f, 0.6f, strength);
+                boostTail.time = tailTime;
                 SetTint(boostTail, tailColor, FeedbackLook.TailGlow);
             }
-            if (boost || both)
+            if (windy)
             {
+                coreTail.time = leftTail.time = rightTail.time = tailTime;
+                Color core = Color.white;
+                core.a = FeedbackLook.CoreTailAlpha * Mathf.Lerp(0.4f, 1f, strength);
+                SetTint(coreTail, core, 1.5f);
+                Color side = tailColor;
+                side.a = Mathf.Min(1f, tailColor.a + 0.2f);
+                SetTint(leftTail, side, FeedbackLook.TailGlow);
+                SetTint(rightTail, side, FeedbackLook.TailGlow);
                 lineStrength = strength;
-                if (strength > WeakestLine && now >= nextLineAt) StartPair(now);
+                // As a booster starts every line shoots out at once, then the pairs take turns.
+                if (!wasWindy && strength > WeakestLine) StartAll(now);
+                else if (strength > WeakestLine && now >= nextLineAt) StartPair(now);
             }
-            UpdateLines(forward, now);
+            wasWindy = windy;
+            UpdateLines(forward, right, now);
+        }
+
+        private void StartAll(float now)
+        {
+            for (int i = 0; i < lines.Length; i++) StartLine(i, now);
+            nextLineAt = now + FeedbackLook.WindLineEvery;
         }
 
         private void StartPair(float now)
@@ -160,9 +201,8 @@ namespace ProtoHarness.ChainRush.Visuals
             lines[index].enabled = true;
         }
 
-        private void UpdateLines(Vector3 forward, float now)
+        private void UpdateLines(Vector3 forward, Vector3 right, float now)
         {
-            Vector3 right = Vector3.Cross(Vector3.up, forward);
             for (int i = 0; i < lines.Length; i++)
                 DrawLine(i, (now - lineBornAt[i]) / FeedbackLook.WindLineTime, forward, right);
         }
@@ -199,11 +239,15 @@ namespace ProtoHarness.ChainRush.Visuals
         {
             Current = Style.None;
             nextLineAt = 0f;
+            wasWindy = false;
             for (int i = 0; i < lines.Length; i++)
                 if (lines[i] != null) lines[i].enabled = false;
             HideTail(boostTail);
             HideTail(swingTail);
             HideTail(swingBoostTail);
+            HideTail(coreTail);
+            HideTail(leftTail);
+            HideTail(rightTail);
         }
 
         private static void HideTail(TrailRenderer tail)
@@ -227,6 +271,9 @@ namespace ProtoHarness.ChainRush.Visuals
             if (boostTail != null) UnityEngine.Object.Destroy(boostTail.gameObject);
             if (swingTail != null) UnityEngine.Object.Destroy(swingTail.gameObject);
             if (swingBoostTail != null) UnityEngine.Object.Destroy(swingBoostTail.gameObject);
+            if (coreTail != null) UnityEngine.Object.Destroy(coreTail.gameObject);
+            if (leftTail != null) UnityEngine.Object.Destroy(leftTail.gameObject);
+            if (rightTail != null) UnityEngine.Object.Destroy(rightTail.gameObject);
             for (int i = 0; i < lines.Length; i++)
                 if (lines[i] != null) UnityEngine.Object.Destroy(lines[i].gameObject);
         }

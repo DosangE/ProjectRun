@@ -215,7 +215,9 @@ namespace ProtoHarness.ChainRush
         public float RespawnFade => RespawnLook.FadeAlpha(respawn.Since(Time.time));
 
         // These envelopes belong to rendered frames, not ticks, and never feed back into the simulation.
-        public float BoostFlash => game.IsRunning ? FeedbackLook.Fade(feedback.SinceBoost(Time.time), FeedbackLook.BoostFlashTime) : 0f;
+        // The mint edges: a burst as a booster fires, held while it lasts, gone shortly after (FeedbackLook.BoostEdge).
+        public float BoostFlash => game.IsRunning
+            ? FeedbackLook.BoostEdge(feedback.SinceBoost(Time.time), feedback.Boosting, feedback.SinceBoostEnd(Time.time)) : 0f;
         public float HookFlash => game.IsRunning ? Mathf.Max(
             FeedbackLook.Fade(feedback.SinceHook(Time.time), FeedbackLook.HookRingTime),
             FeedbackLook.Fade(feedback.SinceSwing(Time.time), FeedbackLook.HookRingTime)) : 0f;
@@ -532,7 +534,7 @@ namespace ProtoHarness.ChainRush
             GUI.Label(new Rect(x + 48, y + 26, 1024, 28),
                 "STAGE " + (tutorial.StageIndex + 1) + " / " + tutorial.StageCount + "   ·   " + tutorial.CurrentStage.Name, small);
             TutorialCourse.Page page = tutorial.CurrentPage;
-            TutorialFigures.Draw(page.Figure, new Rect(x + 48, y + 72, 1024, 280), waiting, small, button, GoalColor);
+            TutorialFigures.Draw(page.Figure, new Rect(x + 48, y + 72, 1024, 280), waiting, small, GoalColor);
             NightUi.Block(new Rect(x + 48, y + 376, 1024, 1), Row);
             GUI.Label(new Rect(x + 48, y + 400, 1024, 54), page.Title, heading);
             GUI.Label(new Rect(x + 48, y + 468, 1024, 96), page.Body, body);
@@ -714,28 +716,34 @@ namespace ProtoHarness.ChainRush
             GUI.matrix = previous;
         }
 
-        // Layered edge strips fall off toward the view, with short lines moving inward as the burst fades.
+        // Layered edge strips on the left and right fall off toward the view, the middle left clear; short lines keep
+        // running inward from them for as long as the edges show.
         private void DrawBoostFlash(float width, float height)
         {
             float fade = BoostFlash;
             if (fade <= 0f) return;
-            for (int layer = 0; layer < 5; layer++)
+            const int Layers = FeedbackLook.BoostEdgeLayers;
+            const float LayerWidth = FeedbackLook.BoostEdgeLayerWidth;
+            for (int layer = 0; layer < Layers; layer++)
             {
                 Color color = Mint;
-                color.a = fade * (0.3f - layer * 0.05f);
-                float x = layer * 12f;
-                NightUi.Block(new Rect(x, 0f, 12f, height), color);
-                NightUi.Block(new Rect(width - x - 12f, 0f, 12f, height), color);
+                color.a = fade * FeedbackLook.BoostEdgeAlpha * (1f - layer / (float)Layers);
+                float x = layer * LayerWidth;
+                NightUi.Block(new Rect(x, 0f, LayerWidth, height), color);
+                NightUi.Block(new Rect(width - x - LayerWidth, 0f, LayerWidth, height), color);
             }
-            for (int i = 0; i < 7; i++)
+            const int Streaks = FeedbackLook.BoostEdgeStreaks;
+            float reach = Layers * LayerWidth * 1.8f;
+            for (int i = 0; i < Streaks; i++)
             {
-                Color color = Mint;
-                color.a = fade * 0.7f;
-                float x = 12f + (1f - fade) * (45f + i * 7f);
-                float y = height * (0.18f + i * 0.1f);
-                float length = (45f + (i % 3) * 18f) * fade;
-                NightUi.Block(new Rect(x, y, length, 2f), color);
-                NightUi.Block(new Rect(width - x - length, y, length, 2f), color);
+                float phase = Mathf.Repeat(Time.time / FeedbackLook.BoostEdgeStreakCycle + i * 0.618f, 1f);
+                Color color = Color.Lerp(Color.white, Mint, phase);
+                color.a = Mathf.Min(1f, fade * 1.2f) * Mathf.Sin(phase * Mathf.PI);
+                float length = (70f + (i % 3) * 30f) * (0.6f + 0.4f * fade);
+                float x = phase * reach;
+                float y = height * (0.08f + i * (0.84f / (Streaks - 1)));
+                NightUi.Block(new Rect(x, y - 1.5f, length, 3f), color);
+                NightUi.Block(new Rect(width - x - length, y - 1.5f, length, 3f), color);
             }
         }
 
@@ -744,39 +752,85 @@ namespace ProtoHarness.ChainRush
         // Only how the gauge is shown: the slots are still RacerState.Gauge's whole part, its fraction the bar.
         private void DrawBoost(float width, float height)
         {
-            DrawBoostGauge(width / 2f - (300f + (int)RacerState.MaxGauge * 56f) / 2f, height - 184f,
-                player.Gauge, FeedbackLook.Fade(feedback.SinceBoost(Time.time), FeedbackLook.GaugeBurstTime),
-                feedback.SpentBoostSlot, small, button);
+            float now = Time.time;
+            DrawBoostGauge(width / 2f - (GaugeBarWidth + (int)RacerState.MaxGauge * (GaugeGap + GaugeBox)) / 2f, height - 196f,
+                player.Gauge, FeedbackLook.Fade(feedback.SinceBoost(now), FeedbackLook.GaugeBurstTime), feedback.SpentBoostSlot,
+                FeedbackLook.Fade(feedback.SinceSlotGained(now), FeedbackLook.SlotGainTime), feedback.GainedSlot,
+                SlotBreath(now), small);
         }
 
-        // Shared by the live HUD and briefing figures; values and styles come from the caller.
-        internal static void DrawBoostGauge(float left, float top, float gauge, float burst, int spentBoostSlot,
-            GUIStyle labelStyle, GUIStyle itemStyle)
+        // A ready slot's mark, two triangles pointing right like a fast-forward. Drawn from column blocks as DrawArrow is:
+        // the "▶▶" glyphs of the OS font broke up after a while (user 2026-11-22 "이 모양이 추후에 깨진다").
+        internal static void DrawBoostMark(Rect item, Color color)
         {
-            const float BarWidth = 300f, Box = 48f, Gap = 8f;
+            const float Column = 1f;
+            float tall = item.height * 0.46f;
+            float wide = tall * 0.78f;
+            float overlap = wide * 0.18f;
+            float x = item.center.x - (wide * 2f - overlap) * 0.5f;
+            float mid = item.center.y;
+            int columns = Mathf.Max(1, Mathf.RoundToInt(wide / Column));
+            for (int t = 0; t < 2; t++)
+            {
+                float start = x + t * (wide - overlap);
+                for (int i = 0; i < columns; i++)
+                {
+                    float height = tall * (1f - (i + 0.5f) / columns);
+                    NightUi.Block(new Rect(start + i * Column, mid - height * 0.5f, Column, height), color);
+                }
+            }
+        }
+
+        private const float GaugeBarWidth = 300f, GaugeBox = 64f, GaugeGap = 8f;
+
+        // 0..1 and back every FeedbackLook.SlotBreathPeriod seconds: how far a filled slot has brightened.
+        internal static float SlotBreath(float time) => 0.5f - 0.5f * Mathf.Cos(time * (Mathf.PI * 2f / FeedbackLook.SlotBreathPeriod));
+
+        // Shared by the live HUD and briefing figures; values and styles come from the caller. spend and gain run 1 to 0
+        // after a slot was spent or filled (spentSlot, gainedSlot); breath is SlotBreath.
+        internal static void DrawBoostGauge(float left, float top, float gauge, float spend, int spentSlot, float gain,
+            int gainedSlot, float breath, GUIStyle labelStyle)
+        {
+            const float BarWidth = GaugeBarWidth, Box = GaugeBox, Gap = GaugeGap, Inset = 7f, Rim = 3f;
             int boxes = (int)RacerState.MaxGauge;
             int boosters = Mathf.Min(boxes, Mathf.FloorToInt(gauge));
             bool full = boosters >= boxes;
             float fill = full ? 1f : gauge - boosters;
             NightUi.Block(new Rect(left, top, BarWidth, Box), Ink);
-            GUI.Label(new Rect(left + 18, top + 7, 220, 20), "BOOST  /  CTRL", labelStyle);
-            GUI.Label(new Rect(left + BarWidth - 78, top + 7, 60, 20), full ? "MAX" : Mathf.FloorToInt(fill * 100f) + "%", labelStyle);
-            var bar = new Rect(left + 18, top + 32, BarWidth - 36, 8);
+            GUI.Label(new Rect(left + 18, top + 12, 220, 20), "BOOST  /  CTRL", labelStyle);
+            GUI.Label(new Rect(left + BarWidth - 78, top + 12, 60, 20), full ? "MAX" : Mathf.FloorToInt(fill * 100f) + "%", labelStyle);
+            var bar = new Rect(left + 18, top + 42, BarWidth - 36, 10);
             NightUi.Block(bar, Row);
             bar.width *= fill;
             NightUi.Block(bar, Mint);
             for (int i = 0; i < boxes; i++)
             {
                 var slot = new Rect(left + BarWidth + Gap + i * (Gap + Box), top, Box, Box);
-                NightUi.Block(slot, Ink);
-                var item = new Rect(slot.x + 6, slot.y + 6, Box - 12, Box - 12);
-                NightUi.Block(item, i < boosters ? Mint : Row);
-                if (i < boosters) GUI.Label(item, "▶▶", itemStyle);
-                if (i == spentBoostSlot && burst > 0f)
+                bool ready = i < boosters;
+                if (ready)
                 {
-                    Color color = Color.Lerp(Mint, Color.white, burst);
-                    color.a = burst;
-                    float spread = (1f - burst) * 12f;
+                    // A glowing rim that breathes; every slot ready (MAX) breathes toward white.
+                    Color rim = Color.Lerp(Mint, Color.white, full ? 0.5f * breath : 0f);
+                    rim.a = 0.45f + 0.45f * breath;
+                    NightUi.Block(new Rect(slot.x - Rim, slot.y - Rim, slot.width + Rim * 2f, slot.height + Rim * 2f), rim);
+                }
+                NightUi.Block(slot, Ink);
+                var item = new Rect(slot.x + Inset, slot.y + Inset, Box - Inset * 2f, Box - Inset * 2f);
+                Color face = ready ? Color.Lerp(Mint, Color.white, 0.2f * breath) : Row;
+                if (ready && i == gainedSlot && gain > 0f)
+                {
+                    // Just filled: in larger and white, settling to its place.
+                    float grow = (FeedbackLook.SlotGainScale - 1f) * gain * item.width * 0.5f;
+                    item = new Rect(item.x - grow, item.y - grow, item.width + grow * 2f, item.height + grow * 2f);
+                    face = Color.Lerp(face, Color.white, gain);
+                }
+                NightUi.Block(item, face);
+                if (ready) DrawBoostMark(item, Ink);
+                if (i == spentSlot && spend > 0f)
+                {
+                    Color color = Color.Lerp(Mint, Color.white, spend);
+                    color.a = spend;
+                    float spread = (1f - spend) * FeedbackLook.SlotSpendSpread;
                     NightUi.Block(new Rect(item.x - spread, item.y - spread, item.width + spread * 2f, item.height + spread * 2f), color);
                 }
             }
