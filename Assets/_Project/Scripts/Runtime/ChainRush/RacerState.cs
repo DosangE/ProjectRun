@@ -42,6 +42,7 @@ namespace ProtoHarness.ChainRush
         private bool grounded;
         private double lastGroundedS;
         private int respawnHoldTicks;
+        private int hookCooldownTicks;
 
         // Every field of this class except the rules, by value (the guard test in SnapshotTests keeps the two in step).
         // Treat it as read-only. A copy taken between ticks puts the racer back exactly where it was.
@@ -76,6 +77,7 @@ namespace ProtoHarness.ChainRush
             public bool Grounded;
             public double LastGroundedS;
             public int RespawnHoldTicks;
+            public int HookCooldownTicks;
         }
 
         public RacerState(RunRules rules)
@@ -110,6 +112,8 @@ namespace ProtoHarness.ChainRush
         public ref double LastGroundedS => ref lastGroundedS;
         // Ticks left in which a runner just put back on the track stands still and ignores its controls; zero otherwise.
         public ref int RespawnHoldTicks => ref respawnHoldTicks;
+        // Ticks left in which a runner whose swing another runner's contact broke hooks no pole; zero otherwise.
+        public ref int HookCooldownTicks => ref hookCooldownTicks;
 
         // Index into the grapple's anchor array rather than a Transform, so the state stays plain data.
         public int AnchorIndex => anchorIndex;
@@ -188,6 +192,7 @@ namespace ProtoHarness.ChainRush
             missUntilTick = 0;
             lastGroundedS = 0d;
             respawnHoldTicks = 0;
+            hookCooldownTicks = 0;
         }
 
         public Snapshot Capture() => new Snapshot
@@ -221,6 +226,7 @@ namespace ProtoHarness.ChainRush
             Grounded = grounded,
             LastGroundedS = lastGroundedS,
             RespawnHoldTicks = respawnHoldTicks,
+            HookCooldownTicks = hookCooldownTicks,
         };
 
         public void Restore(in Snapshot snapshot)
@@ -254,6 +260,7 @@ namespace ProtoHarness.ChainRush
             grounded = snapshot.Grounded;
             lastGroundedS = snapshot.LastGroundedS;
             respawnHoldTicks = snapshot.RespawnHoldTicks;
+            hookCooldownTicks = snapshot.HookCooldownTicks;
         }
 
         public void Attach(int index, float length)

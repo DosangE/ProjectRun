@@ -210,6 +210,53 @@ namespace ProtoHarness.Tests.PlayMode
             Assert.That(input.Consume().SwingPressed, Is.True, "Once the wait ends the same pole is hooked.");
         }
 
+        // A runner whose swing a contact broke hooks no corner pole for 0.5 s, whoever presses: the wait is the simulation's
+        // (user 2026-11-21, swing cooldown S1-S3 "추천대로 진행"), so the player holding the swing key every tick waits as a bot
+        // does, and hooks again on the 25th tick after the break. A contact that breaks no swing starts no wait. Same STADIUM
+        // corner spot as the bot test above.
+        [UnityTest, Timeout(120000)]
+        public IEnumerator Contact_BrokenSwing_HooksNoPoleForHalfASecond_ThenHooks_AndAContactWithoutASwingStartsNoWait()
+        {
+            yield return Load();
+            Begin();
+            ParkUnused();
+            RaceWorld runner = player, other = worlds[1];
+            var spot = new Vector3(3.854f, 1.05f, 140.09f);
+            var press = new TickInput(0f, false, false, false, swingHeld: true, swingPressed: true);
+            const int wait = 25; // 0.5 s at 50 ticks a second.
+            Assert.That(RunnerMotor.ContactRehookTicks, Is.EqualTo(wait));
+
+            Place(runner, spot, Vector3.zero);
+            Assert.That(runner.Player.IsGrounded, Is.True, "precondition: on the road.");
+            Assert.That(runner.Player.TryFindPole(out Vector3 pole), Is.True, "precondition: the corner pole is in reach.");
+            Place(other, runner.Player.transform.position + Vector3.right * 0.3f, Vector3.zero);
+            Contact();
+            Assert.That(Field.ContactSwingBreaks(0), Is.EqualTo(0), "precondition: no swing to break.");
+            ParkUnused();
+            Place(runner, spot, Vector3.zero);
+            runner.Player.Step(press);
+            Assert.That(runner.Player.IsSwinging, Is.True, "A contact that broke no swing leaves the next press free to hook.");
+
+            ParkUnused();
+            Place(runner, spot, Vector3.zero);
+            PoleSwing.End(runner.Game.Racer, Vector3.zero, runner.Game.Racer.Heading);
+            PoleSwing.Hook(runner.Game.Racer, runner.Player.transform.position, pole);
+            Place(other, runner.Player.transform.position + Vector3.right * 0.3f, Vector3.zero);
+            Contact();
+            Assert.That(Field.ContactSwingBreaks(0), Is.EqualTo(1), "precondition: the contact broke the swing.");
+            Assert.That(runner.Player.IsSwinging, Is.False);
+            ParkUnused();
+            for (int tick = 1; tick < wait; tick++)
+            {
+                Place(runner, spot, Vector3.zero);
+                runner.Player.Step(press);
+                Assert.That(runner.Player.IsSwinging, Is.False, $"No hook {tick} ticks after the break, the pole in reach and the key pressed.");
+            }
+            Place(runner, spot, Vector3.zero);
+            runner.Player.Step(press);
+            Assert.That(runner.Player.IsSwinging, Is.True, "The 25th tick after the break hooks the same pole.");
+        }
+
         [UnityTest, Timeout(120000)]
         public IEnumerator Contact_NoOverlap_DoesNotMoveAgainOrChangeSwingTimersAndGroundedPushUpdatesReturnS()
         {
