@@ -41,7 +41,6 @@ namespace ProtoHarness.ChainRush.Flow
 
         [SerializeField] private TrackChoice[] tracks;
         [SerializeField] private RunnerProfile[] runners;
-        [SerializeField] private Texture2D nightBackground;
         [SerializeField] private Texture2D runnerArtwork;
         private BestRecords records = BestRecords.Player;
         // Set in Awake, not here: GameSettings reads PlayerPrefs when it is made, which Unity refuses in a field initializer.
@@ -69,22 +68,23 @@ namespace ProtoHarness.ChainRush.Flow
                 trackPage.RefreshRecords();
             }
         }
-        // Where the settings page reads and writes the settings (the player's; a test gives its own).
+        // Where the lobby reads and writes settings (the player's; a test gives its own).
         public GameSettings Settings
         {
             get => settings;
             set
             {
                 settings = value ?? throw new ArgumentNullException(nameof(value));
-                if (context != null) context.Settings = settings;
+                if (context == null) return;
+                context.Settings = settings;
+                RestoreRunner();
             }
         }
         public Page CurrentPage => page.Id;
         // The track page's record line for a track: "최고 기록 (빠름)  01:19.2  ·  BETA", or "빠름 기록 없음".
         public string TrackRecordText(int index) => trackPage.RecordText(index);
         public int Cursor => cursor;
-        // The runner the setup names: on the runner page the highlighted one (a click only picks it since 2026-10-20),
-        // elsewhere the one last entered with. No longer drawn: the RACE SETUP panel gave way to the descriptions (2026-10-21).
+        // The runner the lobby colors follow: on the runner page the highlighted one, elsewhere the last launched one.
         public int SetupRunner => page.Id == Page.Runner ? cursor : context.Runner;
         // The highlighted entry's description on the main, track and speed pages; empty on the others.
         public string Description => page.Description(cursor);
@@ -122,9 +122,15 @@ namespace ProtoHarness.ChainRush.Flow
             }
             for (int i = 0; i < runners.Length; i++)
             {
-                if (runners[i] == null || !runners[i].TryValidate(out string error))
+                if (runners[i] == null || !runners[i].TryValidate(out _))
                 {
                     Debug.LogError($"LobbyMenu: runner {i} is missing or invalid.", this);
+                    enabled = false;
+                    return;
+                }
+                if (!runners[i].TryValidateLobbyColors(out string error))
+                {
+                    Debug.LogError(error, this);
                     enabled = false;
                     return;
                 }
@@ -143,6 +149,7 @@ namespace ProtoHarness.ChainRush.Flow
                 return;
             }
             context = new LobbyContext(tracks, runners, preview, settings, records);
+            RestoreRunner();
             trackPage = new TrackPage(context);
             pages = new LobbyPage[]
             {
@@ -154,6 +161,22 @@ namespace ProtoHarness.ChainRush.Flow
                 if (pages[i].Id != (Page)i)
                     throw new InvalidOperationException($"LobbyMenu: page {i} is {pages[i].Id}, not {(Page)i}; keep the list in Page order.");
             page = pages[(int)Page.Main];
+        }
+
+        private void RestoreRunner()
+        {
+            string name = settings.LastRunner;
+            if (name.Length > 0)
+            {
+                for (int i = 0; i < runners.Length; i++)
+                {
+                    if (!string.Equals(runners[i].DisplayName, name, StringComparison.Ordinal)) continue;
+                    context.Runner = i;
+                    return;
+                }
+                Debug.LogError($"LobbyMenu: the last runner '{name}' is not in the lobby's runners; starting from {runners[0].DisplayName}.", this);
+            }
+            context.Runner = 0;
         }
 
         private void OnValidate()
@@ -264,6 +287,8 @@ namespace ProtoHarness.ChainRush.Flow
                     RaceLaunch.Request(BuildSetup());
                     leaving = true;
                     SceneManager.LoadScene(RaceLaunch.RaceScene);
+                    // Queue the scene before saving so a preferences error cannot strand the launch request.
+                    settings.SetLastRunner(runners[context.Runner].DisplayName);
                     break;
                 case LobbyPage.Step.Kind.Tutorial:
                     RaceLaunch.Request(BuildTutorialSetup(step.Highlight));
@@ -289,7 +314,7 @@ namespace ProtoHarness.ChainRush.Flow
 
         private void OnGUI()
         {
-            if (view == null) view = new LobbyView(nightBackground, runnerArtwork);
+            if (view == null) view = new LobbyView(runnerArtwork);
             if (!view.Ready)
             {
                 Debug.LogError("LobbyMenu: could not create the font.", this);
@@ -301,6 +326,8 @@ namespace ProtoHarness.ChainRush.Flow
             float width = Screen.width / scale;
             float height = Screen.height / scale;
             GUI.matrix = Matrix4x4.Scale(new Vector3(scale, scale, 1f));
+            int shownRunner = SetupRunner;
+            view.UpdateRunnerColors(shownRunner, runners[shownRunner]);
             bool back = view.DrawFrame(page, width, height);
             int clicked = page.DrawBody(view, cursor, width, height);
             view.DrawFooter(notice, page.Help, width, height);

@@ -39,10 +39,12 @@ namespace ProtoHarness.Tests.PlayMode
         private RaceAssembler lapAssembler;
         private BestRecords lapRecords;
         private GhostFiles lapGhosts;
+        private string savedLastRunner;
 
         [UnitySetUp]
         public IEnumerator SetUp()
         {
+            ChainRushFlowTests.RememberAndClearPlayerLastRunner(out savedLastRunner);
             timeScale = Time.timeScale;
 #if UNITY_EDITOR
             yield return EditorSceneManager.LoadSceneAsyncInPlayMode(CircuitScene, new LoadSceneParameters(LoadSceneMode.Single));
@@ -63,16 +65,23 @@ namespace ProtoHarness.Tests.PlayMode
         [UnityTearDown]
         public IEnumerator TearDown()
         {
-            Time.timeScale = timeScale;
-            RaceLaunch.Clear();
-            if (lapRunner != null) UnityEngine.Object.Destroy(lapRunner);
-            if (lapRecords != null)
+            try
             {
-                if (lapSetup.Track != null) lapRecords.Clear(lapSetup.Track.name, lapSetup.Speed);
-                if (System.IO.Directory.Exists(lapGhosts.Folder)) System.IO.Directory.Delete(lapGhosts.Folder, true);
+                Time.timeScale = timeScale;
+                RaceLaunch.Clear();
+                if (lapRunner != null) UnityEngine.Object.Destroy(lapRunner);
+                if (lapRecords != null)
+                {
+                    if (lapSetup.Track != null) lapRecords.Clear(lapSetup.Track.name, lapSetup.Speed);
+                    if (System.IO.Directory.Exists(lapGhosts.Folder)) System.IO.Directory.Delete(lapGhosts.Folder, true);
+                }
+                yield return null;
+                TestLogs.AssertNoUnexpected();
             }
-            yield return null;
-            TestLogs.AssertNoUnexpected();
+            finally
+            {
+                ChainRushFlowTests.RestorePlayerLastRunner(savedLastRunner);
+            }
         }
 
         // The bot over the grapple gap: plain, with a booster fired before it, and with the grapple empowered.

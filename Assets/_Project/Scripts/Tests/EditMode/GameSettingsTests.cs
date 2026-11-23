@@ -220,6 +220,40 @@ namespace ProtoHarness.Tests.EditMode
         }
 
         [Test]
+        public void LastRunner_NothingStored_IsEmpty()
+        {
+            Assert.That(new GameSettings(Prefix).LastRunner, Is.Empty);
+        }
+
+        [Test]
+        public void LastRunner_AfterSaving_IsReadByANewInstance()
+        {
+            settings.SetLastRunner("BETA");
+
+            Assert.That(settings.LastRunner, Is.EqualTo("BETA"));
+            Assert.That(new GameSettings(Prefix).LastRunner, Is.EqualTo("BETA"));
+            Assert.That(new GameSettings(OtherPrefix).LastRunner, Is.Empty);
+        }
+
+        [Test]
+        public void LastRunner_AfterClear_IsEmptyInMemoryAndStorage()
+        {
+            settings.SetLastRunner("BETA");
+            settings.Clear();
+
+            Assert.That(settings.LastRunner, Is.Empty);
+            Assert.That(PlayerPrefs.HasKey(Prefix + "LastRunner"), Is.False);
+            Assert.That(new GameSettings(Prefix).LastRunner, Is.Empty);
+        }
+
+        [TestCase("")]
+        [TestCase(null)]
+        public void SetLastRunner_EmptyOrNull_Throws(string name)
+        {
+            Assert.Throws<ArgumentException>(() => settings.SetLastRunner(name));
+        }
+
+        [Test]
         public void Constructor_NoPrefix_Throws()
         {
             Assert.Throws<ArgumentException>(() => new GameSettings(""));
