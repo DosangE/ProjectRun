@@ -7,7 +7,7 @@
 
 ## 1. 지금 상태 (2026-11-20)
 
-- **로비 UI 후속 ①~⑤ (2026-11-23 `feature/lobby-followup` 커밋·푸시, 사용자 플레이 "좋다 커밋 푸시하라", `dev` 미병합)**: 키 안내 바탕·러너 `←`/`→` 선택·프리뷰 발 높이 통일(5종 `bottomPx=44`)·띠 스케일 튐 수정·`LobbyMenu.DefaultSettings` 테스트 격리 완료(DECISIONS 2026-11-23 "로비 UI 후속 ①~⑤"). `dev` 병합 전 Codex `adversarial-review` + `unity-reviewer` 리뷰 대기.
+- **로비 UI 후속 ①~⑤ (2026-11-23 `dev` 병합, 사용자 "좋다 커밋 푸시하라" → "dev까지 병합하라")**: `feature/lobby-followup`. 키 안내 바탕·러너 `←`/`→` 선택·프리뷰 발 높이 통일(5종 `bottomPx=44`)·띠 스케일 튐 수정·`LobbyMenu.DefaultSettings` 테스트 격리 끝(DECISIONS 2026-11-23 "로비 UI 후속 ①~⑤"). 병합 전 Codex·`unity-reviewer` 파견은 돌리지 않았다(원하면 `dev` 병합 대상으로 실행). Antigravity `mcp_config.json` 의 `unity-mcp` 는 작업 종료 후 원복(Codex·Antigravity MCP 는 Claude 파견 또는 사용자 직접 요청 시에만 사용).
 - **로비 B 팔레트 (2026-11-23 `dev` 병합·푸시, 사용자 "커밋 병합 푸시 ㄱㄱ" → 리뷰 뒤 "가")**: `feature/lobby-bright-theme`.
 
 - **마일스톤**: **M5 (v0.7) "같이 달리는 맛" 끝 — `dev` 를 `main` 에 병합하고 태그 `v0.7`** (2026-11-18, DECISIONS "main v0.7", 사용자 "확인했다 병합 태그 푸시 모두 진행"). 병합 커밋은 git 으로 구한다(`git log --merges -1 main`). 다음 태그는 **v0.8 = M7 멀티 재개**(DECISIONS 2026-11-18 "태그: M7(멀티 재개) = v0.8") — 2026-11-12 "방향 재설정" 은 멀티를 v1.0 밖으로 두었으니, v1.0 범위를 다시 정한 것인지는 M7 을 열 때 묻는다. 무엇을 먼저 할지는 2절에서 사용자가 고른다. 순서·완료 조건은 `docs/DESIGN.md` §5-1.
@@ -71,7 +71,7 @@
      - PALM·STADIUM 의 장식 보충은 아직이다. 조사는 플레이 중(출발 대기) 임시 카메라로 중심선 50 m 마다 찍는다(DECISIONS "FINGER 장식 보충 1단계" 의 "조사 방법", SKYWAY 항목의 "조사 방법" — 코드는 scratchpad 에만 있다).
    - **UI 디자인 전반 개선** — 인게임 부스터 표시는 끝(`feature/fx-booster-look`, DECISIONS 2026-11-22 "부스터 표시·이펙트 강화", 사용자 "우선 괜찮다"), 봉 표시도 끝(아래 "봉 표시·바람 선"). UI 는 IMGUI 유지(1절 "방향 재설정").
      - **로비·타이틀 밝은 B 팔레트 + 러너 색 연동 + 마지막 러너 저장 — `feature/lobby-bright-theme` `dev` 병합 끝** (DECISIONS 2026-11-23 "로비·타이틀 밝은 B 팔레트 …", 사용자 플레이 "괜찮네"). 병합 전 리뷰(Codex 설계 "needs-attention" 3건·`unity-reviewer` 막는 지적 0)는 같은 항목 "병합 전 리뷰". 시안 캔버스 https://claude.ai/artifact/A8t4DWpCs7naCc73zNXHBV.
-     - **로비 후속 ①~⑤ — `feature/lobby-followup` 구현·검증·사용자 플레이("좋다") 끝 (`dev` 병합 전)** (DECISIONS 2026-11-23 "로비 UI 후속 ①~⑤"): ① 키 안내 흰 카드 바탕(`LobbyView.DrawFooter`) ② 러너 `←`/`→` 선택(`LobbyPage.HorizontalSelection`·`RunnerPage`·`LobbyMenu.Update`) ③ `RunnerPreview` 5종 발 높이 통일(`bottomPx=44`) ④ `LobbyView.EvaluateStripeScale` 띠 튐 수정 ⑤ `LobbyMenu.DefaultSettings` 5개 테스트 격리. 남은 것: 병합 전 리뷰(Codex `adversarial-review` + `unity-reviewer`) 후 `dev` 병합.
+     - **로비 후속 ①~⑤ — `feature/lobby-followup` `dev` 병합 끝** (DECISIONS 2026-11-23 "로비 UI 후속 ①~⑤", 사용자 플레이 "좋다"): ① 키 안내 흰 카드 바탕(`LobbyView.DrawFooter`) ② 러너 `←`/`→` 선택(`LobbyPage.HorizontalSelection`·`RunnerPage`·`LobbyMenu.Update`) ③ `RunnerPreview` 5종 발 높이 통일(`bottomPx=44`) ④ `LobbyView.EvaluateStripeScale` 띠 튐 수정 ⑤ `LobbyMenu.DefaultSettings` 5개 테스트 격리. 병합 전 Codex·`unity-reviewer` 파견은 돌리지 않았다(원하면 `dev` 병합 대상으로 실행).
    - **봇전 난이도 디벨롭** (2026-11-20 추가, 사용자 "작업 후보 둬라") — 지금은 3단계 프리셋·루프 22회차 채택값(2절 1번 ④, DECISIONS 2026-11-15 "MP2 ④ 봇 난이도"). 무엇을 더 볼지(난이도 폭, 트랙별 차이, 봇 성향 등)는 요청서에서 묻는다. 다시 잴 때·루프 방법은 2절 1번 ④ 의 줄.
    - **몸싸움 전략 — 스윙 쿨타임 후속** (2026-11-22, 접촉으로 끊긴 때만 0.5 s 는 끝남 — DECISIONS 2026-11-22 "몸싸움 전략: 접촉이 스윙을 끊으면 0.5 s …"): ① 같은 코너에서 놓았다 바로 다시 걸어 이득이 있으면 "모든 스윙 시도" 쿨타임을 다시 본다(봇전에서 놓은 뒤 다시 걸기까지 시간을 재서). ② 봇의 `BotTuning.ContactRehookTicks`(`RaceBot.cs:114`)가 시뮬 규칙과 겹친다 — 같은 25틱이라 동작 차이 없음, 지우면 튜닝 인자·`BotTuningTests` 가 바뀐다. ③ 리뷰(Codex·`unity-reviewer`) 안 돌림, Lap 안 돌림(혼자 달리면 접촉 없음 — 서킷 지문으로 확인).
    - **부스터 이펙트 — 1차 끝** (같은 DECISIONS 항목: 겹 꼬리, 바람 선 12개 첫 터짐, 가장자리 띠는 부스터 동안). 남은 것: 튜토리얼 게이지 페이지 배치·플레이어 빌드·프레임 비용 미확인(같은 항목 "확인 못 한 것"), 러너 몸 발광은 뺐다(원하면 다음 단계).

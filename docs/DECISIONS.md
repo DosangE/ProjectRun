@@ -27,7 +27,7 @@
   - Device (`^Device$`): `testcasecount="4" result="Passed" passed="4" failed="0" skipped="0"` (`2026-11-23 05:20:02Z~05:20:19Z`, `17.86s`). 새 `Lobby_RunnerPage_LeftAndRightArrowsChooseRunnerWhileUpAndDownDoNothing` 포함.
   - 실제 러너 5종 프리뷰 픽셀 실측(`960×960` RT): ALPHA(`44..814`), BETA(`44..854`), THETA(`44..814`), DELTA(`44..897`), OMEGA(`44..814`) — 5명 모두 `bottomPx=44` 일치. 테스트 후 `PlayerPrefs.HasKey("ChainRush.Settings.LastRunner") == False`.
 - **사용자 플레이 확인 (2026-11-23)**: "좋다".
-- **확인 못 한 것**: 병합 전 Codex `adversarial-review`·`unity-reviewer` 파견은 아직 돌리지 않았다(커밋·푸시 지시 단계, `dev` 병합 전 수행 필요). `.claude/agents/unity-reviewer.md` 체크리스트 메인 대조는 위반 없음.
+- **확인 못 한 것**: 병합 전 Codex `adversarial-review`·`unity-reviewer` 파견은 돌리지 않았다(사용자가 바로 `dev` 병합 지시, 원하면 `dev` 병합 대상으로 실행). `.claude/agents/unity-reviewer.md` 체크리스트 메인 대조는 위반 없음. Antigravity 글로벌 `mcp_config.json` 의 `unity-mcp` 는 작업 완료 후 원복했다(사용자 원칙: Codex·Antigravity MCP 는 Claude 파견 또는 사용자 직접 요청 시에만 사용).
 
 ## 2026-11-23 · 로비·타이틀 밝은 B 팔레트 + 띠·선택 색은 마지막 러너 색, 마지막 러너 저장 (`feature/lobby-bright-theme`)
 
