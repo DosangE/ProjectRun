@@ -47,10 +47,12 @@ namespace ProtoHarness.Tests.PlayMode
         private RunnerProfile runner;
         // Ghosts in a folder of the tests' own, emptied after each test, so the player's ghosts are never touched.
         private GhostFiles ghosts;
+        private string savedLastRunner;
 
         [SetUp]
         public void SetUp()
         {
+            RememberAndClearPlayerLastRunner(out savedLastRunner);
             RaceLaunch.Clear();
             runner = ScriptableObject.CreateInstance<RunnerProfile>();
             runner.name = "TestRunner";
@@ -61,12 +63,19 @@ namespace ProtoHarness.Tests.PlayMode
         [UnityTearDown]
         public IEnumerator TearDown()
         {
-            RaceLaunch.Clear();
-            if (made != null) UnityEngine.Object.Destroy(made);
-            if (runner != null) UnityEngine.Object.Destroy(runner);
-            DeleteGhosts();
-            yield return null;
-            TestLogs.AssertNoUnexpected();
+            try
+            {
+                RaceLaunch.Clear();
+                if (made != null) UnityEngine.Object.Destroy(made);
+                if (runner != null) UnityEngine.Object.Destroy(runner);
+                DeleteGhosts();
+                yield return null;
+                TestLogs.AssertNoUnexpected();
+            }
+            finally
+            {
+                RestorePlayerLastRunner(savedLastRunner);
+            }
         }
 
         // ---- the conditions ------------------------------------------------------------------------------
@@ -198,6 +207,88 @@ namespace ProtoHarness.Tests.PlayMode
             menu.Highlight(3);
             menu.Back();
             Assert.That(menu.SetupRunner, Is.EqualTo(0), "Off the runner page it names the runner last entered with (none yet: the first).");
+        }
+
+        [UnityTest]
+        public IEnumerator Lobby_AfterLaunchingBeta_RestoresBetaOnReopen()
+        {
+            var store = TestSettings();
+            try
+            {
+                LobbyMenu menu = null;
+                yield return Load(LobbyPath, scene => menu = Find<LobbyMenu>(scene));
+                menu.Settings = store;
+                menu.Confirm();
+                menu.Confirm();
+                menu.Confirm();
+                menu.Confirm();
+                Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Runner));
+                menu.Highlight(1);
+                menu.Confirm();
+                Assert.That(store.LastRunner, Is.EqualTo("BETA"));
+
+                float deadline = Time.realtimeSinceStartup + 20f;
+                while (SceneManager.GetActiveScene().name != RaceLaunch.RaceScene && Time.realtimeSinceStartup < deadline)
+                    yield return null;
+                Scene race = SceneManager.GetActiveScene();
+                Assert.That(race.name, Is.EqualTo(RaceLaunch.RaceScene));
+                var assembler = Find<RaceAssembler>(race);
+                assembler.Records = TestRecords();
+                assembler.Ghosts = ghosts;
+                deadline = Time.realtimeSinceStartup + 20f;
+                while (assembler.IsAssembling && Time.realtimeSinceStartup < deadline) yield return null;
+                Assert.That(assembler.IsAssembling, Is.False, "The decoration never finished loading.");
+                Assert.That(assembler.IsLaunched, Is.True);
+                Assert.That(Find<RunnerMotor>(race).Profile.DisplayName, Is.EqualTo("BETA"));
+
+                yield return LeaveLapRace(assembler, assembler.Setup.EnvironmentScene);
+                menu = Find<LobbyMenu>(SceneManager.GetActiveScene());
+                menu.Settings = store;
+                Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Main));
+                Assert.That(menu.SetupRunner, Is.EqualTo(1));
+                menu.Confirm();
+                menu.Confirm();
+                menu.Confirm();
+                menu.Confirm();
+                Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Runner));
+                Assert.That(menu.Cursor, Is.EqualTo(1));
+                Assert.That(menu.Preview.Shown, Is.EqualTo(1));
+                Assert.That(menu.BuildSetup().Runner.DisplayName, Is.EqualTo("BETA"));
+            }
+            finally
+            {
+                store.Clear();
+            }
+        }
+
+        [UnityTest]
+        public IEnumerator Lobby_BackAfterBrowsingRunner_KeepsTheLastRunner()
+        {
+            var store = TestSettings();
+            try
+            {
+                store.SetLastRunner("BETA");
+                LobbyMenu menu = null;
+                yield return Load(LobbyPath, scene => menu = Find<LobbyMenu>(scene));
+                menu.Settings = store;
+                menu.Confirm();
+                menu.Confirm();
+                menu.Confirm();
+                menu.Confirm();
+                Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Runner));
+                menu.Highlight(2);
+                Assert.That(menu.SetupRunner, Is.EqualTo(2));
+                menu.Back();
+
+                Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Track));
+                Assert.That(menu.SetupRunner, Is.EqualTo(1));
+                Assert.That(store.LastRunner, Is.EqualTo("BETA"));
+                Assert.That(RaceLaunch.HasPending, Is.False);
+            }
+            finally
+            {
+                store.Clear();
+            }
         }
 
         [UnityTest]
@@ -2533,6 +2624,23 @@ namespace ProtoHarness.Tests.PlayMode
                    Time.realtimeSinceStartup < deadline) yield return null;
             Assert.That(SceneManager.GetActiveScene().name, Is.EqualTo(RaceLaunch.LobbyScene));
             Assert.That(SceneManager.GetSceneByName(environment).isLoaded, Is.False, "The exterior must leave with the race.");
+        }
+
+        // Lobbies opened by these fixtures read the player's settings in Awake.
+        // Null represents an absent key, so cleanup can also restore a stored empty string.
+        internal static void RememberAndClearPlayerLastRunner(out string savedLastRunner)
+        {
+            string key = GameSettings.Player.LastRunnerKey;
+            savedLastRunner = PlayerPrefs.HasKey(key) ? PlayerPrefs.GetString(key) : null;
+            PlayerPrefs.DeleteKey(key);
+        }
+
+        internal static void RestorePlayerLastRunner(string savedLastRunner)
+        {
+            string key = GameSettings.Player.LastRunnerKey;
+            if (savedLastRunner == null) PlayerPrefs.DeleteKey(key);
+            else PlayerPrefs.SetString(key, savedLastRunner);
+            PlayerPrefs.Save();
         }
 
         private static IEnumerator Load(string path, Action<Scene> found)

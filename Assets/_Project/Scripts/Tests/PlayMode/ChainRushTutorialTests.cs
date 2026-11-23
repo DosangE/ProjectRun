@@ -28,10 +28,12 @@ namespace ProtoHarness.Tests.PlayMode
 
         private RunnerProfile runner;
         private float timeScale;
+        private string savedLastRunner;
 
         [SetUp]
         public void SetUp()
         {
+            ChainRushFlowTests.RememberAndClearPlayerLastRunner(out savedLastRunner);
             RaceLaunch.Clear();
             timeScale = Time.timeScale;
             runner = ScriptableObject.CreateInstance<RunnerProfile>();
@@ -41,11 +43,18 @@ namespace ProtoHarness.Tests.PlayMode
         [UnityTearDown]
         public IEnumerator TearDown()
         {
-            Time.timeScale = timeScale;
-            RaceLaunch.Clear();
-            if (runner != null) UnityEngine.Object.Destroy(runner);
-            yield return null;
-            TestLogs.AssertNoUnexpected();
+            try
+            {
+                Time.timeScale = timeScale;
+                RaceLaunch.Clear();
+                if (runner != null) UnityEngine.Object.Destroy(runner);
+                yield return null;
+                TestLogs.AssertNoUnexpected();
+            }
+            finally
+            {
+                ChainRushFlowTests.RestorePlayerLastRunner(savedLastRunner);
+            }
         }
 
         // ---- the way in ----------------------------------------------------------------------------------

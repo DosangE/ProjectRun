@@ -21,6 +21,12 @@ namespace ProtoHarness.ChainRush
         // (RunnerLook); the simulation never reads it. Empty means the scene's model as saved, by definition (not a fallback).
         [Tooltip("The runner's look: a model with a RunnerVisual on the same rig as the scene's runner model (Art/Models/Runner*.prefab, an instance of RunnerFlatFoot.fbx). Empty keeps the scene's model as saved.")]
         [SerializeField] private GameObject look;
+        [Tooltip("The runner's main diagonal stripe in the lobby. Alpha must be 1.")]
+        [SerializeField] private Color lobbyColor = Color.clear;
+        [Tooltip("The runner's inner diagonal stripe in the lobby. Alpha must be 1.")]
+        [SerializeField] private Color lobbyStripeColor = Color.clear;
+        [Tooltip("The runner's selection and bar color in the lobby. Alpha must be 1.")]
+        [SerializeField] private Color lobbyAccentColor = Color.clear;
 
         public string DisplayName => displayName;
         public float TopSpeedScale => topSpeedScale;
@@ -28,8 +34,11 @@ namespace ProtoHarness.ChainRush
         public float GaugeChargeScale => gaugeChargeScale;
         public float Weight => weight;
         public GameObject Look => look;
+        public Color LobbyColor => lobbyColor;
+        public Color LobbyStripeColor => lobbyStripeColor;
+        public Color LobbyAccentColor => lobbyAccentColor;
 
-        // Whether every value is usable; RunnerMotor.Configure refuses a profile that is not.
+        // Validates the display name and race values read by RunnerMotor.Configure.
         public bool TryValidate(out string error)
         {
             error = null;
@@ -39,9 +48,19 @@ namespace ProtoHarness.ChainRush
             return error == null;
         }
 
+        public bool TryValidateLobbyColors(out string error)
+        {
+            string field = lobbyColor.a != 1f ? nameof(lobbyColor)
+                : lobbyStripeColor.a != 1f ? nameof(lobbyStripeColor)
+                : lobbyAccentColor.a != 1f ? nameof(lobbyAccentColor) : null;
+            error = field == null ? null : $"RunnerProfile '{name}': {field} must have alpha 1.";
+            return field == null;
+        }
+
         private void OnValidate()
         {
             if (!TryValidate(out string error)) Debug.LogError(error, this);
+            if (!TryValidateLobbyColors(out error)) Debug.LogError(error, this);
         }
     }
 }

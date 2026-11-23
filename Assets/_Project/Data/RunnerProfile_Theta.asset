@@ -18,3 +18,6 @@ MonoBehaviour:
   gaugeChargeScale: 1
   weight: 1.1
   look: {fileID: 2297959042653289946, guid: f3e4369dc77abe14f824eba114623ca4, type: 3}
+  lobbyColor: {r: 0.56078434, g: 0.6392157, b: 0.7372549, a: 1}
+  lobbyStripeColor: {r: 1, g: 1, b: 1, a: 1}
+  lobbyAccentColor: {r: 0.43529412, g: 0.5254902, b: 0.6392157, a: 1}

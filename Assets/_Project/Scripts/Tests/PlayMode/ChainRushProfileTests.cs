@@ -139,8 +139,9 @@ namespace ProtoHarness.Tests.PlayMode
             try
             {
 #if UNITY_EDITOR
-                // The profile says so itself, loudly, as it is edited (OnValidate).
+                // OnValidate reports the invalid scale and the unset lobby color.
                 LogAssert.Expect(LogType.Error, new System.Text.RegularExpressions.Regex("must be positive"));
+                LogAssert.Expect(LogType.Error, new System.Text.RegularExpressions.Regex("lobbyColor must have alpha 1"));
                 var data = new SerializedObject(broken);
                 data.FindProperty("topSpeedScale").floatValue = 0f;
                 data.ApplyModifiedPropertiesWithoutUndo();

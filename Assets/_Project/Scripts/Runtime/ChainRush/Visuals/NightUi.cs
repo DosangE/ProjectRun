@@ -1,3 +1,4 @@
+using System;
 using ProtoHarness.ChainRush.Audio;
 using UnityEngine;
 
@@ -21,15 +22,53 @@ namespace ProtoHarness.ChainRush.Visuals
             Action,
         }
 
-        private static readonly Color CardFill = new Color(24f / 255, 36f / 255, 54f / 255, .97f);
-        private static readonly Color CardSelected = new Color(30f / 255, 62f / 255, 74f / 255, .97f);
-        private static readonly Color CardLocked = new Color(18f / 255, 26f / 255, 38f / 255, .94f);
-        private static readonly Color CardEdge = new Color(88f / 255, 229f / 255, 238f / 255, .35f);
-        private static readonly Color CardShadow = new Color(0, 0, 0, .55f);
-        private static readonly Color CardHover = new Color(.62f, .65f, .70f, .16f);
-        private static readonly Color CardHeld = new Color(.30f, .32f, .36f, .22f);
-        // The shadow's offset, and how far a held card sinks toward it.
-        private static readonly Vector2 ShadowOffset = new Vector2(7, 9), PressSink = new Vector2(4, 5);
+        public sealed class Palette
+        {
+            public Palette(Color fill, Color selectedFill, Color lockedFill, Color edge, Color selectedEdge,
+                Color lockedEdge, Color shadow, Vector2 shadowOffset, Color hover, Color held, Color accent,
+                Color panelTop, Color action)
+            {
+                Fill = fill;
+                SelectedFill = selectedFill;
+                LockedFill = lockedFill;
+                Edge = edge;
+                SelectedEdge = selectedEdge;
+                LockedEdge = lockedEdge;
+                Shadow = shadow;
+                ShadowOffset = shadowOffset;
+                Hover = hover;
+                Held = held;
+                Accent = accent;
+                PanelTop = panelTop;
+                Action = action;
+            }
+
+            internal Color Fill { get; }
+            internal Color SelectedFill { get; private set; }
+            internal Color LockedFill { get; }
+            internal Color Edge { get; }
+            internal Color SelectedEdge { get; private set; }
+            internal Color LockedEdge { get; }
+            internal Color Shadow { get; }
+            internal Vector2 ShadowOffset { get; }
+            internal Color Hover { get; }
+            internal Color Held { get; }
+            internal Color Accent { get; private set; }
+            internal Color PanelTop { get; }
+            internal Color Action { get; }
+
+            public void SetAccent(Color accent, Color selectedFill)
+            {
+                if (ReferenceEquals(this, Night))
+                    throw new InvalidOperationException("NightUi: the Night palette is read-only.");
+                Accent = SelectedEdge = accent;
+                SelectedFill = selectedFill;
+            }
+        }
+
+        // How far a held card sinks.
+        private static readonly Vector2 PressSink = new Vector2(4, 5);
+        private static readonly Color LabelShadow = new Color(0, 0, 0, .8f);
         // The card the mouse was last on, and the frame it was seen there (UiSound on coming onto another).
         private static Rect hoverRect;
         private static int hoverFrame = -2;
@@ -40,6 +79,16 @@ namespace ProtoHarness.ChainRush.Visuals
         public static readonly Color Muted = new Color(158f / 255, 172f / 255, 190f / 255);
         public static readonly Color Border = new Color(38f / 255, 52f / 255, 68f / 255);
         public static readonly Color Selected = new Color(0.10f, 0.19f, 0.23f);
+
+        public static readonly Palette Night = new Palette(
+            fill: new Color(24f / 255, 36f / 255, 54f / 255, .97f),
+            selectedFill: new Color(30f / 255, 62f / 255, 74f / 255, .97f),
+            lockedFill: new Color(18f / 255, 26f / 255, 38f / 255, .94f),
+            edge: new Color(88f / 255, 229f / 255, 238f / 255, .35f),
+            selectedEdge: new Color(88f / 255, 229f / 255, 238f / 255, .35f),
+            lockedEdge: Border, shadow: new Color(0, 0, 0, .55f), shadowOffset: new Vector2(7, 9),
+            hover: new Color(.62f, .65f, .70f, .16f), held: new Color(.30f, .32f, .36f, .22f),
+            accent: Accent, panelTop: Accent, action: Action);
 
         public static Font DisplayFont() => Font.CreateDynamicFontFromOSFont(new[] { "Bahnschrift", "Arial" }, 32);
 
@@ -76,36 +125,41 @@ namespace ProtoHarness.ChainRush.Visuals
         }
 
         // Draws a card at rect and returns its face: rect itself, or moved by PressSink when pressed.
-        public static Rect Card(Rect rect, CardLook look = CardLook.Plain, bool hovered = false, bool pressed = false)
+        public static Rect Card(Rect rect, CardLook look = CardLook.Plain, bool hovered = false, bool pressed = false,
+            Palette palette = null)
         {
-            Block(new Rect(rect.x + ShadowOffset.x, rect.y + ShadowOffset.y, rect.width, rect.height), CardShadow);
+            palette ??= Night;
+            Vector2 shadowOffset = palette.ShadowOffset;
+            Block(new Rect(rect.x + shadowOffset.x, rect.y + shadowOffset.y, rect.width, rect.height), palette.Shadow);
             Rect face = pressed ? new Rect(rect.position + PressSink, rect.size) : rect;
-            Block(face, look == CardLook.Selected ? CardSelected : look == CardLook.Locked ? CardLocked
-                : look == CardLook.Action ? Action : CardFill);
+            Block(face, look == CardLook.Selected ? palette.SelectedFill : look == CardLook.Locked ? palette.LockedFill
+                : look == CardLook.Action ? palette.Action : palette.Fill);
             if (look != CardLook.Action)
             {
-                Color edge = look == CardLook.Locked ? Border : CardEdge;
+                Color edge = look == CardLook.Locked ? palette.LockedEdge
+                    : look == CardLook.Selected ? palette.SelectedEdge : palette.Edge;
                 Block(new Rect(face.x, face.y, face.width, 1), edge);
                 Block(new Rect(face.x, face.yMax - 1, face.width, 1), edge);
                 Block(new Rect(face.x, face.y, 1, face.height), edge);
                 Block(new Rect(face.xMax - 1, face.y, 1, face.height), edge);
             }
-            if (look == CardLook.Selected) Block(new Rect(face.x, face.yMax - 4, face.width, 4), Accent);
-            if (pressed) Block(face, CardHeld);
-            else if (hovered) Block(face, CardHover);
+            if (look == CardLook.Selected) Block(new Rect(face.x, face.yMax - 4, face.width, 4), palette.Accent);
+            if (pressed) Block(face, palette.Held);
+            else if (hovered) Block(face, palette.Hover);
             return face;
         }
 
-        // A panel card with a mint line along its top.
-        public static void PanelCard(Rect rect)
+        // A panel card with a line along its top.
+        public static void PanelCard(Rect rect, Palette palette = null)
         {
-            Card(rect);
-            Block(new Rect(rect.x, rect.y, rect.width, 3), Accent);
+            palette ??= Night;
+            Card(rect, palette: palette);
+            Block(new Rect(rect.x, rect.y, rect.width, 3), palette.PanelTop);
         }
 
         // A card that takes clicks over all of rect. Returns the face to draw the content on; clicked is true on the
         // click's release, as GUI.Button.
-        public static Rect PressableCard(Rect rect, CardLook look, out bool clicked)
+        public static Rect PressableCard(Rect rect, CardLook look, out bool clicked, Palette palette = null)
         {
             bool hovered = GUI.enabled && rect.Contains(Event.current.mousePosition);
             // hotControl is the control the mouse went down on; held over this card, it is this card being pressed.
@@ -116,23 +170,23 @@ namespace ProtoHarness.ChainRush.Visuals
                 hoverRect = rect;
                 hoverFrame = Time.frameCount;
             }
-            Rect face = Card(rect, look, hovered, pressed);
+            Rect face = Card(rect, look, hovered, pressed, palette);
             clicked = GUI.Button(rect, GUIContent.none, GUIStyle.none);
             return face;
         }
 
         // A pressable card with a label on its face.
-        public static bool CardButton(Rect rect, string text, GUIStyle style, CardLook look = CardLook.Plain)
+        public static bool CardButton(Rect rect, string text, GUIStyle style, CardLook look = CardLook.Plain, Palette palette = null)
         {
-            Rect face = PressableCard(rect, look, out bool clicked);
+            Rect face = PressableCard(rect, look, out bool clicked, palette);
             GUI.Label(face, text, style);
             return clicked;
         }
 
-        public static void ShadowLabel(Rect rect, string text, GUIStyle style, float shadow = 3f)
+        public static void ShadowLabel(Rect rect, string text, GUIStyle style, float shadow = 3f, Color? shadowColor = null)
         {
             Color color = style.normal.textColor;
-            style.normal.textColor = style.hover.textColor = new Color(0, 0, 0, .8f);
+            style.normal.textColor = style.hover.textColor = shadowColor ?? LabelShadow;
             GUI.Label(new Rect(rect.x + shadow, rect.y + shadow, rect.width, rect.height), text, style);
             style.normal.textColor = style.hover.textColor = color;
             GUI.Label(rect, text, style);
