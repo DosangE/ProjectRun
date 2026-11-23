@@ -28,12 +28,14 @@ namespace ProtoHarness.Tests.PlayMode
 
         private RunnerProfile runner;
         private float timeScale;
-        private string savedLastRunner;
+        private GameSettings lobbySettings;
 
         [SetUp]
         public void SetUp()
         {
-            ChainRushFlowTests.RememberAndClearPlayerLastRunner(out savedLastRunner);
+            lobbySettings = new GameSettings("ChainRush.Test.TutorialLobby.");
+            lobbySettings.Clear();
+            LobbyMenu.DefaultSettings = lobbySettings;
             RaceLaunch.Clear();
             timeScale = Time.timeScale;
             runner = ScriptableObject.CreateInstance<RunnerProfile>();
@@ -53,7 +55,8 @@ namespace ProtoHarness.Tests.PlayMode
             }
             finally
             {
-                ChainRushFlowTests.RestorePlayerLastRunner(savedLastRunner);
+                LobbyMenu.DefaultSettings = null;
+                lobbySettings?.Clear();
             }
         }
 

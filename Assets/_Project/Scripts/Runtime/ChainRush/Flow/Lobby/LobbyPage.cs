@@ -70,6 +70,8 @@ namespace ProtoHarness.ChainRush.Flow.Lobby
         public virtual string DescriptionFoot(int row) => "";
         // Whether ←/→ change this page's rows.
         public virtual bool Adjusts => false;
+        // Whether ←/→ move the highlight instead of ↑/↓ (for a horizontal row of tiles).
+        public virtual bool HorizontalSelection => false;
         // Whether a click on a row chooses it (as Enter) or only highlights it (as ↑/↓).
         public virtual bool ClickChooses => true;
 

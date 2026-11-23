@@ -80,7 +80,14 @@ namespace ProtoHarness.ChainRush.Flow
                 RestoreRunner();
             }
         }
+        // Test-only seam: when set before Awake, new lobbies use this store instead of GameSettings.Player.
+        public static GameSettings DefaultSettings { get; set; }
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetDefaultSettings() => DefaultSettings = null;
+
         public Page CurrentPage => page.Id;
+        public string CurrentHelp => page.Help;
         // The track page's record line for a track: "최고 기록 (빠름)  01:19.2  ·  BETA", or "빠름 기록 없음".
         public string TrackRecordText(int index) => trackPage.RecordText(index);
         public int Cursor => cursor;
@@ -95,7 +102,7 @@ namespace ProtoHarness.ChainRush.Flow
 
         private void Awake()
         {
-            if (settings == null) settings = GameSettings.Player;
+            if (settings == null) settings = DefaultSettings ?? GameSettings.Player;
             if (tracks == null || tracks.Length == 0)
             {
                 Debug.LogError("LobbyMenu: at least one track is required.", this);
@@ -196,6 +203,14 @@ namespace ProtoHarness.ChainRush.Flow
             if (mouse != null && !leaving) page.Point(mouse);
             var keyboard = Keyboard.current;
             if (keyboard == null) return;
+            if (page.HorizontalSelection)
+            {
+                if (keyboard.leftArrowKey.wasPressedThisFrame) Move(-1);
+                else if (keyboard.rightArrowKey.wasPressedThisFrame) Move(1);
+                else if (keyboard.enterKey.wasPressedThisFrame || keyboard.spaceKey.wasPressedThisFrame) Confirm();
+                else if (keyboard.escapeKey.wasPressedThisFrame) Back();
+                return;
+            }
             if (keyboard.upArrowKey.wasPressedThisFrame) Move(-1);
             else if (keyboard.downArrowKey.wasPressedThisFrame) Move(1);
             else if (keyboard.leftArrowKey.wasPressedThisFrame) Adjust(-1);

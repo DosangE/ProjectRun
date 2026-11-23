@@ -10,6 +10,25 @@
 
 ---
 
+## 2026-11-23 · 로비 UI 후속 ①~⑤: 키 안내 바탕, 러너 ←/→ 선택, 프리뷰 발 높이 통일, 띠 튐 수정, 테스트 격리 (`feature/lobby-followup`)
+
+- **결정 (사용자 2026-11-23 Antigravity 첫 작업 — Unity MCP 연결 + HANDOFF 2절 8번 로비 후속 ①~⑤ "1,2 둘다 좋다" → §3-2 요청서 "작업 진행해봐 mcp 등록도 했다" → 플레이 확인 "좋다 커밋 푸시하라")**: 표현·로비 입력·테스트 격리만 바꿨다. 시뮬·씬·에셋은 그대로다.
+  - **① 키 안내 바탕** (`LobbyView.DrawFooter`): 캐시된 `GUIContent`(`helpContent`, 할당 0)로 `help` 폭을 재어 오른쪽 끝(`width - 64`)·세로 중심(`height - 60`, 왼쪽 뒤로 버튼과 정렬)에 `NightUi.Card(..., NightUi.CardLook.Plain, palette: Palette)` 흰 바탕을 그린 뒤 `help` 를 출력한다.
+  - **② 러너 선택 `←`/`→`** (`LobbyPage.HorizontalSelection`, `RunnerPage`, `LobbyMenu.Update`): `LobbyPage.HorizontalSelection`(기본 `false`, `RunnerPage` 만 `true`)을 두고, `true` 일 때 `←`/`→` 를 `Move(-1)`/`Move(1)` 로 보내며 `↑`/`↓` 는 무시한다. 기존 `Move()`/`Highlight()` API 는 그대로 유지해 기존 로비 테스트를 깨지 않는다. `RunnerPage` 키 안내는 `"← / →  선택      ENTER  결정      ESC  뒤로      마우스 드래그  회전"`.
+  - **③ 프리뷰 발 높이 통일** (`RunnerPreview`): 1패스에서 모든 러너의 `Bounds` 와 최대 높이(`maxHeight`, `halfHeight = maxHeight * 0.5f`)를 측정한 뒤, 2패스에서 XZ 는 턴테이블 축 중앙(`bounds.center.x/z`), Y 는 모든 러너의 발(`bounds.min.y`)을 공통 바닥(`turntable.position.y - halfHeight`)에 맞춘다. 기존에 각자 `bounds.center.y` 로 맞추어 안테나가 있는 러너(DELTA)가 아래로 밀리던 문제를 해결했다.
+  - **④ 띠 스케일 튐 수정** (`LobbyView.UpdateRunnerColors`·`EvaluateStripeScale`): 전환 시작 시 직전 `stripeScale` 을 `stripeBounceStart` 에 저장해 상승 구간을 `stripeBounceStart → BouncePeak(1.08)` 로 보간한다.
+  - **⑤ 테스트 `LastRunner` 격리** (`LobbyMenu.DefaultSettings`): `public static GameSettings DefaultSettings { get; set; }` + `[RuntimeInitializeOnLoadMethod(SubsystemRegistration)]` 초기화(`RaceLaunch.cs:47` 패턴)를 두고 `Awake` 에서 `DefaultSettings ?? GameSettings.Player` 를 읽는다. 로비를 여는 PlayMode 클래스 5개(`ChainRushFlowTests`·`ChainRushBotRaceTests`·`ChainRushProbeTests`·`ChainRushTutorialTests`·`RaceBotTests`)에서 `RememberAndClearPlayerLastRunner`/`RestorePlayerLastRunner` 를 제거하고 테스트 접두사 `GameSettings` 를 `DefaultSettings` 에 주입해 플레이어 `PlayerPrefs` 키를 아예 건드리지 않는다.
+- **버린 대안**: 키 안내 바탕을 반투명 검은 블록으로(밝은 B 팔레트의 흰 카드 문법과 어긋남), `RunnerPage` 에서 `Adjust` 를 커서 이동에 재사용(설정 페이지의 값 조절 의미와 섞임), `RememberAndClearPlayerLastRunner` 에 `try/finally` 만 보강(에디터 강제 종료 시 키 소실이 남음).
+- **영향 평가**: `LobbyPage`·`LobbyView`·`RunnerPage`·`LobbyMenu`·`RunnerPreview`(표현·로비 입력, 시뮬 참조 없음) → 로비 테스트; 5개 PlayMode 테스트 파일의 `SetUp`/`TearDown`(메서드 밖) 변경 → `VERIFICATION.md` §4-4 및 `select-tests.ps1` 대로 5개 클래스 전체(`!Device !Enemy !NetEndReplay !^Lap$`). 시뮬·에셋 무변경이라 서킷 지문·Lap 제외. `LobbyMenu.Update` 키 경로 변경 + 새 Device 테스트 추가로 `^Device$` 실행 포함.
+- **검증 (에디터 6000.3.19f1, Unity MCP, 모두 `test-runs.ps1 -Record`)**:
+  - 컴파일: `*** Tundra build success (12.37 seconds), 29 items updated, 1618 evaluated`, 컴파일 직후 Console Error 0.
+  - EditMode 전체(`!Enemy`): `testcasecount="442" result="Passed" passed="442" failed="0" skipped="0"` (`2026-11-23 05:12:29Z~05:12:38Z`, `8.81s`). 새 테스트 `RunnerPreviewTests.New_LooksOfDifferentHeights_AlignTheirFeetOnTheSameFloor`, `LobbyView_EvaluateStripeScale_ContinuesFromInterruptedScale` 포함.
+  - PlayMode (5개 클래스 `ChainRushFlowTests`·`ChainRushBotRaceTests`·`ChainRushProbeTests`·`ChainRushTutorialTests`·`RaceBotTests`, `!Device !Enemy !NetEndReplay !^Lap$`): `testcasecount="124" result="Passed" passed="120" failed="0" skipped="4"` (`2026-11-23 05:14:03Z~05:17:49Z`, `226.30s`). `skipped="4"` 는 `[Explicit]` `Probe_*`. 실행 중 Console Error 12건은 모두 기존 테스트의 `LogAssert.Expect` 기대 에러이며 전 테스트 `TestLogs.AssertNoUnexpected()` 통과.
+  - Device (`^Device$`): `testcasecount="4" result="Passed" passed="4" failed="0" skipped="0"` (`2026-11-23 05:20:02Z~05:20:19Z`, `17.86s`). 새 `Lobby_RunnerPage_LeftAndRightArrowsChooseRunnerWhileUpAndDownDoNothing` 포함.
+  - 실제 러너 5종 프리뷰 픽셀 실측(`960×960` RT): ALPHA(`44..814`), BETA(`44..854`), THETA(`44..814`), DELTA(`44..897`), OMEGA(`44..814`) — 5명 모두 `bottomPx=44` 일치. 테스트 후 `PlayerPrefs.HasKey("ChainRush.Settings.LastRunner") == False`.
+- **사용자 플레이 확인 (2026-11-23)**: "좋다".
+- **확인 못 한 것**: 병합 전 Codex `adversarial-review`·`unity-reviewer` 파견은 돌리지 않았다(사용자가 바로 `dev` 병합 지시, 원하면 `dev` 병합 대상으로 실행). `.claude/agents/unity-reviewer.md` 체크리스트 메인 대조는 위반 없음. Antigravity 글로벌 `mcp_config.json` 의 `unity-mcp` 는 작업 완료 후 원복했다(사용자 원칙: Codex·Antigravity MCP 는 Claude 파견 또는 사용자 직접 요청 시에만 사용).
+
 ## 2026-11-23 · 로비·타이틀 밝은 B 팔레트 + 띠·선택 색은 마지막 러너 색, 마지막 러너 저장 (`feature/lobby-bright-theme`)
 
 - **결정 (사용자 2026-11-23 HANDOFF "다음작업 후보" → "A 해봐"(로비 UI) → 로비 9화면 캡처 조사 → "색상이 남색이라 뭔가 피곤한거같은데 조금 더 밝은 느낌은 어떨지 … 카트라이더 드리프트 UI 참고해봐 또는 현재 러너 모델을 보고 어울릴만하게 추천안들" → 시안 A 스카이 / B 피트 화이트 / C 밝힌 밤(디자인 캔버스 https://claude.ai/artifact/A8t4DWpCs7naCc73zNXHBV) → "B 바탕으로 하되 러너 바꿀때마다 뒤의 색이 바뀌게" → "전체에 남게 해줘 … 살짝 확대되었다가 원래 크기로 돌아가는 이펙트 … 가장 최근에 골랐던 러너 선택에 대한 데이터가 게임에 남아야겠다" → 질문에 "사선 색 띠"·"띠·선택·막대만"·"레이스 시작할 때" → 요청서(대화) "ㄱㄱ" → "codex로 구현해보아라" → 테스트 격리 "추천대로해봐" → 기대 로그 "ㄱㄱ")**: 표현 계층과 설정 저장만 바꿨다. 시뮬은 그대로다.
