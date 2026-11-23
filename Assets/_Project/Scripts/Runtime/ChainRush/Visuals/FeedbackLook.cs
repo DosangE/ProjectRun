@@ -11,9 +11,9 @@ namespace ProtoHarness.ChainRush.Visuals
         public const float PolePulseMax = 1.3f;
         public const float PoleEnterTime = 0.3f;
         public const float PoleEnterScale = 1.8f;
-        // The faint fill inside the pole's screen target, breathing with the ring between these alphas.
-        public const float TargetFillMin = 0.08f;
-        public const float TargetFillMax = 0.22f;
+        // The pole's screen target, and the bracket it tightens into on the hook, drawn this much larger than DrawTarget's
+        // own size (user 2026-11-22 "스윙 가능할 때의 사각형 조금 더 크게"); the tutorial's figures keep that size.
+        public const float PoleTargetScale = 1.3f;
         // An off-screen pole's target is pinned this far inside the screen's edge, this much smaller, with an arrow this
         // far beyond it pointing at the pole (user 2026-10-29 "화면 밖에 있어도 그 방향에 있다고").
         public const float EdgeInset = 60f;
@@ -75,17 +75,31 @@ namespace ProtoHarness.ChainRush.Visuals
         public const float ShoulderTailSide = 0.35f;
         public const float ShoulderTailHeight = 0.3f;
         public const float TailGlow = 1.2f;
-        // The white wind lines: every line at once as a booster starts, then a mirrored pair every WindLineEvery seconds,
+        // The white wind lines: every line at once as a booster starts, then one line about every WindLineEvery seconds,
         // each living WindLineTime, from WindLineAhead metres ahead of the runner, WindLineRadius round a centre
-        // WindLineHeight up, reaching WindLineReach metres back.
-        public const float WindLineEvery = 0.07f;
+        // WindLineHeight up, reaching about WindLineReach metres back.
+        public const float WindLineEvery = 0.045f;
         public const float WindLineTime = 0.28f;
         public const float WindLineAhead = 0.8f;
         public const float WindLineHeight = 0.4f;
         public const float WindLineRadius = 0.5f;
         public const float WindLineReach = 7f;
-        public const float WindLineWidth = 0.2f;
+        // Thin (user 2026-11-23 "선이 굵고"): each line's width is 0.6 to 1.4 times this.
+        public const float WindLineWidth = 0.07f;
         public const float WindLineAlpha = 0.85f;
+        // Each wind line bends outward as it runs back (user 2026-11-22 "살짝의 디테일"), like air parted round the runner:
+        // WindLineBend of its reach aside at its far end, growing with the square of the distance back.
+        public const float WindLineBend = 0.05f;
+        // Not mirrored (user 2026-11-23 "대칭이라"): each line starts within WindLineJitter degrees of its band round the
+        // runner, fans WindLineFanMin to WindLineFanMax degrees off straight back and reaches WindLineReachMin to
+        // WindLineReachMax of WindLineReach; the lines after the first burst start 0.5 to 1.5 WindLineEvery apart, and the
+        // first burst's start up to WindLineBurstSpread seconds apart.
+        public const float WindLineJitter = 12f;
+        public const float WindLineFanMin = 12f;
+        public const float WindLineFanMax = 32f;
+        public const float WindLineReachMin = 0.6f;
+        public const float WindLineReachMax = 1.25f;
+        public const float WindLineBurstSpread = 0.08f;
         // The speed the HUD shows is km/h (user 2026-11-06); the simulation stays in m/s.
         public const float KmhPerMetrePerSecond = 3.6f;
         // The countdown's 3, 2, 1 and "GO!" (user 2026-11-06 "큰 글자가 축소되서"): each comes in CueStartScale times its

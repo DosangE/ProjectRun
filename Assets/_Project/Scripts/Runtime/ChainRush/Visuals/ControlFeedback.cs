@@ -276,7 +276,8 @@ namespace ProtoHarness.ChainRush.Visuals
                 rings[ReadyRing].transform.SetPositionAndRotation(bite, Quaternion.identity);
                 rings[ReadyRing].transform.localScale = Vector3.one *
                     ((SwingLook.PoleThickness * 0.5f + 0.18f) * FeedbackLook.PoleScale(since));
-                Color color = Color.Lerp(NightUi.Accent, Color.white, FeedbackLook.Fade(since, FeedbackLook.PoleEnterTime));
+                // The same action yellow as the pole's mark on the HUD (ChainRushHud.DrawPoleMark).
+                Color color = Color.Lerp(NightUi.Action, Color.white, FeedbackLook.Fade(since, FeedbackLook.PoleEnterTime));
                 color.a = 0.8f;
                 SetTint(rings[ReadyRing], color);
             }
