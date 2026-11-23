@@ -5,10 +5,10 @@
 > 작업을 넘길 때마다 고친다. 고칠 때 볼 것(끝난 항목 지우기 등 ⓐ~ⓓ)과 병합 메시지의 `HANDOFF:` 줄은 `CLAUDE.md` §9-2 가 원본이다. 날짜별 기록을 쌓지 않는다.
 > 2026-11-12 문서 다이어트로 다시 썼다. 그 전 판(2026-10-05 ~ 2026-11-12, 283줄)은 `docs/archive/HANDOFF-2026-11-12.md` 에 그대로 있다.
 
-## 1. 지금 상태 (2026-11-20)
+## 1. 지금 상태 (2026-11-23)
 
 - **로비 UI 후속 ①~⑤ (2026-11-23 `dev` 병합, 사용자 "좋다 커밋 푸시하라" → "dev까지 병합하라")**: `feature/lobby-followup`. 키 안내 바탕·러너 `←`/`→` 선택·프리뷰 발 높이 통일(5종 `bottomPx=44`)·띠 스케일 튐 수정·`LobbyMenu.DefaultSettings` 테스트 격리 끝(DECISIONS 2026-11-23 "로비 UI 후속 ①~⑤"). 병합 전 Codex·`unity-reviewer` 파견은 돌리지 않았다(원하면 `dev` 병합 대상으로 실행). Antigravity `mcp_config.json` 의 `unity-mcp` 는 작업 종료 후 원복(Codex·Antigravity MCP 는 Claude 파견 또는 사용자 직접 요청 시에만 사용).
-- **로비 B 팔레트 (2026-11-23 `dev` 병합·푸시, 사용자 "커밋 병합 푸시 ㄱㄱ" → 리뷰 뒤 "가")**: `feature/lobby-bright-theme`.
+- **로비 B 팔레트 (2026-11-23 `dev` 병합·푸시, 사용자 "커밋 병합 푸시 ㄱㄱ" → 리뷰 뒤 "가")**: `feature/lobby-bright-theme`. 위 후속과 함께 v0.7.1 로 `main` 에도 올라갔다(아래 마일스톤 줄).
 
 - **마일스톤**: **M5 (v0.7) "같이 달리는 맛" 끝 — `dev` 를 `main` 에 병합하고 태그 `v0.7`** (2026-11-18, DECISIONS "main v0.7", 사용자 "확인했다 병합 태그 푸시 모두 진행"). 그 뒤 싱글 다듬기(장식 보충·로비 B 팔레트·부스터/봉 표시 등)를 **v0.7.1** 로 `main` 에 올렸다(2026-11-23, DECISIONS "main v0.7.1", 사용자 "마일스톤으로 진행"·"v0.7.1"). 병합 커밋은 git 으로 구한다(`git log --merges -1 main`). 다음 태그는 **v0.8 = M7 멀티 재개**(DECISIONS 2026-11-18 "태그: M7(멀티 재개) = v0.8") — 2026-11-12 "방향 재설정" 은 멀티를 v1.0 밖으로 두었으니, v1.0 범위를 다시 정한 것인지는 M7 을 열 때 묻는다. 무엇을 먼저 할지는 2절에서 사용자가 고른다. 순서·완료 조건은 `docs/DESIGN.md` §5-1.
 - **MP2 ④ 봇 난이도 (2026-11-16 `dev` 병합·푸시, 사용자 "병합 푸시 ㄱㄱ")** — `feature/mp2-bot-difficulty`. 난이도 3단계·루프 22회차·스윙 중 부스트 감속·봇 재시도 0.5 s·리뷰 대응. 병합 커밋은 git 으로 구한다(`git log --merges -1 dev`). 상태·결과는 DECISIONS 2026-11-15 "MP2 ④ 봇 난이도", 2026-11-16 "스윙 중 부스트가 끝나면 감속", 회차 기록은 `docs/BOT_TUNING_LOG.tsv`. `ProjectSettings/ProjectSettings.asset` 수정은 에디터 버전 차이(커밋 안 함).
@@ -56,7 +56,9 @@
    - D:/PCUBE PC 의 Codex 설정에 Unity relay 서버가 둘이라 `-Unity` 가 실패하던 일(DECISIONS 2026-11-14 "Codex 의 Blender MCP" 발견): 그 뒤 MP2 단계 B 가 그 PC 에서 `-Write -Unity` 로 돌았다(DECISIONS "MP2 단계 B" 의 "진행"). 설정을 어떻게 고쳤는지는 기록이 없다 — 다시 "found 2" 가 나오면 사용자에게 묻는다.
    - 리뷰어 diff 파일 전달에서 확인 못 한 것(DECISIONS 2026-11-15 "읽기 전용 에이전트의 Bash"): 작업 트리 = HEAD 인 실제 "그 밖" 병합 리뷰. 다음 `Assets/` 병합에서 파견문에 diff 파일 경로·base·HEAD 를 적고(SUBAGENTS §7-1) 결과를 그 항목에 덧붙인다.
    - 그 밖의 후보: `select-tests` 하한 규칙과 실제 실행 범위, SessionStart `resume` 트리거 미확인, 서브에이전트 안의 훅은 Bash deny 만 확인됨, 파견 0~1건인 에이전트 3종(`unity-explorer`·`unity-architect`·`unity-verifier`, DECISIONS 2026-11-13 "하네스 비용 기준선").
-   - **게이트의 패키지 경고 — 남은 확인** (DECISIONS 2026-11-19 "테스트 로그 검사에서 AI 패키지의 계정 대기 경고 한 문장만 뺀다"): PlayMode TearDown 은 이제 `TestLogs.AssertNoUnexpected()` 를 부른다 — 새 로그 검사 테스트도 이것을 쓴다. 실제 패키지 경고가 난 실행에서 그때 돌던 테스트가 통과하는지는 아직 못 봤다(`Editor.log` 에서 Filename 이 `TestLogsTests.cs` 가 아닌 그 문장을 찾고, 같은 시각의 테스트 결과를 본다). 실패하면 원문을 그 항목에 덧붙인다.
+   - **② 영향 범위가 데이터 검사 추가를 놓친 일** (DECISIONS 2026-11-23 "main v0.7.1" 의 게이트 1회차): `79628b9` 가 `RunnerProfile.OnValidate` 에 로비 색 검사를 더했는데, `CreateInstance<RunnerProfile>` + `SerializedObject` 로 값을 바꾸는 테스트(`ChainRushCornerSwingTests.Swing_BoosterOnAShortenedRope_…`)가 ② 선택에 없어 ③ 게이트에서야 드러났다. 후보: SO 에 `OnValidate` 검사를 더한 변경은 그 SO 를 `CreateInstance` 하는 테스트를 grep 해 고른다는 줄을 `VERIFICATION.md` §4-4 영향 평가나 `select-tests.ps1` 에 넣을지(§3-2 합의).
+   - **Device 실행이 시작되지 않은 일** (DECISIONS 2026-11-23 "main v0.7.1"): v0.7.1 게이트 뒤 `Run Device Input Tests` 를 두 번(포커스 대기 `EditorApplication.update` 콜백, 포커스 상태에서 `ExecuteMenuItem`) 걸었는데 Play 에 들어가지 않았고 결과 XML 도 그대로였다. 세 번째(12:18Z, `ExecuteMenuItem` 이 `True`)에 돌았다. 원인 미확인 — 다음 마일스톤에서 Device 를 걸 때 결과 XML 갱신을 확인하고, 다시 안 돌면 그때의 Console·`Editor.log` 를 이 줄에 붙인다.
+   - **게이트의 패키지 경고 — 남은 확인** (DECISIONS 2026-11-19 "테스트 로그 검사에서 AI 패키지의 계정 대기 경고 한 문장만 뺀다"): PlayMode TearDown 은 이제 `TestLogs.AssertNoUnexpected()` 를 부른다 — 새 로그 검사 테스트도 이것을 쓴다. 실제 패키지 경고가 난 실행에서 그때 돌던 테스트가 통과하는지는 아직 못 봤다(`Editor.log` 에서 Filename 이 `TestLogsTests.cs` 가 아닌 그 문장을 찾고, 같은 시각의 테스트 결과를 본다). 실패하면 원문을 그 항목에 덧붙인다. 2026-11-23 v0.7.1 게이트 3회의 `Editor.log` 에서는 이 문장이 회차마다 3번씩 나왔는데 모두 `TestLogsTests` 가 남긴 것이었다 — 실제 패키지 경고는 나지 않아 아직 못 봤다.
    - **재측정** (사용자 2026-11-13 "다 네 추천대로 ㄱㄱ"): **2026-11-27 이후, 그리고 2026-11-13 이후 시작한 세션이 10개 이상일 때** `python -I tools/harness-cost.py --since 2026-11-13` 으로 돌려 DECISIONS "하네스 비용 기준선" 의 표와 비교하고, 결과를 같은 항목에 덧붙인다. 2026-11-23 에 날짜 조건 전 중간 값을 쟀다(같은 항목 "중간 재측정" — 컨텍스트 중앙값 −20%, 세션 첫 요청 +9%) — 정식 재측정은 그대로 11-27 이후, 중간 값과도 비교한다.
      - 중간 값에서 나온 후보: 세션 첫 요청(고정 비용)이 늘었다 — 세션마다 읽는 문서(HANDOFF·메모리) 몫을 나눠 재고 줄일지 본다.
      - 비교할 것: 요청당 컨텍스트 중앙값, 20만 넘는 요청의 입력 몫, 조회 분류. 세션마다 작업 종류(코드·아트·문서)를 붙여 같은 종류끼리 본다.
