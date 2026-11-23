@@ -15,7 +15,7 @@ namespace ProtoHarness.ChainRush.Flow
     {
         // Not the Player Settings bundle version (ProjectSettings is off limits, CLAUDE.md §0); raised by hand to match
         // the milestone tag (user 2026-10-29).
-        public const string Version = "0.7";
+        public const string Version = "0.7.1";
         // The title has no runner list, so these stripes use fixed colors.
         private static readonly Color Teal = new Color32(31, 181, 174, 255);
         private static readonly NightUi.Palette Palette = LobbyView.CreateBrightPalette(Teal);
