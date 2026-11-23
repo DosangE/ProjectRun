@@ -29,6 +29,7 @@ namespace ProtoHarness.ChainRush
         private GUIStyle number;
         private GUIStyle button;
         private GUIStyle waiting;
+        private GUIStyle poleKey;
         private GUIStyle cue;
         private GUIStyle pauseItem;
         private Font font;
@@ -330,6 +331,8 @@ namespace ProtoHarness.ChainRush
             button.alignment = TextAnchor.MiddleCenter;
             waiting = Style(22, Color.white, FontStyle.Bold);
             waiting.alignment = TextAnchor.MiddleCenter;
+            poleKey = NightUi.Style(displayFont, 17, Ink, FontStyle.Bold);
+            poleKey.alignment = TextAnchor.MiddleCenter;
             pauseItem = Style(22, Color.white, FontStyle.Bold);
             pauseItem.alignment = TextAnchor.MiddleCenter;
             cue = NightUi.Style(displayFont, CueDrawSize, Mint, FontStyle.BoldAndItalic);
@@ -497,18 +500,17 @@ namespace ProtoHarness.ChainRush
             bool swinging = player.IsSwinging;
             Vector3 pole = swinging ? game.Racer.SwingCenter : grapple.PoleCandidate;
             float since = swinging ? feedback.SinceSwing(Time.time) : feedback.SincePoleReady(Time.time);
-            float size = swinging ? FeedbackLook.BracketScale(since) : FeedbackLook.PoleScale(since);
+            float size = (swinging ? FeedbackLook.BracketScale(since) : FeedbackLook.PoleScale(since)) * FeedbackLook.PoleTargetScale;
             float flash = FeedbackLook.Fade(since, swinging ? FeedbackLook.HookRingTime : FeedbackLook.PoleEnterTime);
-            Color color = Color.Lerp(Mint, Color.white, flash);
-            float fill = swinging ? 0f : Mathf.Lerp(FeedbackLook.TargetFillMin, FeedbackLook.TargetFillMax, FeedbackLook.Pulse(since));
+            Color color = Color.Lerp(NightUi.Action, Color.white, flash);
             // Just after a contact broke the swing the pole cannot be hooked yet (RunnerMotor.ContactRehookTicks): its mark
             // goes grey and stops pulsing, so a press that hooks nothing does not read as a lost key (user 2026-11-21, S5).
             if (!swinging && player.IsHookCoolingDown)
             {
                 color = Muted;
-                fill = FeedbackLook.TargetFillMin;
+                size = FeedbackLook.PolePulseMin * FeedbackLook.PoleTargetScale;
             }
-            DrawPinnedTarget(SwingLook.PoleBite(pole), size, color, fill, width, height, scale);
+            DrawPinnedTarget(SwingLook.PoleBite(pole), size, color, swinging ? Mark.PoleHooked : Mark.Pole, width, height, scale);
         }
 
         // The tutorial's stage and goal, and where the goal is when it has a place.
@@ -521,7 +523,7 @@ namespace ProtoHarness.ChainRush
                 return;
             }
             TutorialCourse.Goal goal = tutorial.CurrentGoal;
-            if (goal.HasZone) DrawPinnedTarget(goal.Point + Vector3.up * GoalMarkHeight, 1f, GoalColor, 0f, width, height, scale);
+            if (goal.HasZone) DrawPinnedTarget(goal.Point + Vector3.up * GoalMarkHeight, 1f, GoalColor, Mark.Goal, width, height, scale);
         }
 
         private const float GoalMarkHeight = 3f;
@@ -534,7 +536,7 @@ namespace ProtoHarness.ChainRush
             GUI.Label(new Rect(x + 48, y + 26, 1024, 28),
                 "STAGE " + (tutorial.StageIndex + 1) + " / " + tutorial.StageCount + "   ·   " + tutorial.CurrentStage.Name, small);
             TutorialCourse.Page page = tutorial.CurrentPage;
-            TutorialFigures.Draw(page.Figure, new Rect(x + 48, y + 72, 1024, 280), waiting, small, GoalColor);
+            TutorialFigures.Draw(page.Figure, new Rect(x + 48, y + 72, 1024, 280), waiting, small, poleKey, GoalColor);
             NightUi.Block(new Rect(x + 48, y + 376, 1024, 1), Row);
             GUI.Label(new Rect(x + 48, y + 400, 1024, 54), page.Title, heading);
             GUI.Label(new Rect(x + 48, y + 468, 1024, 96), page.Body, body);
@@ -590,7 +592,7 @@ namespace ProtoHarness.ChainRush
 
         // A target on a world point; off the screen (to the side, or behind the camera) it stays pinned at the screen's
         // edge toward it, smaller, with an arrow pointing at it.
-        private void DrawPinnedTarget(Vector3 world, float size, Color color, float fill, float width, float height, float scale)
+        private void DrawPinnedTarget(Vector3 world, float size, Color color, Mark mark, float width, float height, float scale)
         {
             Vector3 screen = viewCamera.WorldToScreenPoint(world);
             var point = new Vector2(screen.x / scale, (Screen.height - screen.y) / scale);
@@ -598,18 +600,67 @@ namespace ProtoHarness.ChainRush
             if (screen.z < 0f) point = new Vector2(width - point.x, height - point.y);
             if (screen.z > 0f && FeedbackLook.IsOnScreen(point, width, height))
             {
-                DrawTarget(point.x, point.y, size, color, fill);
+                DrawMark(mark, point.x, point.y, size, color);
                 return;
             }
             Vector2 pinned = FeedbackLook.PinToEdge(point, width, height, out Vector2 direction);
             float edgeSize = size * FeedbackLook.EdgeTargetScale;
-            DrawTarget(pinned.x, pinned.y, edgeSize, color, fill);
-            // Past the square's side in that direction, so the arrow never overlaps the target.
-            float reach = PoleTargetHalf * edgeSize / Mathf.Max(Mathf.Abs(direction.x), Mathf.Abs(direction.y));
+            DrawMark(mark, pinned.x, pinned.y, edgeSize, color);
+            // Past the mark's side in that direction, so the arrow never overlaps it: a square's side, or a diamond's.
+            float dx = Mathf.Abs(direction.x), dy = Mathf.Abs(direction.y);
+            float reach = mark == Mark.Goal
+                ? PoleTargetHalf * edgeSize / Mathf.Max(dx, dy)
+                : PoleMarkHalf * edgeSize / (dx + dy);
             DrawArrow(pinned + direction * (reach + FeedbackLook.ArrowGap), direction, color);
         }
 
+        // What a pinned target draws: the tutorial's goal square, the pole offered to hook, or the pole hooked.
+        private enum Mark { Goal, Pole, PoleHooked }
+
+        private void DrawMark(Mark mark, float x, float y, float size, Color color)
+        {
+            if (mark == Mark.Goal) DrawTarget(x, y, size, color, 0f);
+            else DrawPoleMark(x, y, size, color, mark == Mark.Pole ? poleKey : null);
+        }
+
         private const float PoleTargetHalf = 30f;
+        // Half the pole mark's diagonal at size 1, and the key it names (KeyboardMouseInputSource: left shift swings).
+        private const float PoleMarkHalf = 36f;
+        private const string PoleKeyLabel = "SHIFT";
+
+        // The pole's mark (user 2026-11-23 "봉 표시가 제대로 안보이는거같다"): a solid diamond in the action yellow, apart from
+        // the booster's mint, outlined in ink, naming the key to press, like a button prompt. Hooked (key null) it is the
+        // same diamond's outline only, tightening round the swing's center.
+        internal static void DrawPoleMark(float x, float y, float size, Color color, GUIStyle key)
+        {
+            const float Thick = 6f, Edge = 2f;
+            float half = PoleMarkHalf * size;
+            float side = half * Mathf.Sqrt(2f);
+            Matrix4x4 previous = GUI.matrix;
+            GUI.matrix = previous * Matrix4x4.TRS(new Vector3(x, y, 0f), Quaternion.Euler(0f, 0f, 45f), Vector3.one);
+            if (key != null)
+            {
+                NightUi.Block(new Rect(-side * 0.5f - Edge, -side * 0.5f - Edge, side + Edge * 2f, side + Edge * 2f), Ink);
+                NightUi.Block(new Rect(-side * 0.5f, -side * 0.5f, side, side), color);
+            }
+            else
+            {
+                DrawSquareFrame(side + Edge * 2f, Thick + Edge * 2f, Ink);
+                DrawSquareFrame(side, Thick, color);
+            }
+            GUI.matrix = previous;
+            if (key != null) GUI.Label(new Rect(x - half, y - half, half * 2f, half * 2f), PoleKeyLabel, key);
+        }
+
+        // A square frame side wide around the origin, its edges thick wide, reaching inward.
+        private static void DrawSquareFrame(float side, float thick, Color color)
+        {
+            float s = side * 0.5f;
+            NightUi.Block(new Rect(-s, -s, side, thick), color);
+            NightUi.Block(new Rect(-s, s - thick, side, thick), color);
+            NightUi.Block(new Rect(-s, -s + thick, thick, side - thick * 2f), color);
+            NightUi.Block(new Rect(s - thick, -s + thick, thick, side - thick * 2f), color);
+        }
 
         // The pole's target is bolder than an anchor's bracket (user 2026-10-29 "사각형 타겟 … 잘 보이게"): all four
         // corners, thicker, outlined in ink so it reads against bright scenery, over a faint fill that breathes with the

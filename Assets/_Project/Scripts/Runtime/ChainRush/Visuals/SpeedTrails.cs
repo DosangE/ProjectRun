@@ -9,7 +9,7 @@ namespace ProtoHarness.ChainRush.Visuals
     // both, green for a boost pad's carry, fading with it. The swing and the booster tails drawn one on the other did not
     // read as a third tail (user 2026-11-06, "부스터 + 스윙 의 꼬리가 안보인다"), so both has its own. Under any booster, white
     // wind lines cut back past the runner (user 2026-11-06, "날카롭게 바람을 가르는 듯한 흰색 뾰족한 선들"): thin spindles,
-    // pointed at both ends, shot in mirrored pairs from all round the runner and fanning back ("여러 방향으로"), read from
+    // pointed at both ends, shot from all round the runner and fanning back ("여러 방향으로"), read from
     // the user's reference clip. Loose particle streaks were too irregular and sonic rings too round and too many. All of
     // it hangs on the runner's root, so it does not depend on the runner's temporary model (DECISIONS 2026-11-06).
     // Under a booster the tail is layered, a white core and a thin tail off each shoulder, and the wind lines all shoot
@@ -21,12 +21,14 @@ namespace ProtoHarness.ChainRush.Visuals
         private const int LinePoints = 7;
         // Below this share of a pad's speed no new line starts; the tail fades on.
         private const float WeakestLine = 0.05f;
-        // Each line's direction round the runner, in degrees from its right over the top to its left, none into the road,
-        // and how far it fans out from straight back. Line i mirrors line Length - 1 - i. Fixed, so the lines stay regular.
+        // Each line's band round the runner, in degrees from its right over the top to its left, none into the road. Every
+        // time a line starts it takes a direction within WindLineJitter of its band, a fan back, a reach and a width from a
+        // hash of how many lines have started, so no two shots look alike and the sides are not mirrors (user 2026-11-23
+        // "선이 굵고 대칭이라 보기가 살짝 불편하다"), yet the bands keep them spread round the runner rather than loose (fully
+        // loose streaks were too irregular, 2026-11-06).
         private static readonly float[] LineAround = { -10f, 10f, 30f, 50f, 70f, 85f, 95f, 110f, 130f, 150f, 170f, 190f };
-        private static readonly float[] LineFan = { 30f, 20f, 30f, 20f, 30f, 20f, 20f, 30f, 20f, 30f, 20f, 30f };
-        // The order the mirrored pairs fire in, each named by its first line, so the wave jumps about the runner.
-        private static readonly int[] PairOrder = { 0, 3, 5, 1, 4, 2 };
+        // The order the lines fire in after the first burst, so the next line jumps about the runner.
+        private static readonly int[] LineOrder = { 0, 7, 3, 10, 5, 1, 8, 11, 4, 2, 9, 6 };
         private static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
         private static readonly int EmissionColorId = Shader.PropertyToID("_EmissionColor");
         private readonly Transform runner;
@@ -40,9 +42,14 @@ namespace ProtoHarness.ChainRush.Visuals
         private bool wasWindy;
         private readonly LineRenderer[] lines = new LineRenderer[LineAround.Length];
         private readonly float[] lineBornAt = new float[LineAround.Length];
+        // The shape each line took when it started: direction round and fan back in radians, reach in metres.
+        private readonly float[] lineAround = new float[LineAround.Length];
+        private readonly float[] lineFan = new float[LineAround.Length];
+        private readonly float[] lineReach = new float[LineAround.Length];
         private readonly Vector3[] points = new Vector3[LinePoints];
         private readonly MaterialPropertyBlock tint = new MaterialPropertyBlock();
-        private int nextPair;
+        private int nextLine;
+        private int linesStarted;
         private float nextLineAt;
         private float lineStrength;
 
@@ -172,33 +179,53 @@ namespace ProtoHarness.ChainRush.Visuals
                 SetTint(leftTail, side, FeedbackLook.TailGlow);
                 SetTint(rightTail, side, FeedbackLook.TailGlow);
                 lineStrength = strength;
-                // As a booster starts every line shoots out at once, then the pairs take turns.
+                // As a booster starts every line shoots out at once, then one at a time at uneven gaps.
                 if (!wasWindy && strength > WeakestLine) StartAll(now);
-                else if (strength > WeakestLine && now >= nextLineAt) StartPair(now);
+                else if (strength > WeakestLine && now >= nextLineAt) StartNext(now);
             }
             wasWindy = windy;
             UpdateLines(forward, right, now);
         }
 
+        // The first burst's lines start a little apart, so they do not all close at the same instant either.
         private void StartAll(float now)
         {
-            for (int i = 0; i < lines.Length; i++) StartLine(i, now);
+            for (int i = 0; i < lines.Length; i++)
+                StartLine(i, now - Hash01(linesStarted, 4) * FeedbackLook.WindLineBurstSpread);
             nextLineAt = now + FeedbackLook.WindLineEvery;
         }
 
-        private void StartPair(float now)
+        private void StartNext(float now)
         {
-            int first = PairOrder[nextPair];
-            StartLine(first, now);
-            StartLine(lines.Length - 1 - first, now);
-            nextPair = (nextPair + 1) % PairOrder.Length;
-            nextLineAt = now + FeedbackLook.WindLineEvery;
+            StartLine(LineOrder[nextLine], now);
+            nextLine = (nextLine + 1) % LineOrder.Length;
+            nextLineAt = now + FeedbackLook.WindLineEvery * Mathf.Lerp(0.5f, 1.5f, Hash01(linesStarted, 5));
         }
 
-        private void StartLine(int index, float now)
+        private void StartLine(int index, float bornAt)
         {
-            lineBornAt[index] = now;
+            int n = linesStarted++;
+            lineBornAt[index] = bornAt;
+            lineAround[index] = (LineAround[index] + (Hash01(n, 0) * 2f - 1f) * FeedbackLook.WindLineJitter) * Mathf.Deg2Rad;
+            lineFan[index] = Mathf.Lerp(FeedbackLook.WindLineFanMin, FeedbackLook.WindLineFanMax, Hash01(n, 1)) * Mathf.Deg2Rad;
+            lineReach[index] = FeedbackLook.WindLineReach * Mathf.Lerp(FeedbackLook.WindLineReachMin, FeedbackLook.WindLineReachMax, Hash01(n, 2));
+            lines[index].widthMultiplier = FeedbackLook.WindLineWidth * Mathf.Lerp(0.6f, 1.4f, Hash01(n, 3));
             lines[index].enabled = true;
+        }
+
+        // A fixed 0..1 value for the n-th line's salt-th choice, so the look is the same from one run to the next.
+        private static float Hash01(int n, int salt)
+        {
+            unchecked
+            {
+                uint h = (uint)n * 0x9E3779B1u + (uint)salt * 0x85EBCA77u;
+                h ^= h >> 15;
+                h *= 0x2C1B3C6Du;
+                h ^= h >> 12;
+                h *= 0x297A2D39u;
+                h ^= h >> 15;
+                return (h & 0xFFFFFF) / (float)0x1000000;
+            }
         }
 
         private void UpdateLines(Vector3 forward, Vector3 right, float now)
@@ -208,7 +235,7 @@ namespace ProtoHarness.ChainRush.Visuals
         }
 
         // The leading tip shoots out fast and slows; the trailing tip catches it up, so the line stretches, then closes to
-        // nothing at its end.
+        // nothing at its end. It runs along a fixed curve bending outward, so the line slides round it as it goes.
         private void DrawLine(int index, float age, Vector3 forward, Vector3 right)
         {
             LineRenderer line = lines[index];
@@ -218,16 +245,23 @@ namespace ProtoHarness.ChainRush.Visuals
                 line.enabled = false;
                 return;
             }
-            float around = LineAround[index] * Mathf.Deg2Rad;
-            float fan = LineFan[index] * Mathf.Deg2Rad;
+            float around = lineAround[index];
+            float fan = lineFan[index];
             Vector3 outward = right * Mathf.Cos(around) + Vector3.up * Mathf.Sin(around);
             Vector3 way = outward * Mathf.Sin(fan) - forward * Mathf.Cos(fan);
+            // Square to way, leaning out: the side the line bends to.
+            Vector3 aside = outward * Mathf.Cos(fan) + forward * Mathf.Sin(fan);
             Vector3 origin = runner.position + Vector3.up * FeedbackLook.WindLineHeight + forward * FeedbackLook.WindLineAhead
                 + outward * FeedbackLook.WindLineRadius;
-            float lead = FeedbackLook.WindLineReach * (1f - (1f - age) * (1f - age));
-            float trail = FeedbackLook.WindLineReach * age * age;
+            float reach = lineReach[index];
+            float bend = FeedbackLook.WindLineBend / reach;
+            float lead = reach * (1f - (1f - age) * (1f - age));
+            float trail = reach * age * age;
             for (int i = 0; i < LinePoints; i++)
-                points[i] = origin + way * Mathf.Lerp(lead, trail, i / (float)(LinePoints - 1));
+            {
+                float back = Mathf.Lerp(lead, trail, i / (float)(LinePoints - 1));
+                points[i] = origin + way * back + aside * (bend * back * back);
+            }
             line.SetPositions(points);
             Color color = Color.white;
             color.a = FeedbackLook.WindLineAlpha * lineStrength * (1f - age * age);

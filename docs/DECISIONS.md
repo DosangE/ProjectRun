@@ -10,6 +10,22 @@
 
 ---
 
+## 2026-11-23 · 봉 표시는 노란 마름모 + SHIFT, 부스터 바람 선은 가늘고 대칭 없이 (`feature/hud-pole-trails`)
+
+- **결정 (사용자 2026-11-23 HANDOFF "다음 작업 후보" → "B ㄱㄱ"(2절 8번 후속 후보: 봉 표시 크게·바람 선 디테일, 로비 UI 는 따로) → 요청서(대화) "추천대로 ㄱㄱ"(봉 표시 ×1.3, 바람 선 휨 + 쌍마다 길이·굵기 편차) → 플레이 "아직 봉 표시가 제대로 안보이는거같다. 색상때문인지 크기 때문인지 표시 자체를 다른거로 바꿔야하나 싶다. 부스터 바람 가르기에 대해선 선이 굵고 대칭이라 보기가 살짝 불편하다. 카트라이더나 마리오카트 부스터 썼을때 바람가르는 이펙트 보고 참고해봐" → 질문에 "노랑 + 키 표시", "가늘고 불규칙하게" → 플레이 "좋다")**: 표현 계층만 바꿨다. 시뮬은 그대로다.
+  - **봉 표시** (`ChainRushHud.DrawPoleMark`): 민트 모서리 L자 4개 → 꽉 찬 노란 마름모(`NightUi.Action`, 남색 테두리 2 px) 안에 남색 `SHIFT`(`poleKey` 17 px). 반 대각선 36 px × `FeedbackLook.PoleTargetScale` 1.3 × 맥동. 건 뒤에는 같은 마름모의 6 px 윤곽만(글자 없음) 스윙 중심으로 조인다. 쿨타임은 회색·맥동 멈춤. 화면 밖 화살표 거리는 마름모 모양으로(`PoleMarkHalf * size / (|dx| + |dy|)`). 튜토리얼 목표 표시는 사각형(`DrawTarget`) 그대로다 — `DrawPinnedTarget` 이 `Mark { Goal, Pole, PoleHooked }` 로 고른다.
+  - **원인 판단 (화면으로 보지 않고 코드로)**: 봉 표시의 민트가 부스터 꼬리·가장자리 띠·패널 테두리·봉 고리와 같은 색이고, 채움이 알파 0.08~0.22 라 속이 비어 앵커 브래킷과 같은 말로 읽혔다. 첫 시도(×1.3 만)로는 "아직 … 안보이는거같다".
+  - **함께 바꾼 것 (요청서 범위 밖, 보고함)**: 봉 위 고리 색도 노랑(`ControlFeedback.cs:279`), 튜토리얼 봉 페이지 그림(`TutorialFigures.cs:68,126`)과 문구 "사각형 표시" → "노란 마름모 표시"(`TutorialCourse.cs:157`). 쓰지 않게 된 `FeedbackLook.TargetFillMin/Max` 는 지웠다.
+  - **바람 선** (`SpeedTrails`): 굵기 0.2 → 0.07 m(선마다 0.6~1.4배), 대칭 6쌍·고정 순서 → 선이 시작할 때마다 해시(시작 횟수)로 방향(띠 ±12°)·펼침 12~32°·길이 0.6~1.25배를 정한다. 첫 터짐 12개는 그대로(시작 시각 0.08 s 안에서 엇갈림), 그 뒤 한 줄씩 `WindLineEvery` 0.045 s 의 0.5~1.5배 간격. 뒤로 갈수록 바깥으로 휜다(끝에서 길이의 5%, `WindLineBend`). 완전 무작위가 아니라 띠 안에서 흩는 것은 2026-11-06 "흩어진 파티클 줄기는 너무 불규칙" 때문이다.
+  - **레퍼런스**: 마리오카트 8·카트라이더 부스터 이펙트의 분석 자료는 검색으로 찾지 못했다. 이 PC(C:/Users/User/Desktop/PCUBE)에는 yt-dlp·ffmpeg 가 없어 영상을 받지 못했다. 근거로 쓴 것은 SuperTuxKart 포럼의 부스트 속도선 설명(가장자리에서 강하고 가운데는 비움, 움직이며 나타났다 사라짐, https://forum.supertuxkart.net/thread-200.html)과 사용자의 "굵고 대칭" 지적.
+- **버린 대안**: 봉 표시 — 색만 노랑(모양 그대로), 봉 자체에 빛 기둥(HUD 는 작게). 바람 선 — 화면 집중선으로 바꾸기, 둘 다. 첫 요청서의 쌍마다 고정 편차(대칭이 남는다).
+- **영향 평가**: `FeedbackLook`·`ChainRushHud`·`SpeedTrails`·`ControlFeedback`·`TutorialFigures`·`TutorialCourse`(표현, 시뮬 참조 없음) → HUD·튜토리얼 화면·러너 이펙트 → PlayMode `ChainRushTests`·`ChainRushPresentationTests`·`ChainRushInputSourceTests`·`ChainRushTutorialTests`·`ChainRushBotRaceTests`·`ChainRushCornerSwingTests.SpeedTrails_`·`ChainRushFlowTests` HUD 6묶음(`select-tests.ps1` 의 `ChainRushHud.cs` 줄) + EditMode `SpeedTrailsTests`·`TutorialCourseTests`. 서킷 지문·Lap 은 돌리지 않았다(시뮬 무변경). 도구의 "전체" 는 에디터 버전 차이 파일 때문이다. 테스트 사양은 바꾸지 않았다(`SpeedTrails_BoosterStart_ShootsEveryWindLineAndLayersTheTail` 의 첫 터짐 12개 유지).
+- **검증 (에디터 6000.3.19f1, Unity MCP, 모두 `test-runs.ps1 -Record`)**:
+  - 첫 시도(×1.3·휨·쌍 편차): 컴파일 `*** Tundra build success (14.64 seconds), 29 items updated, 1618 evaluated`, EditMode `SpeedTrailsTests` `testcasecount="7" result="Passed" passed="7" failed="0" skipped="0"` (03:01:15Z), PlayMode (위 목록) `testcasecount="95" result="Passed" passed="95" failed="0" skipped="0"` (03:01:58Z~03:04:41Z).
+  - 최종: 컴파일 `*** Tundra build success (8.55 seconds), 29 items updated, 1618 evaluated`, Console Error 0. EditMode `SpeedTrailsTests`·`TutorialCourseTests` `testcasecount="24" result="Passed" passed="24" failed="0" skipped="0"` (2026-11-23 03:16:50Z~03:16:51Z). PlayMode (위 목록) `testcasecount="95" result="Passed" passed="95" failed="0" skipped="0"` (03:17:18Z~03:19:47Z). 그 뒤 `Assets/` 코드 변경 없음(커밋하지 않은 7개는 테스트가 다시 쓴 `M_PalmTower*.mat`).
+- **사용자 플레이 확인 (2026-11-23)**: "좋다".
+- **확인 못 한 것**: 화면 캡처를 하지 않았다(HUD 가 IMGUI 라 카메라 캡처에 안 나온다) — 화면 밖 0.8배 마름모 안의 `SHIFT` 글자, 튜토리얼 봉 그림은 사용자 "좋다" 외에 따로 보지 않았다. 바람 선 프레임 비용은 개수가 같아 재지 않았다. 실제 레퍼런스 영상과의 비교.
+
 ## 2026-11-22 · SKYWAY 장식 보충 1단계: 트랙 조명(B) + 지상 거리 2,573조각·주차된 차 438대 + 포장 한 단계 어둡게 (`feature/skyway-decor-fill`)
 
 - **결정 (사용자 2026-11-22 HANDOFF "다음작업 후보" → 추천 "SKYWAY 장식 보충 + 트랙 조명" "추천대로 ㄱㄱ" → 조사 후보 ①~④ 중 추천 ③+① "추천대로만 ㄱㄱ, 다른 작업 없다" → 요청서(대화) "ㄱㄱ" → 조명 비교에 "B ㄱㄱ" → 전후 렌더·프레임 보고에 "ㄱㄱ"(Q2 포장 어둡게 포함으로 받음) → "플레이 확인했다 커밋 병합 ㄱㄱ")**: SKYWAY 그늘면의 남색·보라를 트랙 조명으로 고치고, 도로에서 내려다보이는 흰 포장 바닥을 지상 거리로 채웠다. D:/PCUBE 에 같은 작업은 없다(사용자 "다른 작업 없다").

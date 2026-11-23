@@ -154,7 +154,7 @@ namespace ProtoHarness.ChainRush.Tutorial
                 Zone(GoalKind.Reverse, -14f, -50f, 7f, "↓ 를 유지한 채 ← 를 누르면\n뒤가 왼쪽으로 갑니다. 왼쪽 뒤 빛기둥으로.")),
             new Stage("봉 스윙", "가운데 봉에 줄을 걸고 돕니다.\n코너를 도는 이 게임의 핵심 기술입니다.", new[]
                 {
-                    new Page("바닥 어디서나 봉에 줄 걸기", "사각형 표시와 화살표가 봉의 방향을 알려줍니다.\n바닥 어디서나 ↑ 로 달리면서 SHIFT 를 누르고 유지하세요.\n멀리서 걸면 크게, 가까이서 걸면 작게 돕니다.", TutorialFigures.Kind.Pole),
+                    new Page("바닥 어디서나 봉에 줄 걸기", "노란 마름모 표시와 화살표가 봉의 방향을 알려줍니다.\n바닥 어디서나 ↑ 로 달리면서 SHIFT 를 누르고 유지하세요.\n멀리서 걸면 크게, 가까이서 걸면 작게 돕니다.", TutorialFigures.Kind.Pole),
                     new Page("줄 길이를 조절하고 놓기", "스윙 중 ← / → 는 줄 길이를 조절합니다.\n봉 쪽으로 감고 반대쪽으로 늘립니다.\nSHIFT 를 놓으면 그 속도로 곧장 나갑니다.", TutorialFigures.Kind.Rope),
                 },
                 Action(GoalKind.Swing, 180f, "바닥 어디서나 왼쪽 SHIFT 를 누르고 유지하면\n줄이 걸립니다. ↑ 를 누른 채 반 바퀴 도세요."),

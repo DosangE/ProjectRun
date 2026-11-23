@@ -10,7 +10,7 @@ namespace ProtoHarness.ChainRush.Tutorial
     {
         public enum Kind { Goal, Drive, Turn, Reverse, Pole, Rope, Gauge, Boost }
 
-        public static void Draw(Kind kind, Rect area, GUIStyle keys, GUIStyle small, Color goalColor)
+        public static void Draw(Kind kind, Rect area, GUIStyle keys, GUIStyle small, GUIStyle poleKey, Color goalColor)
         {
             NightUi.Block(area, NightUi.Background);
             Matrix4x4 previous = GUI.matrix;
@@ -65,7 +65,7 @@ namespace ProtoHarness.ChainRush.Tutorial
                 case Kind.Pole:
                     NightUi.Block(new Rect(328, 34, 14, 180), NightUi.Muted);
                     Ellipse(new Vector2(335, 214), 54, 14, 0, 360, NightUi.Muted);
-                    ChainRushHud.DrawTarget(335, 118, 2f, NightUi.Accent, 0.08f);
+                    ChainRushHud.DrawPoleMark(335, 118, 1.6f, NightUi.Action, poleKey);
                     Key(610, 90, 150, "SHIFT", keys);
                     GUI.Label(new Rect(590, 190, 320, 28), "누르고 유지하면 줄 연결", small);
                     break;
@@ -123,7 +123,7 @@ namespace ProtoHarness.ChainRush.Tutorial
             NightUi.Block(new Rect(center.x - 7, center.y - 7, 14, 14), NightUi.Muted);
             Line(center, center + new Vector2(90, 0), NightUi.Accent);
             Runner(center + new Vector2(90, 0));
-            ChainRushHud.DrawTarget(center.x, center.y, 0.6f, NightUi.Accent, 0f);
+            ChainRushHud.DrawPoleMark(center.x, center.y, 0.6f, NightUi.Action, null);
             ChainRushHud.DrawArrow(center + new Vector2(0, -60), Vector2.right, NightUi.Accent);
         }
 
