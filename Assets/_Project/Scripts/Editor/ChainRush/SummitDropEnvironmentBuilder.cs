@@ -103,7 +103,28 @@ namespace ProtoHarness.Editor.ChainRush
             private Mesh chevronPanel, chevronArrow;
             // The board's front (0.079) plus half the arrow's thickness (0.063).
             private const float ArrowOut = 0.142f;
+            // The valley cabins' kit (docs/ART_REQUEST_PROPS.md K11), loaded when the build starts.
+            private readonly Dictionary<string, Mesh> cabinKit = new Dictionary<string, Mesh>();
+            private const string CabinKitName = "CabinKit";
+            // Cabin sizes (K11): round logs 0.45 thick laid in nine courses from the footing's top at 0.8 m, the side walls
+            // half a course higher; façade bays 2.4 m wide over the whole 4.05 m wall with 0.5 m of logs at each corner;
+            // a 27 degree roof of 0.35 m panels reaching 0.5 m past the side walls; logs 0.3 m past the corners.
+            private const float CabinLog = 0.45f, CabinFloor = 0.8f, CabinBay = 2.4f, CabinCorner = 0.5f, CabinLogOut = 0.3f;
+            private const float CabinPitch = 27f, CabinRoof = 0.35f, CabinEave = 0.5f, CabinChimneyAboveRoof = 1.8f;
+            private const int CabinCourses = 9;
+            private const float CabinWall = CabinCourses * CabinLog;
+            // The porch kit (measured, checked in LoadCabinKit): a 0.2 m step under a 0.2 m deck, the step 0.3 m deep at
+            // the porch's front edge. The porch sits 1 cm up so its deck does not share the footing lip's top face.
+            private const float PorchDeckOverFoot = 0.4f, PorchDeck = 0.2f, PorchStepDepth = 0.3f, PorchLift = 0.01f;
             private Mesh[] crags;
+            // The roadside props and summit markers' kit (docs/ART_REQUEST_PROPS.md K12), loaded when the build starts.
+            private const string RoadsideKitName = "RoadsideNatureKit";
+            private Mesh[] bushes, tufts, stones;
+            private Mesh logBark, logEnds, stumpBark, stumpTop, cairn, trailPost, trailBoard;
+            // K12 ④: only the bushes carry UVs (1 = 1 m), so only they take a texture, one tile a metre.
+            private readonly Material leaf = ExteriorAssets.Surface("Summit", "Leaf", new Color(0.16f, 0.29f, 0.18f), ExteriorAssets.Grain.Leaf, 1f, 0.05f);
+            // K12 ①: Moss is the ground's own colour, so a tuft in it vanished; a drier yellow-green stands out.
+            private readonly Material tuft = Palette("Grass", new Color(0.45f, 0.47f, 0.25f));
             private Vector3 min = Vector3.positiveInfinity, max = Vector3.negativeInfinity;
             private int terrainLeft, terrainRight, terrainBottom, terrainTop;
             private int trees, rocks, groundedRocks, skippedRocks;
@@ -116,7 +137,7 @@ namespace ProtoHarness.Editor.ChainRush
                 gaps = definition.Gaps();
                 if (!definition.IsOpenCourse || gaps.Count != 1 || definition.Shortcuts.Count != 1)
                     throw new InvalidOperationException("Summit Drop layout changed: expected an open course, one gap and one shortcut.");
-                corridor = new RoadCorridor(definition, line, 0.5d, 1.8f);
+                corridor = new RoadCorridor(definition, line, 0.5d, CorridorKeepOut);
                 line.GetPoles(poles);
                 for (double s = -definition.StartRunway; s < definition.LapLength + definition.FinishRunout; s += 4d)
                     AddSample(line.FrameAt(s), definition.HalfWidthAt(Math.Max(0d, Math.Min(definition.LapLength, s))));
@@ -149,6 +170,8 @@ namespace ProtoHarness.Editor.ChainRush
                 pineTier = KitMesh("TreeKit", "PineCrownTier"); pineTrunk = KitMesh("TreeKit", "TreeTrunk");
                 chevronPanel = KitMesh("RoadsideKit", "ChevronPanel"); chevronArrow = KitMesh("RoadsideKit", "ChevronArrow");
                 crags = new[] { KitMesh("RockKit", "CragA"), KitMesh("RockKit", "CragB"), KitMesh("RockKit", "CragC") };
+                LoadCabinKit();
+                LoadRoadsideKit();
                 Terrain(Group("01 Descending mountain and valley", root.transform));
                 MountainLedges(Group("09 Mountain overhangs below upper road", root.transform));
                 // Reserve the four required corner landmarks before scattering optional scenery.
@@ -158,8 +181,15 @@ namespace ProtoHarness.Editor.ChainRush
                 Fork(Group("04 Forest clearing shortcut", root.transform));
                 Tunnel(Group("06 Rock tunnel", root.transform));
                 Village(Group("07 Valley village and finish", root.transform));
-                Forest(Group("08 Irregular pine forest", root.transform));
+                Transform forest = Group("08 Irregular pine forest", root.transform);
+                Forest(forest);
+                // In the same group, so it merges into the forest's meshes and materials (no new renderers or assets).
+                Groves(forest);
                 PoleSpires(Group("10 Rock spires under corner poles", root.transform));
+                // Last, so every pine, crag, sign and cabin keeps its spot and the small props take what is left.
+                Transform roadside = Group("11 Roadside props and summit markers", root.transform);
+                SummitMarkers(roadside);
+                Roadside(roadside);
                 // Validate bounds before merging; afterwards they span the whole mountain. A spire's tall bounds swell
                 // toward a road beside it, so 10 is left to the vertex check in ValidateClearance, with 01, 06 and 09.
                 // So are 02 and 05 (05's zigzag boards with its crags): a tilted crag whose foot follows the slope has
@@ -172,7 +202,7 @@ namespace ProtoHarness.Editor.ChainRush
                 var transient = new HashSet<Mesh>();
                 foreach (MeshFilter filter in root.GetComponentsInChildren<MeshFilter>(true))
                     if (!EditorUtility.IsPersistent(filter.sharedMesh)) transient.Add(filter.sharedMesh);
-                foreach (Transform group in root.transform) MergeByMaterial(group, group.name.Substring(0, 2));
+                foreach (Transform group in root.transform) MergeByMaterial(group, "SummitDropExterior", group.name.Substring(0, 2));
                 foreach (Mesh mesh in transient) UnityEngine.Object.DestroyImmediate(mesh);
                 Debug.Log($"Summit Drop placed {trees} pines and {rocks} crags ({groundedRocks} with a foot reaching down the slope, longest {longestCragReach:F2} m; {skippedRocks} spots skipped at a drop); terrain follows main road, shortcut, runway and runout.", root);
                 return root;
@@ -271,12 +301,21 @@ namespace ProtoHarness.Editor.ChainRush
             }
 
             // Interpolate the actual terrain triangles so props sit on the saved mesh, even on steep slopes.
+            // Outside the two-metre patch the skirts are 16 m faces (Terrain), split the same way, so a prop there follows them
+            // (the groves reach that far, 2026-11-20; before them nothing stood outside the patch).
+            private const int SkirtStep = 16, SkirtReach = 928;
+
             private float GroundAt(Vector3 point)
             {
-                float x = point.x / GroundStep, z = point.z / GroundStep;
+                if (terrainRight <= terrainLeft) throw new InvalidOperationException("GroundAt before Terrain: the patch bounds are not set.");
+                bool fine = point.x >= terrainLeft && point.x <= terrainRight && point.z >= terrainBottom && point.z <= terrainTop;
+                float step = fine ? GroundStep : SkirtStep;
+                int cells = fine ? 1 : (int)(SkirtStep / GroundStep);
+                float x = point.x / step, z = point.z / step;
                 int ix = Mathf.FloorToInt(x), iz = Mathf.FloorToInt(z);
                 float u = x - ix, v = z - iz;
-                float a = GridHeight(ix, iz), b = GridHeight(ix + 1, iz), c = GridHeight(ix, iz + 1), d = GridHeight(ix + 1, iz + 1);
+                float a = GridHeight(ix * cells, iz * cells), b = GridHeight((ix + 1) * cells, iz * cells);
+                float c = GridHeight(ix * cells, (iz + 1) * cells), d = GridHeight((ix + 1) * cells, (iz + 1) * cells);
                 return u + v <= 1f ? a + (b - a) * u + (c - a) * v : d + (c - d) * (1f - u) + (b - d) * (1f - v);
             }
 
@@ -287,10 +326,10 @@ namespace ProtoHarness.Editor.ChainRush
                 terrainLeft = left; terrainRight = right; terrainBottom = bottom; terrainTop = top;
                 // Two-metre faces close to the road; outer skirts are outside every road's footprint.
                 Patch(parent, "Mountain", left, right, bottom, top, 2, grass);
-                Patch(parent, "West skirt", left - 928, left, bottom - 928, top + 928, 16, earth);
-                Patch(parent, "East skirt", right, right + 928, bottom - 928, top + 928, 16, earth);
-                Patch(parent, "South skirt", left, right, bottom - 928, bottom, 16, earth);
-                Patch(parent, "North skirt", left, right, top, top + 928, 16, earth);
+                Patch(parent, "West skirt", left - SkirtReach, left, bottom - SkirtReach, top + SkirtReach, SkirtStep, earth);
+                Patch(parent, "East skirt", right, right + SkirtReach, bottom - SkirtReach, top + SkirtReach, SkirtStep, earth);
+                Patch(parent, "South skirt", left, right, bottom - SkirtReach, bottom, SkirtStep, earth);
+                Patch(parent, "North skirt", left, right, top, top + SkirtReach, SkirtStep, earth);
             }
 
             private void Patch(Transform parent, string name, int x0, int x1, int z0, int z1, int step, Material material)
@@ -432,17 +471,308 @@ namespace ProtoHarness.Editor.ChainRush
                             float radius = 2.3f + Hash(seed * 19) * 1.6f;
                             float height = (dense ? 16f : 11f) + Hash(seed * 23) * 9f;
                             if (!Place(at, side, 5f + radius * 1.5f + row * 11f + Hash(seed * 29) * 7f, radius, height, out Vector3 p)) continue;
-                            Transform tree = Group("Pine " + seed, parent);
-                            tree.SetPositionAndRotation(p, Quaternion.Euler(0f, Hash(seed * 31) * 360f, 0f));
-                            Shape("Trunk", tree, Vector3.up * height * 0.35f, new Vector3(0.6f, height * 0.7f, 0.6f), wood, pineTrunk);
-                            Material needles = Pick(seed * 37, pineA, pineB, pineC);
-                            for (int tier = 0; tier < 3; tier++)
-                                Shape("Needle crown", tree, Vector3.up * height * (0.36f + tier * 0.20f),
-                                    new Vector3(radius * 2f * (1f - tier * 0.23f), height * 0.46f, radius * 2f * (1f - tier * 0.23f)), needles, pineTier);
+                            Pine(parent, seed, p, radius, height);
                             trees++;
                         }
                     }
             }
+
+            private void Pine(Transform parent, int seed, Vector3 p, float radius, float height)
+            {
+                Transform tree = Group("Pine " + seed, parent);
+                tree.SetPositionAndRotation(p, Quaternion.Euler(0f, Hash(seed * 31) * 360f, 0f));
+                Shape("Trunk", tree, Vector3.up * height * 0.35f, new Vector3(0.6f, height * 0.7f, 0.6f), wood, pineTrunk);
+                Material needles = Pick(seed * 37, pineA, pineB, pineC);
+                for (int tier = 0; tier < 3; tier++)
+                    Shape("Needle crown", tree, Vector3.up * height * (0.36f + tier * 0.20f),
+                        new Vector3(radius * 2f * (1f - tier * 0.23f), height * 0.46f, radius * 2f * (1f - tier * 0.23f)), needles, pineTier);
+            }
+
+            // The two stretches with a drop on the left (Height's cliffSide, user 2026-11-20 "옆에 낭떠러지인 곳이 너무
+            // 공허해보인다"): Forest leaves their left side bare and plants only within about 50 m of a road, so the valley
+            // floor seen from them was empty. Pine clumps 40-250 m out, where Perlin noise is high, so they read as groves.
+            private static readonly (double From, double To)[] DropStretches = { (0d, 420d), (800d, 1190d) };
+            // First pass (6 tries, threshold 0.5, 10-25 m pines) read as a thin scatter from the road, not as groves: one try
+            // per ~100 m² left pines ~18 m apart inside a clump. More tries over smaller clumps keep the count, packed closer.
+            private const float GroveNear = 40f, GroveFar = 250f, GroveStep = 5f, GroveNoise = 0.012f, GroveThreshold = 0.63f;
+            private const int GroveTries = 24;
+            // The terrain's cliff test (Patch): a face steeper than this is painted rock, so no tree stands on it.
+            private const float GroveSteepest = 0.64f;
+
+            private void Groves(Transform parent)
+            {
+                int planted = 0, tried = 0, sparse = 0, steep = 0, outside = 0, taken = 0;
+                int seed = 3000;
+                foreach (var stretch in DropStretches)
+                    for (double s = stretch.From; s < stretch.To; s += GroveStep)
+                        for (int k = 0; k < GroveTries; k++, seed++)
+                        {
+                            tried++;
+                            double at = s + Hash(seed * 7) * GroveStep;
+                            float offset = Mathf.Lerp(GroveNear, GroveFar, Hash(seed * 11));
+                            TrackFrame f = line.FrameAt(at);
+                            Vector3 spot = f.Position - f.Right * (definition.HalfWidthAt(at) + offset);
+                            // The skirts reach SkirtReach past the patch (Terrain); keep a face's width inside them.
+                            if (spot.x < terrainLeft - SkirtReach + SkirtStep || spot.x > terrainRight + SkirtReach - SkirtStep
+                                || spot.z < terrainBottom - SkirtReach + SkirtStep || spot.z > terrainTop + SkirtReach - SkirtStep) { outside++; continue; }
+                            if (Mathf.PerlinNoise(spot.x * GroveNoise + 41f, spot.z * GroveNoise + 59f) < GroveThreshold) { sparse++; continue; }
+                            if (GroundNormalY(spot) < GroveSteepest) { steep++; continue; }
+                            float radius = 2.4f + Hash(seed * 19) * 2.2f;
+                            float height = 12f + Hash(seed * 23) * 16f;
+                            // Place's pole test only looks at a pole's own heights; a spire (10) reaches from it down to the ground.
+                            bool bySpire = false;
+                            foreach (Vector3 pole in poles)
+                                if (Vector2.Distance(new Vector2(spot.x, spot.z), new Vector2(pole.x, pole.z)) < radius + 6f) bySpire = true;
+                            if (bySpire || !Place(at, -1, offset, radius, height, out Vector3 p)) { taken++; continue; }
+                            Pine(parent, seed, p, radius, height);
+                            planted++;
+                        }
+                trees += planted;
+                Debug.Log($"Summit Drop groves below the drops: {planted} pines from {tried} tries ({sparse} outside a clump, {steep} on rock faces, {outside} beyond the skirts, {taken} by a road, pole or tree).", parent);
+            }
+
+            private float GroundNormalY(Vector3 p) => GroundNormal(p).y;
+
+            private Vector3 GroundNormal(Vector3 p)
+            {
+                float dx = GroundAt(p + Vector3.right * GroundStep) - GroundAt(p - Vector3.right * GroundStep);
+                float dz = GroundAt(p + Vector3.forward * GroundStep) - GroundAt(p - Vector3.forward * GroundStep);
+                return new Vector3(-dx, GroundStep * 2f, -dz).normalized;
+            }
+
+            private void LoadRoadsideKit()
+            {
+                bushes = new[] { KitMesh(RoadsideKitName, "BushA"), KitMesh(RoadsideKitName, "BushB") };
+                tufts = new[] { KitMesh(RoadsideKitName, "GrassTuftA"), KitMesh(RoadsideKitName, "GrassTuftB") };
+                stones = new[] { KitMesh(RoadsideKitName, "StoneA"), KitMesh(RoadsideKitName, "StoneB"), KitMesh(RoadsideKitName, "StoneC") };
+                logBark = KitMesh(RoadsideKitName, "FallenLog_Bark");
+                stumpBark = KitMesh(RoadsideKitName, "Stump_Bark");
+                cairn = KitMesh(RoadsideKitName, "Cairn");
+                trailPost = KitMesh(RoadsideKitName, "TrailPost");
+                trailBoard = KitMesh(RoadsideKitName, "TrailBoard");
+                // A log's ends and a stump's cut top share the bark's origin (K12: the two pieces' joint bounds centre), so
+                // they are placed by origin with the bark; one outside the bark's bounds was exported from another origin.
+                logEnds = KitPiece(RoadsideKitName, "FallenLog_Ends");
+                stumpTop = KitPiece(RoadsideKitName, "Stump_Top");
+                foreach ((Mesh piece, Mesh bark) in new[] { (logEnds, logBark), (stumpTop, stumpBark) })
+                {
+                    Bounds outer = bark.bounds;
+                    outer.Expand(0.02f);
+                    if (!outer.Contains(piece.bounds.min) || !outer.Contains(piece.bounds.max))
+                        throw new InvalidOperationException($"Kit mesh {piece.name} in {RoadsideKitName}.fbx lies outside {bark.name} ({piece.bounds} in {bark.bounds}); export the two pieces from their joint bounds centre.");
+                }
+            }
+
+            // Small props along the whole road (user 2026-11-20 ① "길가 전 구간의 작은 소품", docs/ART_REQUEST_PROPS.md K12):
+            // clumps of one to three every RoadsideStep on both sides, from just past the road's keep-out to RoadsideSpread
+            // beyond it. Not in the tunnel, over the gap or at the finish gate; nowhere the ground drops away (PlaceSmall).
+            private const float RoadsideStep = 7f, RoadsideSpread = 5f;
+            private const double RoadsideFrom = 10d, TunnelFrom = 1840d, TunnelTo = 1920d, GapMargin = 12d, FinishMargin = 10d;
+
+            private void Roadside(Transform parent)
+            {
+                var placed = new int[5];
+                int tried = 0, taken = 0, seed = 5000;
+                double gapStart = gaps[0].Start, gapEnd = gaps[0].End;
+                for (double s = RoadsideFrom; s < definition.LapLength + definition.FinishRunout - 5d; s += RoadsideStep)
+                {
+                    if (s >= TunnelFrom && s < TunnelTo || s > gapStart - GapMargin && s < gapEnd + GapMargin
+                        || Math.Abs(s - definition.LapLength) < FinishMargin) continue;
+                    for (int side = -1; side <= 1; side += 2)
+                    {
+                        int clump = 1 + Mathf.Min(2, (int)(Hash(seed * 3) * 3f));
+                        for (int k = 0; k < clump; k++, seed++)
+                        {
+                            tried++;
+                            double at = s + (Hash(seed * 5) - 0.5f) * RoadsideStep;
+                            float pick = Hash(seed * 11);
+                            int kind = pick < 0.35f ? 0 : pick < 0.60f ? 1 : pick < 0.85f ? 2 : pick < 0.93f ? 3 : 4;
+                            if (RoadsideProp(parent, kind, at, side, seed)) placed[kind]++;
+                            else taken++;
+                        }
+                    }
+                }
+                Debug.Log($"Summit Drop roadside: {placed[0]} grass tufts, {placed[1]} stones, {placed[2]} bushes, {placed[3]} stumps, {placed[4]} fallen logs from {tried} tries ({taken} by a road, pole, drop, steep ground or something already there).", parent);
+            }
+
+            // K12 ③: a prop's base goes this far under the ground (the bushes' open bottom must not show), plus its
+            // footprint's half-width times the ground's slope, so its downhill edge does not float either.
+            private static readonly float[] RoadsideSink = { 0.06f, 0.08f, 0.12f, 0.06f, 0.10f };
+
+            private bool RoadsideProp(Transform parent, int kind, double at, int side, int seed)
+            {
+                Mesh mesh = kind switch
+                {
+                    0 => tufts[Mathf.Min(tufts.Length - 1, (int)(Hash(seed * 13) * tufts.Length))],
+                    1 => stones[Mathf.Min(stones.Length - 1, (int)(Hash(seed * 13) * stones.Length))],
+                    2 => bushes[Mathf.Min(bushes.Length - 1, (int)(Hash(seed * 13) * bushes.Length))],
+                    3 => stumpBark,
+                    _ => logBark
+                };
+                // K12: the kit is at real size; a copy varies by 0.7-1.3.
+                float scale = 0.7f + Hash(seed * 17) * 0.6f;
+                Vector3 size = mesh.bounds.size * scale;
+                float radius = Mathf.Max(size.x, size.z) * 0.5f;
+                float offset = CorridorKeepOut + radius * 1.45f + 0.2f + Hash(seed * 19) * RoadsideSpread;
+                if (!PlaceSmall(at, side, offset, radius, out Vector3 p, out Vector3 normal)) return false;
+                // K12 ②: a log lies along the slope's level line, so both ends touch; across the slope only its thickness
+                // rises. On level ground it lies any way.
+                Vector3 level = Vector3.Cross(normal, Vector3.up);
+                Quaternion turn = kind == 4 && level.sqrMagnitude > 1e-4f
+                    ? Quaternion.LookRotation(Vector3.Cross(level.normalized, Vector3.up)) * Quaternion.Euler(0f, Hash(seed * 23) < 0.5f ? 0f : 180f, 0f)
+                    : Quaternion.Euler(0f, Hash(seed * 23) * 360f, 0f);
+                // Stones settle half-way toward the slope; plants and wood stand upright.
+                if (kind == 1) turn = Quaternion.FromToRotation(Vector3.up, Vector3.Slerp(Vector3.up, normal, 0.5f)) * turn;
+                float foot = kind == 4 ? size.y * 0.5f : radius;
+                float slope = Mathf.Sqrt(Mathf.Max(0f, 1f - normal.y * normal.y)) / normal.y;
+                float sink = Mathf.Min(RoadsideSink[kind] * scale + foot * slope, size.y * 0.45f);
+                Transform prop = Group(RoadsideNames[kind] + " " + seed, parent);
+                prop.SetPositionAndRotation(p + Vector3.up * (size.y * 0.5f - sink), turn);
+                prop.localScale = Vector3.one * scale;
+                switch (kind)
+                {
+                    case 0: Piece("Tuft", prop, Vector3.zero, tuft, mesh); break;
+                    case 1: Piece("Stone", prop, Vector3.zero, Pick(seed * 29, rockA, rockB, rockC), mesh); break;
+                    case 2: Piece("Bush", prop, Vector3.zero, leaf, mesh); break;
+                    case 3: Piece("Bark", prop, Vector3.zero, wood, stumpBark); Piece("Cut top", prop, Vector3.zero, cutWood, stumpTop); break;
+                    default: Piece("Bark", prop, Vector3.zero, wood, logBark); Piece("Cut ends", prop, Vector3.zero, cutWood, logEnds); break;
+                }
+                return true;
+            }
+
+            private static readonly string[] RoadsideNames = { "Grass tuft", "Stone", "Bush", "Stump", "Fallen log" };
+            // The corridor's keep-out past a road's edge.
+            private const float CorridorKeepOut = 1.8f;
+            // Ground this far under the road's slab is a drop or under a ledge's shoulder (MountainLedges): a prop there
+            // would be out of sight. Steeper than RoadsideSteepest (about 45 degrees) a prop would cling to a face.
+            private const float RoadsideBelowSlab = 0.6f, RoadsideSteepest = 0.7f;
+
+            // Where a small prop of footprint radius stands at (s, side, offset): clear of every road, reserved spot and
+            // pole (with the spire under it, 10), on ground neither dropping away nor too steep. p is on the ground there;
+            // the spot is reserved.
+            private bool PlaceSmall(double s, int side, float offset, float radius, out Vector3 p, out Vector3 normal)
+                => SmallSpot(s, side, offset, radius, true, out p, out normal) == null;
+
+            // PlaceSmall, saying why a spot was turned down (null when it is free); reserve false only looks.
+            private string SmallSpot(double s, int side, float offset, float radius, bool reserve, out Vector3 p, out Vector3 normal)
+            {
+                TrackFrame f = line.FrameAt(s);
+                p = f.Position + f.Right * side * (definition.HalfWidthAt(s) + offset);
+                normal = Vector3.up;
+                if (!corridor.Clear(p, radius * 1.45f)) return "by a road";
+                if (!corridor.Available(p, radius * 1.45f)) return "taken";
+                foreach (Vector3 pole in poles)
+                    if (Vector2.Distance(new Vector2(p.x, p.z), new Vector2(pole.x, pole.z)) < radius + PoleRadius + 6f) return "by a pole";
+                float ground = GroundAt(p);
+                float below = f.Position.y - definition.RoadThickness - ground;
+                if (below > RoadsideBelowSlab) return "drop";
+                normal = GroundNormal(p);
+                if (normal.y < RoadsideSteepest) return "steep";
+                p.y = ground;
+                if (reserve) corridor.Reserve(p, radius * 1.15f);
+                return null;
+            }
+
+            // The summit start's markers (user 2026-11-20 ② "정상 출발 구간", K12): cairns and trail signs over the first
+            // 420 m. Fixed S failed there: S 110-190 drops away on the right too, or is a ledge over the lower zigzag
+            // (2026-11-21, ground 26-102 m under the slab). So the stretch is scanned every MarkerScan on both sides for
+            // free spots, and the markers spread over them evenly, at least MarkerSpacing apart. Each is a landmark: fewer
+            // free spots than markers fails the build.
+            private const double MarkerFrom = 4d, MarkerTo = 420d, MarkerScan = 4d, MarkerSpacing = 60d;
+            private static readonly float[] MarkerOffsets = { 0.4f, 1f, 2f, 3f };
+            // Cairn, sign, cairn, sign, cairn, down the road.
+            private static readonly bool[] MarkerIsSign = { false, true, false, true, false };
+            // K12 ⑥ (the mock-up's assembly): two boards on the post's road face, 0.3 and 0.75 m under its top, one
+            // pointing on down the road and one back; a board's tip is its -x end.
+            private const float BoardBelowTop1 = 0.3f, BoardBelowTop2 = 0.75f, BoardReach = 0.4f, PostSink = 0.3f;
+
+            private void SummitMarkers(Transform parent)
+            {
+                // The sign's footprint is the larger, so a spot free for it is free for a cairn.
+                float signRadius = trailBoard.bounds.size.x * 0.5f + BoardReach;
+                Vector3 heap = cairn.bounds.size;
+                float cairnRadius = Mathf.Max(heap.x, heap.z) * 0.5f;
+                if (cairnRadius > signRadius) throw new InvalidOperationException("The cairn's footprint outgrew the trail sign's; scan with the larger.");
+                var spots = new List<(double S, int Side, float Offset)>();
+                var refused = new Dictionary<string, int>();
+                for (double s = MarkerFrom; s <= MarkerTo; s += MarkerScan)
+                    for (int side = 1; side >= -1; side -= 2)
+                    {
+                        string why = null;
+                        foreach (float extra in MarkerOffsets)
+                        {
+                            float offset = CorridorKeepOut + signRadius * 1.45f + extra;
+                            why = SmallSpot(s, side, offset, signRadius, false, out _, out _);
+                            if (why != null) continue;
+                            spots.Add((s, side, offset));
+                            break;
+                        }
+                        if (why != null) refused[why] = refused.TryGetValue(why, out int n) ? n + 1 : 1;
+                    }
+                var chosen = new List<(double S, int Side, float Offset)>();
+                if (spots.Count != 0)
+                {
+                    double first = spots[0].S, last = spots[spots.Count - 1].S;
+                    for (int i = 0; i < MarkerIsSign.Length; i++)
+                    {
+                        double target = first + (last - first) * i / (MarkerIsSign.Length - 1);
+                        (double S, int Side, float Offset)? best = null;
+                        foreach (var spot in spots)
+                        {
+                            bool apart = true;
+                            foreach (var taken in chosen) apart &= Math.Abs(taken.S - spot.S) >= MarkerSpacing;
+                            if (apart && (best == null || Math.Abs(spot.S - target) < Math.Abs(best.Value.S - target))) best = spot;
+                        }
+                        if (best != null) chosen.Add(best.Value);
+                    }
+                }
+                var reasons = new List<string>();
+                foreach (KeyValuePair<string, int> pair in refused) reasons.Add(pair.Value + " " + pair.Key);
+                string scan = $"{spots.Count} free of {(int)((MarkerTo - MarkerFrom) / MarkerScan + 1) * 2} spots scanned (refused: {string.Join(", ", reasons)})";
+                if (chosen.Count < MarkerIsSign.Length)
+                    throw new InvalidOperationException($"Summit markers: only {chosen.Count} of {MarkerIsSign.Length} placeable {MarkerSpacing} m apart over S{MarkerFrom}-{MarkerTo}; {scan}.");
+                chosen.Sort((a, b) => a.S.CompareTo(b.S));
+                var placed = new List<string>();
+                for (int i = 0; i < chosen.Count; i++)
+                {
+                    (double s, int side, float offset) = chosen[i];
+                    bool sign = MarkerIsSign[i];
+                    if (!PlaceSmall(s, side, offset, sign ? signRadius : cairnRadius, out Vector3 p, out Vector3 normal))
+                        throw new InvalidOperationException($"Summit marker {i} lost its scanned spot at S{s:F0}.");
+                    if (sign) TrailSign(parent, i, s, side, p);
+                    else Cairn(parent, i, p, normal);
+                    placed.Add($"{(sign ? "sign" : "cairn")} S{s:F0}{(side > 0 ? "R" : "L")}");
+                }
+                Debug.Log($"Summit Drop summit markers ({RoadsideKitName}): {string.Join(", ", placed)}; {scan}.", parent);
+            }
+
+            private void Cairn(Transform parent, int index, Vector3 p, Vector3 normal)
+            {
+                Vector3 size = cairn.bounds.size;
+                float slope = Mathf.Sqrt(Mathf.Max(0f, 1f - normal.y * normal.y)) / normal.y;
+                float sink = Mathf.Min(0.12f + size.x * 0.5f * slope, size.y * 0.3f);
+                Transform heap = Group("Summit cairn " + index, parent);
+                heap.SetPositionAndRotation(p + Vector3.up * (size.y * 0.5f - sink), Quaternion.Euler(0f, Hash(index * 61 + 7) * 360f, 0f));
+                Piece("Cairn", heap, Vector3.zero, rockA, cairn);
+            }
+
+            private void TrailSign(Transform parent, int index, double s, int side, Vector3 p)
+            {
+                TrackFrame f = line.FrameAt(s);
+                Transform sign = Group("Summit trail sign " + index, parent);
+                // Local +z faces the road; down the road is +x on the right side, -x on the left.
+                sign.SetPositionAndRotation(p, Flat(-f.Right * side));
+                float post = trailPost.bounds.size.y, half = trailPost.bounds.size.z * 0.5f + trailBoard.bounds.size.z * 0.5f;
+                Piece("Post", sign, Vector3.up * (post * 0.5f - PostSink), wood, trailPost);
+                float top = post - PostSink;
+                // The tip is -x; a board turned about its normal (z) points +x (K12: the board reads the same upside down).
+                Quaternion pointPlusX = Quaternion.Euler(0f, 0f, 180f);
+                Piece("Board on", sign, new Vector3(BoardReach * side, top - BoardBelowTop1, half), cutWood, trailBoard)
+                    .transform.localRotation = side > 0 ? pointPlusX : Quaternion.identity;
+                Piece("Board back", sign, new Vector3(-BoardReach * side, top - BoardBelowTop2, half), cutWood, trailBoard)
+                    .transform.localRotation = side > 0 ? Quaternion.identity : pointPlusX;
+            }
+
 
             private void RockWalls(Transform parent)
             {
@@ -701,24 +1031,19 @@ namespace ProtoHarness.Editor.ChainRush
 
             private void Village(Transform parent)
             {
+                var built = new List<string>();
                 for (int i = 0; i < 6; i++)
                 {
                     double s = 2148d + i * 19d;
                     int side = i % 2 == 0 ? -1 : 1;
-                    if (!Place(s, side, 17f + Hash(i + 91) * 7f, 7f, 9f, out Vector3 p)) continue;
+                    // 10 m high: a chimney on the ridge of a four-bay cabin tops out at 9.7 m.
+                    if (!Place(s, side, 17f + Hash(i + 91) * 7f, 7f, 10f, out Vector3 p)) continue;
                     Transform hut = Group("Valley cabin " + i, parent);
-                    hut.SetPositionAndRotation(p, Flat(-line.FrameAt(s).Right * side));
-                    Box("Cabin footing", hut, Vector3.up * 0.3f, new Vector3(8.6f, 1f, 7.6f), rockB);
-                    for (int log = 0; log < 9; log++) Box("Log walls", hut, Vector3.up * (0.8f + log * 0.45f), new Vector3(8f + log % 2 * 0.3f, 0.43f, 7f), wood);
-                    for (int sideRoof = -1; sideRoof <= 1; sideRoof += 2)
-                    {
-                        GameObject panel = Box("Pitched timber roof", hut, new Vector3(sideRoof * 2.2f, 5.8f, 0f), new Vector3(5.3f, 0.35f, 8.2f), roof);
-                        panel.transform.localRotation = Quaternion.Euler(0f, 0f, -sideRoof * 27f);
-                    }
-                    Box("Door", hut, new Vector3(0f, 1.7f, -3.56f), new Vector3(1.4f, 2.4f, 0.14f), ink);
-                    for (int w = -1; w <= 1; w += 2) Box("Shuttered window", hut, new Vector3(w * 2.4f, 2.9f, -3.56f), new Vector3(1.3f, 1.2f, 0.16f), cutWood);
-                    Box("Stone chimney", hut, new Vector3(2.3f, 6.1f, 1.8f), new Vector3(0.9f, 3.4f, 1f), rockC);
+                    // The front (local -z) faces the road (user 2026-11-20 "앞면 길 쪽으로 돌려줘"; it used to face away).
+                    hut.SetPositionAndRotation(p, Flat(line.FrameAt(s).Right * side));
+                    built.Add(i + ": " + Cabin(hut, i));
                 }
+                Debug.Log($"Summit Drop valley: {built.Count} cabins ({CabinKitName}) — {string.Join("; ", built)}.", parent);
                 TrackFrame finish = line.FrameAt(definition.LapLength);
                 Transform gate = Group("Timber finish gate", parent);
                 gate.SetPositionAndRotation(finish.Position, Flat(finish.Forward));
@@ -732,6 +1057,169 @@ namespace ProtoHarness.Editor.ChainRush
                 Box("Finish beam", gate, new Vector3(0f, 11.2f, 0f), new Vector3(half * 2f + 1.5f, 1.8f, 1.3f), cutWood);
                 // Solid glyphs, as on Palm Coast's arch, with this course's own finish wording.
                 Lettering(gate, "SUMMIT DROP", 15f, 11.2f, -0.72f);
+            }
+
+            // The cabin kit's meshes, checked where their origins lie: a bay's pieces share the bay's origin (middle of its
+            // width and height, on the wall's face, standing out to +z), the porch's two pieces the middle of the porch,
+            // the rest their bounds centre (KitMesh). A re-export with another pivot would stand a bay off the wall.
+            private void LoadCabinKit()
+            {
+                cabinKit.Clear();
+                foreach (string name in new[] { "CabinWindow_Trim", "CabinWindow_Glass", "CabinWindow_Accent", "CabinDoor_Trim", "CabinDoor_Accent" })
+                {
+                    Mesh mesh = KitPiece(CabinKitName, name);
+                    Bounds b = mesh.bounds;
+                    // Every piece starts at the wall (the glass 3 cm out): a piece standing further off would float in
+                    // front of its frame although it stays inside the bay (Codex review 2026-11-20).
+                    if (b.min.z < -0.01f || b.min.z > 0.035f || b.max.z > 0.3f || b.min.x < -CabinBay * 0.5f - 0.01f || b.max.x > CabinBay * 0.5f + 0.01f
+                        || b.min.y < -CabinWall * 0.5f - 0.01f || b.max.y > CabinWall * 0.5f + 0.01f)
+                        throw new InvalidOperationException($"Kit mesh {name} in {CabinKitName} has bounds {b}, outside its {CabinBay} x {CabinWall} m bay or off the wall's face from the bay's origin; export it with the bay's pivot.");
+                    cabinKit[name] = mesh;
+                }
+                Mesh porchTrim = KitPiece(CabinKitName, "CabinPorch_Trim"), porchRoof = KitPiece(CabinKitName, "CabinPorch_Roof");
+                Bounds porch = porchTrim.bounds;
+                porch.Encapsulate(porchRoof.bounds);
+                if (porch.center.sqrMagnitude > 1e-4f || Vector3.Distance(porch.size, new Vector3(CabinBay, 3f, 1.8f)) > 0.02f)
+                    throw new InvalidOperationException($"Kit porch in {CabinKitName} spans {porch}; it should be {CabinBay} x 3 x 1.8 m round its origin.");
+                // The step and the deck the footings below are cut to: only the step reaches the porch's foot, at its
+                // front edge (+z in the kit), and the deck's top is PorchDeckOverFoot up.
+                float foot = porch.min.y, deckTop = foot + PorchDeckOverFoot;
+                bool deckFound = false;
+                foreach (Vector3 v in porchTrim.vertices)
+                {
+                    if (v.y < foot + 0.01f && v.z < porch.max.z - PorchStepDepth - 0.01f)
+                        throw new InvalidOperationException($"Kit porch in {CabinKitName} reaches its foot at z {v.z:F2}, behind its {PorchStepDepth} m step; the porch footings would not fit it.");
+                    if (Mathf.Abs(v.y - deckTop) < 0.01f) deckFound = true;
+                }
+                if (!deckFound)
+                    throw new InvalidOperationException($"Kit porch in {CabinKitName} has no deck top {PorchDeckOverFoot} m over its foot; the deck would not meet the cabin's floor.");
+                cabinKit["CabinPorch_Trim"] = porchTrim;
+                cabinKit["CabinPorch_Roof"] = porchRoof;
+                foreach (string name in new[] { "CabinLog", "CabinGable", "RoofRidge", "StoneChimney", "WoodPile_Wood", "WoodPile_Ends" })
+                    cabinKit[name] = KitMesh(CabinKitName, name);
+            }
+
+            // One valley cabin of the kit (K11), its front to local -z (toward the road). Per cabin: three or four
+            // bays with the door in the middle bay or the next, 6.4-8.0 m deep, a side window or none, a porch or none, the
+            // chimney on the left or right slope or on the ridge at the back, a wood pile by one side or none. The footing
+            // and the roof panels are boxes (their sizes differ per cabin). Returns what it chose, for the build log.
+            private string Cabin(Transform hut, int index)
+            {
+                int seed = 700 + index * 11;
+                int bays = Hash(seed) < 0.5f ? 3 : 4;
+                float width = bays * CabinBay + 2f * CabinCorner;
+                float depth = 6.4f + Hash(seed + 1) * 1.6f;
+                int middle = (bays - 1) / 2;
+                int door = Hash(seed + 2) < 0.5f ? middle : middle + 1;
+                int sideWindow = Hash(seed + 3) < 0.5f ? 0 : Hash(seed + 4) < 0.5f ? -1 : 1;
+                bool porch = Hash(seed + 5) < 0.5f;
+                int chimney = Mathf.Min(2, (int)(Hash(seed + 6) * 3f));
+                int pile = Hash(seed + 7) < 0.5f ? 0 : Hash(seed + 8) < 0.5f ? -1 : 1;
+
+                Box("Cabin footing", hut, Vector3.up * (CabinFloor - 0.5f), new Vector3(width + 0.4f, 1f, depth + 0.4f), rockB);
+                // Front and back logs run the width, side logs the depth, each 0.3 m past the corner; the side walls sit half
+                // a course up, so the logs cross in turn at every corner, with a sill under the side walls' lowest logs.
+                Mesh log = cabinKit["CabinLog"];
+                for (int course = 0; course < CabinCourses; course++)
+                {
+                    float y = CabinFloor + (course + 0.5f) * CabinLog;
+                    for (int end = -1; end <= 1; end += 2)
+                    {
+                        Shape("Log", hut, new Vector3(0f, y, end * (depth - CabinLog) * 0.5f), new Vector3(width + 2f * CabinLogOut, CabinLog, CabinLog), wood, log);
+                        // 1 cm short of the roof panels' ends at each end: the top side logs reach into the panels, and
+                        // ends in the panels' end planes would flicker (reviewer 2026-11-20).
+                        GameObject sideLog = Shape("Log", hut, new Vector3(end * (width - CabinLog) * 0.5f, y + CabinLog * 0.5f, 0f), new Vector3(depth + 2f * CabinLogOut - 0.02f, CabinLog, CabinLog), wood, log);
+                        sideLog.transform.localRotation = Quaternion.Euler(0f, 90f, 0f);
+                    }
+                }
+                for (int end = -1; end <= 1; end += 2)
+                    Box("Side wall sill", hut, new Vector3(end * (width - CabinLog) * 0.5f, CabinFloor + CabinLog * 0.25f, 0f), new Vector3(CabinLog, CabinLog * 0.5f, depth), rockB);
+
+                // The gable fills the front and back walls up to the ridge; the panels' undersides meet on its apex and
+                // stop there, so they do not overlap (a filler under the ridge closes the notch between their upper ends).
+                float rad = CabinPitch * Mathf.Deg2Rad, cos = Mathf.Cos(rad), sin = Mathf.Sin(rad), pitch = Mathf.Tan(rad);
+                float wallTop = CabinFloor + CabinWall, rise = width * 0.5f * pitch, apex = wallTop + rise;
+                float top = apex + CabinRoof / cos, slope = (width * 0.5f + CabinEave) / cos, roofLength = depth + 2f * CabinLogOut;
+                Shape("Gable", hut, new Vector3(0f, wallTop + rise * 0.5f, 0f), new Vector3(width, rise, depth), wood, cabinKit["CabinGable"]);
+                for (int sideRoof = -1; sideRoof <= 1; sideRoof += 2)
+                {
+                    var centre = new Vector3(sideRoof * (slope * 0.5f * cos + CabinRoof * 0.5f * sin), apex - slope * 0.5f * sin + CabinRoof * 0.5f * cos, 0f);
+                    GameObject panel = Box("Pitched timber roof", hut, centre, new Vector3(slope, CabinRoof, roofLength), roof);
+                    panel.transform.localRotation = Quaternion.Euler(0f, 0f, -sideRoof * CabinPitch);
+                }
+                // 1 cm short of the panels' ends, so no face lies in their end planes.
+                Box("Ridge filler", hut, new Vector3(0f, (apex + top) * 0.5f, 0f), new Vector3(2f * CabinRoof * sin, top - apex, roofLength - 0.02f), roof);
+                Mesh ridgeMesh = cabinKit["RoofRidge"];
+                Vector3 ridgeSize = ridgeMesh.bounds.size;
+                // The ridge's underside is a V at the roof's pitch, its apex this far over the mesh's middle.
+                float ridgeUnder = -ridgeSize.y * 0.5f + ridgeSize.z * 0.5f * pitch;
+                GameObject ridge = Shape("Roof ridge", hut, new Vector3(0f, top - ridgeUnder, 0f), new Vector3(roofLength, ridgeSize.y, ridgeSize.z), roof, ridgeMesh);
+                ridge.transform.localRotation = Quaternion.Euler(0f, 90f, 0f);
+
+                float frontZ = -depth * 0.5f, bayY = CabinFloor + CabinWall * 0.5f, doorX = 0f;
+                for (int b = 0; b < bays; b++)
+                {
+                    // Turned to face -z, so bay 0 is on the cabin's +x side.
+                    float x = width * 0.5f - CabinCorner - (b + 0.5f) * CabinBay;
+                    if (b == door) doorX = x;
+                    CabinFacadeBay(hut, b == door ? "CabinDoor" : "CabinWindow", new Vector3(x, bayY, frontZ), Quaternion.Euler(0f, 180f, 0f));
+                }
+                if (sideWindow != 0)
+                    CabinFacadeBay(hut, "CabinWindow", new Vector3(sideWindow * width * 0.5f, bayY + CabinLog * 0.5f, 0f), Quaternion.Euler(0f, sideWindow * 90f, 0f));
+                if (porch)
+                {
+                    // Its wall side (-z in the kit) against the front, the deck level with the bays' floor (1 cm over it).
+                    Mesh porchTrim = cabinKit["CabinPorch_Trim"];
+                    Bounds porchBounds = porchTrim.bounds;
+                    porchBounds.Encapsulate(cabinKit["CabinPorch_Roof"].bounds);
+                    float deckTop = CabinFloor + PorchLift, porchDepth = porchBounds.size.z;
+                    Vector3 at = new Vector3(doorX, deckTop - PorchDeckOverFoot - porchBounds.min.y, frontZ - porchDepth * 0.5f);
+                    Piece("Porch", hut, at, cutWood, porchTrim).transform.localRotation = Quaternion.Euler(0f, 180f, 0f);
+                    Piece("Porch roof", hut, at, roof, cabinKit["CabinPorch_Roof"]).transform.localRotation = Quaternion.Euler(0f, 180f, 0f);
+                    // The cabin stands on the ground at its middle; on a slope the porch would hang over it (Codex review
+                    // 2026-11-20: up to 1.4 m), so stone footings reach down under the deck and under the step.
+                    PorchFooting(hut, doorX, frontZ, frontZ - porchDepth + PorchStepDepth, deckTop - PorchDeck);
+                    PorchFooting(hut, doorX, frontZ - porchDepth + PorchStepDepth, frontZ - porchDepth, deckTop - PorchDeckOverFoot);
+                }
+
+                Mesh chimneyMesh = cabinKit["StoneChimney"];
+                float chimneyX = chimney == 2 ? 0f : (chimney == 0 ? -0.25f : 0.25f) * width;
+                float chimneyZ = chimney == 2 ? depth * 0.5f - 1f : depth * 0.25f;
+                float roofOver = top - Mathf.Abs(chimneyX) * pitch;
+                Piece("Stone chimney", hut, new Vector3(chimneyX, roofOver + CabinChimneyAboveRoof - chimneyMesh.bounds.extents.y, chimneyZ), rockC, chimneyMesh);
+
+                if (pile != 0)
+                {
+                    // On the ground beside the footing (its top is 0.8 m up, too high to lean on), along the side wall.
+                    Mesh pileWood = cabinKit["WoodPile_Wood"];
+                    var at = new Vector3(pile * (width * 0.5f + 0.2f + pileWood.bounds.extents.z + 0.05f), 0f, (Hash(seed + 9) < 0.5f ? -0.25f : 0.25f) * depth);
+                    at.y = GroundAt(hut.TransformPoint(at)) - hut.position.y + pileWood.bounds.extents.y - 0.05f;
+                    Piece("Wood pile", hut, at, wood, pileWood).transform.localRotation = Quaternion.Euler(0f, 90f, 0f);
+                    Piece("Wood pile ends", hut, at, cutWood, cabinKit["WoodPile_Ends"]).transform.localRotation = Quaternion.Euler(0f, 90f, 0f);
+                }
+                string chimneySpot = chimney == 0 ? "left" : chimney == 1 ? "right" : "ridge";
+                return $"{bays} bays x {depth:F1} m, door bay {door}, side window {sideWindow}, porch {(porch ? "yes" : "no")}, chimney {chimneySpot}, wood pile {pile}";
+            }
+
+            // A stone footing under part of a porch (z from near to far in front of the cabin), from its top down 0.1 m into
+            // the lowest ground at its corners. None where the ground already reaches the top.
+            private void PorchFooting(Transform hut, float x, float near, float far, float top)
+            {
+                float lowest = float.PositiveInfinity;
+                for (int cx = -1; cx <= 1; cx += 2)
+                    foreach (float z in new[] { near, far })
+                        lowest = Mathf.Min(lowest, GroundAt(hut.TransformPoint(new Vector3(x + cx * CabinBay * 0.5f, 0f, z))) - hut.position.y);
+                float bottom = lowest - 0.1f;
+                if (top - bottom < 0.05f) return;
+                Box("Porch footing", hut, new Vector3(x, (top + bottom) * 0.5f, (near + far) * 0.5f), new Vector3(CabinBay, top - bottom, Mathf.Abs(near - far)), rockB);
+            }
+
+            // A façade bay of the cabin kit: its Trim, Glass and Accent pieces (those it has) at one origin.
+            private void CabinFacadeBay(Transform hut, string bay, Vector3 origin, Quaternion facing)
+            {
+                foreach (var (slot, colour) in new[] { ("_Trim", cutWood), ("_Glass", ink), ("_Accent", cutWood) })
+                    if (cabinKit.TryGetValue(bay + slot, out Mesh mesh))
+                        Piece(bay + slot, hut, origin, colour, mesh).transform.localRotation = facing;
             }
 
             private void Lettering(Transform parent, string words, float width, float y, float z)
@@ -870,32 +1358,6 @@ namespace ProtoHarness.Editor.ChainRush
                 return part;
             }
 
-            // Same material merge and persistent mesh naming as SkywayEnvironmentBuilder.
-            private static void MergeByMaterial(Transform group, string key)
-            {
-                var byMaterial = new Dictionary<Material, List<CombineInstance>>();
-                foreach (MeshFilter filter in group.GetComponentsInChildren<MeshFilter>(true))
-                {
-                    Material material = filter.GetComponent<MeshRenderer>().sharedMaterial;
-                    if (!byMaterial.TryGetValue(material, out List<CombineInstance> parts)) byMaterial[material] = parts = new List<CombineInstance>();
-                    parts.Add(new CombineInstance { mesh = filter.sharedMesh, transform = group.worldToLocalMatrix * filter.transform.localToWorldMatrix });
-                }
-                for (int i = group.childCount - 1; i >= 0; i--) UnityEngine.Object.DestroyImmediate(group.GetChild(i).gameObject);
-                foreach (var pair in byMaterial)
-                {
-                    var mesh = new Mesh { name = $"SummitDropExterior_{key}_{pair.Key.name}", indexFormat = IndexFormat.UInt32 };
-                    mesh.CombineMeshes(pair.Value.ToArray(), true, true);
-                    mesh.RecalculateBounds();
-                    var part = new GameObject(key + " " + pair.Key.name);
-                    part.transform.SetParent(group, false);
-                    part.AddComponent<MeshFilter>().sharedMesh = mesh;
-                    MeshRenderer renderer = part.AddComponent<MeshRenderer>();
-                    renderer.sharedMaterial = pair.Key;
-                    renderer.shadowCastingMode = ShadowCastingMode.Off;
-                    renderer.receiveShadows = false;
-                    GameObjectUtility.SetStaticEditorFlags(part, StaticEditorFlags.BatchingStatic);
-                }
-            }
         }
     }
 }

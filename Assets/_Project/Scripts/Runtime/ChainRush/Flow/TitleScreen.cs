@@ -1,4 +1,5 @@
 using ProtoHarness.ChainRush.Audio;
+using ProtoHarness.ChainRush.Flow.Lobby;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.SceneManagement;
@@ -14,14 +15,16 @@ namespace ProtoHarness.ChainRush.Flow
     {
         // Not the Player Settings bundle version (ProjectSettings is off limits, CLAUDE.md §0); raised by hand to match
         // the milestone tag (user 2026-10-29).
-        public const string Version = "0.7";
-        private static readonly Color Ink = NightUi.Background;
-        private static readonly Color Mint = NightUi.Accent;
-        private static readonly Color Muted = NightUi.Muted;
+        public const string Version = "0.7.1";
+        // The title has no runner list, so these stripes use fixed colors.
+        private static readonly Color Teal = new Color32(31, 181, 174, 255);
+        private static readonly NightUi.Palette Palette = LobbyView.CreateBrightPalette(Teal);
+        private static readonly Color LogoShadow = new Color(LobbyView.Ink.r, LobbyView.Ink.g, LobbyView.Ink.b, .18f);
+        private static readonly Color CheckerDark = new Color(LobbyView.Ink.r, LobbyView.Ink.g, LobbyView.Ink.b, .85f);
+        private static readonly Color CheckerLight = new Color(LobbyView.Ink.r, LobbyView.Ink.g, LobbyView.Ink.b, .08f);
         // The stripes' lean in degrees about z; with OnGUI's y pointing down, negative raises the right end.
         private const float StripeAngle = -9f;
         private const int CheckerSize = 14, CheckerColumns = 34;
-        [SerializeField] private Texture2D nightBackground;
         private GUIStyle small;
         private GUIStyle title;
         private GUIStyle button;
@@ -68,15 +71,15 @@ namespace ProtoHarness.ChainRush.Flow
                 enabled = false;
                 return;
             }
-            small = Style(15, Muted);
-            title = NightUi.Style(displayFont, 160, Color.white, FontStyle.BoldAndItalic);
-            accentTitle = NightUi.Style(displayFont, 160, Mint, FontStyle.BoldAndItalic);
-            brand = NightUi.Style(displayFont, 34, Color.white, FontStyle.BoldAndItalic);
-            button = Style(26, Ink, FontStyle.Bold);
+            small = Style(15, LobbyView.Muted);
+            title = NightUi.Style(displayFont, 160, LobbyView.Ink, FontStyle.BoldAndItalic);
+            accentTitle = NightUi.Style(displayFont, 160, Teal, FontStyle.BoldAndItalic);
+            brand = NightUi.Style(displayFont, 34, LobbyView.Ink, FontStyle.BoldAndItalic);
+            button = Style(26, NightUi.Background, FontStyle.Bold);
             button.alignment = TextAnchor.MiddleCenter;
-            versionLabel = NightUi.Style(displayFont, 20, Color.white, FontStyle.Bold);
+            versionLabel = NightUi.Style(displayFont, 20, LobbyView.Ink, FontStyle.Bold);
             versionLabel.alignment = TextAnchor.MiddleLeft;
-            buildLabel = NightUi.Style(displayFont, 16, NightUi.Action, FontStyle.Bold);
+            buildLabel = NightUi.Style(displayFont, 16, LobbyView.Gold, FontStyle.Bold);
             buildLabel.alignment = TextAnchor.MiddleRight;
             versionText = "v" + Version;
             buildText = BuildName;
@@ -97,7 +100,7 @@ namespace ProtoHarness.ChainRush.Flow
             for (int row = 0; row < 2; row++)
                 for (int column = 0; column < CheckerColumns; column++)
                     NightUi.Block(new Rect(x + column * CheckerSize, y + row * CheckerSize, CheckerSize, CheckerSize),
-                        (row + column) % 2 == 0 ? new Color(1, 1, 1, .85f) : new Color(1, 1, 1, .08f));
+                        (row + column) % 2 == 0 ? CheckerDark : CheckerLight);
         }
 
         private void OnGUI()
@@ -110,25 +113,26 @@ namespace ProtoHarness.ChainRush.Flow
             float height = Screen.height / scale;
             Matrix4x4 canvas = Matrix4x4.Scale(new Vector3(scale, scale, 1f));
             GUI.matrix = canvas;
-            NightUi.Backdrop(nightBackground, width, height);
+            if (Event.current.type == EventType.Repaint)
+                LobbyView.DrawBackdrop(width, height, Teal, Color.white);
             GUI.Label(new Rect(64, 38, 500, 52), "CHAIN RUSH", brand);
 
             // Version and build, top right.
             var tag = new Rect(width - 324, 40, 260, 44);
-            NightUi.Card(tag);
-            NightUi.Block(new Rect(tag.x, tag.y, 4, tag.height), Mint);
+            NightUi.Card(tag, palette: Palette);
+            NightUi.Block(new Rect(tag.x, tag.y, 4, tag.height), Teal);
             GUI.Label(new Rect(tag.x + 20, tag.y, 110, tag.height), versionText, versionLabel);
             GUI.Label(new Rect(tag.x + 110, tag.y, tag.width - 128, tag.height), buildText, buildLabel);
 
             // Speed stripes behind the logo, leaning up to the right.
             var pivot = new Vector2(480, 420);
-            Stripe(canvas, pivot, new Rect(-300, 352, 1380, 18), new Color(Mint.r, Mint.g, Mint.b, .55f));
-            Stripe(canvas, pivot, new Rect(-300, 380, 1220, 6), new Color(1f, 1f, 1f, .35f));
-            Stripe(canvas, pivot, new Rect(-300, 395, 1060, 3), NightUi.Action);
-            Stripe(canvas, pivot, new Rect(-300, 520, 900, 2), new Color(Mint.r, Mint.g, Mint.b, .35f));
+            Stripe(canvas, pivot, new Rect(-300, 352, 1380, 18), new Color(Teal.r, Teal.g, Teal.b, .85f));
+            Stripe(canvas, pivot, new Rect(-300, 380, 1220, 6), new Color(LobbyView.Ink.r, LobbyView.Ink.g, LobbyView.Ink.b, .25f));
+            Stripe(canvas, pivot, new Rect(-300, 395, 1060, 3), LobbyView.Yellow);
+            Stripe(canvas, pivot, new Rect(-300, 520, 900, 2), new Color(Teal.r, Teal.g, Teal.b, .35f));
 
-            NightUi.ShadowLabel(new Rect(87, 235, 780, 190), "CHAIN", title);
-            NightUi.ShadowLabel(new Rect(167, 387, 780, 190), "RUSH", accentTitle);
+            NightUi.ShadowLabel(new Rect(87, 235, 780, 190), "CHAIN", title, shadowColor: LogoShadow);
+            NightUi.ShadowLabel(new Rect(167, 387, 780, 190), "RUSH", accentTitle, shadowColor: LogoShadow);
             Checker(100, 590);
 
             // The start button, its glow breathing so the eye finds it.

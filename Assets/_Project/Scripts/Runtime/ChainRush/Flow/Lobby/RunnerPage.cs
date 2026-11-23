@@ -23,11 +23,12 @@ namespace ProtoHarness.ChainRush.Flow.Lobby
         // Per runner: the four stats (StatNames order) and their "x1.03" labels, made once.
         private readonly float[,] stats;
         private readonly string[,] statTexts;
+        private string trackAndSpeed;
         // A drag that began on the preview turns it until the button is released.
         private bool dragging;
 
         public RunnerPage(LobbyContext context)
-            : base(context, LobbyMenu.Page.Runner, "RUNNER", ListHelp + "      마우스 드래그  회전")
+            : base(context, LobbyMenu.Page.Runner, "RUNNER", "← / →  선택      ENTER  결정      ESC  뒤로      마우스 드래그  회전")
         {
             int count = Context.Runners.Count;
             labels = new string[count];
@@ -54,6 +55,7 @@ namespace ProtoHarness.ChainRush.Flow.Lobby
         public override string Heading => "CHOOSE YOUR RUNNER";
         public override int Count => labels.Length;
         public override string Label(int row) => labels[row];
+        public override bool HorizontalSelection => true;
         public override bool ClickChooses => false;
 
         public override Step Confirm(int row)
@@ -67,6 +69,7 @@ namespace ProtoHarness.ChainRush.Flow.Lobby
         public override void Opened(int highlight)
         {
             dragging = false;
+            trackAndSpeed = Context.Tracks[Context.Track].Title + "  /  " + SpeedPage.LabelAt(Context.Speed);
             Context.Preview.Show(highlight);
         }
 
@@ -100,7 +103,7 @@ namespace ProtoHarness.ChainRush.Flow.Lobby
             DrawPreview(view, width, cursor);
             DrawStats(view, width, cursor);
             var start = new Rect(width - 484, height - 240, 420, 140);
-            return NightUi.CardButton(start, "레이스 시작   ENTER  →", view.EnterButton, NightUi.CardLook.Action);
+            return NightUi.CardButton(start, "레이스 시작   ENTER  →", view.EnterButton, NightUi.CardLook.Action, view.Palette);
         }
 
         // The preview's left edge in the lobby's units: centred between the list (ends at 732) and the right-hand panels.
@@ -127,7 +130,7 @@ namespace ProtoHarness.ChainRush.Flow.Lobby
         // track and speed class chosen.
         private void DrawStats(LobbyView view, float width, int shown)
         {
-            NightUi.PanelCard(new Rect(width - 484, 238, 420, 382));
+            NightUi.PanelCard(new Rect(width - 484, 238, 420, 382), view.Palette);
             GUI.Label(new Rect(width - 452, 261, 360, 28), "RUNNER PROFILE", view.Small);
             GUI.Label(new Rect(width - 452, 298, 360, 62), labels[shown], view.Heading);
             for (int s = 0; s < StatNames.Length; s++)
@@ -137,10 +140,10 @@ namespace ProtoHarness.ChainRush.Flow.Lobby
                 var bar = new Rect(width - 308, y + 9, 150, 6);
                 NightUi.Block(bar, LobbyView.Slate);
                 bar.width *= Mathf.InverseLerp(StatBarFloor, StatBarCeiling, stats[shown, s]);
-                NightUi.Block(bar, LobbyView.Mint);
+                NightUi.Block(bar, view.Palette.Accent);
                 GUI.Label(new Rect(width - 135, y, 65, 28), statTexts[shown, s], view.Small);
             }
-            GUI.Label(new Rect(width - 452, 574, 360, 28), Context.Tracks[Context.Track].Title + "  /  " + SpeedPage.LabelAt(Context.Speed), view.Small);
+            GUI.Label(new Rect(width - 452, 574, 360, 28), trackAndSpeed, view.Small);
         }
     }
 }

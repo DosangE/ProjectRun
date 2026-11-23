@@ -5,9 +5,10 @@ namespace ProtoHarness.ChainRush.Flow
 {
     // The player's settings (M2-c, user 2026-10-20): three volume levels and the speed field of view, changed on the
     // lobby's settings page and read by the race's audio and camera, and the screen's window mode, resolution and VSync
-    // (2026-10-26), put into effect by ScreenOptions. Presentation only; the simulation never reads them.
-    // Kept in PlayerPrefs under a key prefix and read once on construction, so the race reads memory, not PlayerPrefs,
-    // every frame. The game uses Player, tests their own prefix so they never touch the player's settings.
+    // (2026-10-26), put into effect by ScreenOptions. Also remembers the display name of the last runner launched
+    // from the lobby so it can restore the selection.
+    // Settings are read from PlayerPrefs once on construction, apart from LastRunner, which reads on access so lobby
+    // tests can clear and restore the player's key around each test.
     public sealed class GameSettings
     {
         public const int MaxLevel = 10;
@@ -41,6 +42,7 @@ namespace ProtoHarness.ChainRush.Flow
             windowedKey = prefix + "Windowed";
             resolutionKey = prefix + "Resolution";
             vSyncKey = prefix + "VSync";
+            LastRunnerKey = prefix + "LastRunner";
             MasterLevel = ReadLevel(masterKey);
             MusicLevel = ReadLevel(musicKey);
             EffectsLevel = ReadLevel(effectsKey);
@@ -60,6 +62,8 @@ namespace ProtoHarness.ChainRush.Flow
         // Which of ScreenOptions' resolutions, 0 (ScreenOptions.AutoResolution) .. ScreenOptions.ResolutionCount - 1.
         public int ResolutionIndex { get; private set; }
         public bool VSync { get; private set; }
+        public string LastRunnerKey { get; }
+        public string LastRunner => PlayerPrefs.GetString(LastRunnerKey, "");
 
         // The levels as volume factors, 0..1.
         public float Master => MasterLevel / (float)MaxLevel;
@@ -77,6 +81,13 @@ namespace ProtoHarness.ChainRush.Flow
         public void SetResolution(int resolution) =>
             ResolutionIndex = WriteIndex(resolutionKey, resolution, ScreenOptions.ResolutionCount - 1, nameof(resolution));
 
+        public void SetLastRunner(string name)
+        {
+            if (string.IsNullOrEmpty(name)) throw new ArgumentException("A runner name is required.", nameof(name));
+            PlayerPrefs.SetString(LastRunnerKey, name);
+            PlayerPrefs.Save();
+        }
+
         public void Clear()
         {
             PlayerPrefs.DeleteKey(masterKey);
@@ -86,6 +97,7 @@ namespace ProtoHarness.ChainRush.Flow
             PlayerPrefs.DeleteKey(windowedKey);
             PlayerPrefs.DeleteKey(resolutionKey);
             PlayerPrefs.DeleteKey(vSyncKey);
+            PlayerPrefs.DeleteKey(LastRunnerKey);
             MasterLevel = MusicLevel = EffectsLevel = DefaultLevel;
             SpeedFieldOfView = DefaultSpeedFieldOfView;
             Windowed = DefaultWindowed;

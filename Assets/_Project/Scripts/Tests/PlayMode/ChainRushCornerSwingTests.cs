@@ -94,7 +94,7 @@ namespace ProtoHarness.Tests.PlayMode
             for (int i = 0; i < built.Count; i++) if (built[i] != null) Object.Destroy(built[i]);
             built.Clear();
             yield return null;
-            LogAssert.NoUnexpectedReceived();
+            TestLogs.AssertNoUnexpected();
         }
 
         [UnityTest]
@@ -332,6 +332,10 @@ namespace ProtoHarness.Tests.PlayMode
             built.Add(slow);
             var data = new SerializedObject(slow);
             data.FindProperty("accelerationScale").floatValue = 0.1f;
+            // A valid profile otherwise: OnValidate reports unset (clear) lobby colors (RunnerProfile.TryValidateLobbyColors).
+            data.FindProperty("lobbyColor").colorValue = Color.white;
+            data.FindProperty("lobbyStripeColor").colorValue = Color.white;
+            data.FindProperty("lobbyAccentColor").colorValue = Color.white;
             data.ApplyModifiedPropertiesWithoutUndo();
             player.Configure(slow);
 #else

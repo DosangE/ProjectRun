@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using NUnit.Framework;
 using ProtoHarness.ChainRush.Flow;
+using ProtoHarness.ChainRush.Flow.Lobby;
 using UnityEngine;
 using Object = UnityEngine.Object;
 
@@ -83,6 +84,34 @@ namespace ProtoHarness.Tests.EditMode
         // The runner FBX carries every runner's faces and switches the other nine off: a renderer that is off is not drawn,
         // so it must not push the camera back (2026-11-16: it made the runners a third smaller than they needed to be).
         [Test]
+        public void New_LooksOfDifferentHeights_AlignTheirFeetOnTheSameFloor()
+        {
+            GameObject shortLook = LookWithSize("Short", new Vector3(0f, 0.9f, 0f), new Vector3(1f, 1.8f, 0.5f));
+            GameObject tallLook = LookWithSize("Tall", new Vector3(0f, 1.15f, 0f), new Vector3(1f, 2.3f, 0.5f));
+            preview = new RunnerPreview(new[] { shortLook, tallLook }, 64, 96, Background);
+
+            preview.Show(0);
+            Bounds shortBounds = ShownBounds();
+            preview.Show(1);
+            Bounds tallBounds = ShownBounds();
+
+            Assert.That(shortBounds.min.y, Is.EqualTo(tallBounds.min.y).Within(1e-3f), "Feet sit on the same floor regardless of antenna or helmet height.");
+            Assert.That(shortBounds.center.x, Is.EqualTo(tallBounds.center.x).Within(1e-3f));
+            Assert.That(shortBounds.center.z, Is.EqualTo(tallBounds.center.z).Within(1e-3f));
+            Assert.That(tallBounds.max.y, Is.GreaterThan(shortBounds.max.y + 0.4f));
+        }
+
+        [Test]
+        public void LobbyView_EvaluateStripeScale_ContinuesFromInterruptedScale()
+        {
+            Assert.That(LobbyView.EvaluateStripeScale(1.06f, 0f), Is.EqualTo(1.06f).Within(1e-5f));
+            float midRise = LobbyView.EvaluateStripeScale(1.06f, 0.06f);
+            Assert.That(midRise, Is.GreaterThan(1.06f).And.LessThan(1.08f));
+            Assert.That(LobbyView.EvaluateStripeScale(1.06f, 0.12f), Is.EqualTo(1.08f).Within(1e-4f));
+            Assert.That(LobbyView.EvaluateStripeScale(1.06f, 0.35f), Is.EqualTo(1f).Within(1e-5f));
+        }
+
+        [Test]
         public void New_ARendererThatIsOff_DoesNotPushTheCameraBack()
         {
             preview = new RunnerPreview(new[] { Look("Plain", Vector3.zero) }, 64, 96, Background);
@@ -142,14 +171,25 @@ namespace ProtoHarness.Tests.EditMode
         // ---- helpers -------------------------------------------------------------------------------
 
         // A look whose only part, a cube, sits at offset from the look's root.
-        private GameObject Look(string name, Vector3 offset)
+        private GameObject Look(string name, Vector3 offset) => LookWithSize(name, offset, new Vector3(1f, 2f, 0.5f));
+
+        private GameObject LookWithSize(string name, Vector3 offset, Vector3 scale)
         {
             GameObject root = Track(new GameObject(name));
             GameObject cube = GameObject.CreatePrimitive(PrimitiveType.Cube);
             cube.transform.SetParent(root.transform, false);
             cube.transform.localPosition = offset;
-            cube.transform.localScale = new Vector3(1f, 2f, 0.5f);
+            cube.transform.localScale = scale;
             return root;
+        }
+
+        private Bounds ShownBounds()
+        {
+            GameObject stage = GameObject.Find("Runner preview");
+            Assert.That(stage, Is.Not.Null);
+            Renderer[] renderers = stage.GetComponentsInChildren<Renderer>();
+            Assert.That(renderers.Length, Is.EqualTo(1), "Only the shown copy is active.");
+            return renderers[0].bounds;
         }
 
         // How far the preview camera stands from the turntable's axis.

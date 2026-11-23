@@ -76,8 +76,9 @@ namespace ProtoHarness.Editor.ChainRush
             return material;
         }
 
-        // The grains a road or wall surface is textured with (user 2026-11-02, "실제 아스팔트 도로 같은 디자인").
-        public enum Grain { Asphalt, Concrete, Rubber }
+        // The grains a road or wall surface is textured with (user 2026-11-02, "실제 아스팔트 도로 같은 디자인"), and the
+        // leaves on SUMMIT's bushes (docs/ART_REQUEST_PROPS.md K12). A new grain goes last: the seed is its number.
+        public enum Grain { Asphalt, Concrete, Rubber, Leaf }
 
         private const string TextureFolder = "Assets/_Project/Art/Textures/";
         private const int GrainSize = 512;
@@ -138,12 +139,17 @@ namespace ProtoHarness.Editor.ChainRush
                     Add(height, Noise(64, random), 0.06f);
                     Dots(height, random, 1800, 1, 0.12f, 0.1f);
                     break;
-                default:
+                case Grain.Rubber:
                     // A running track's rubber: an even, fine granule.
                     Add(height, Noise(32, random), 0.06f);
                     Add(height, Noise(256, random), 0.16f);
                     Dots(height, random, 5000, 1, 0.08f, 0.5f);
                     break;
+                case Grain.Leaf:
+                    Leaves(height, random);
+                    break;
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(grain), grain, "No heights for this grain.");
             }
             for (int i = 0; i < n; i++) height[i] = Mathf.Clamp(GrainMean + height[i], 0.4f, 1f);
             return height;
@@ -176,6 +182,53 @@ namespace ProtoHarness.Editor.ChainRush
                 }
             }
             return noise;
+        }
+
+        // SUMMIT's bush leaves (docs/ART_REQUEST_PROPS.md K12 ④): a single-colour low-poly bush read as a rock or a
+        // polyhedron, a leaf pattern as a bush (user 2026-11-21). Voronoi cells about 7 cm across on the bushes' 1 m UV
+        // tile, stretched LeafStretch times along a leaf and turned LeafTurn degrees, each its own brightness, darker
+        // toward its rim; noise bends the outlines a little. Points wrap, so the tile does.
+        private const int LeafCells = 14;
+        private const float LeafStretch = 1.8f, LeafTurn = 25f, LeafBend = 0.6f, LeafRim = 0.35f;
+
+        private static void Leaves(float[] height, System.Random random)
+        {
+            const int n = LeafCells;
+            var points = new Vector2[n * n];
+            var shade = new float[n * n];
+            for (int i = 0; i < points.Length; i++)
+            {
+                points[i] = new Vector2(i % n + (float)random.NextDouble(), i / n + (float)random.NextDouble());
+                shade[i] = (float)random.NextDouble();
+            }
+            float[] bendX = Noise(6, random), bendY = Noise(6, random);
+            float cos = Mathf.Cos(LeafTurn * Mathf.Deg2Rad), sin = Mathf.Sin(LeafTurn * Mathf.Deg2Rad);
+            // A cell stretched along a leaf can hold the nearest point three cells away.
+            const int Reach = 3;
+            for (int y = 0; y < GrainSize; y++)
+                for (int x = 0; x < GrainSize; x++)
+                {
+                    int i = y * GrainSize + x;
+                    float px = (x + 0.5f) * n / GrainSize + (bendX[i] - 0.5f) * LeafBend;
+                    float py = (y + 0.5f) * n / GrainSize + (bendY[i] - 0.5f) * LeafBend;
+                    int cx = Mathf.FloorToInt(px), cy = Mathf.FloorToInt(py);
+                    float first = float.PositiveInfinity, second = float.PositiveInfinity;
+                    int nearest = 0;
+                    for (int dy = -Reach; dy <= Reach; dy++)
+                        for (int dx = -Reach; dx <= Reach; dx++)
+                        {
+                            int gx = cx + dx, gy = cy + dy;
+                            int wx = ((gx % n) + n) % n, wy = ((gy % n) + n) % n;
+                            Vector2 q = points[wy * n + wx];
+                            float ex = q.x + (gx - wx) - px, ey = q.y + (gy - wy) - py;
+                            float along = ex * cos + ey * sin, across = (-ex * sin + ey * cos) / LeafStretch;
+                            float d = Mathf.Sqrt(along * along + across * across);
+                            if (d < first) { second = first; first = d; nearest = wy * n + wx; }
+                            else if (d < second) second = d;
+                        }
+                    float rim = 1f - Mathf.SmoothStep(0f, 1f, Mathf.Clamp01((second - first) / LeafRim));
+                    height[i] += Mathf.Lerp(-0.30f, 0.18f, shade[nearest]) - rim * 0.30f - first * 0.08f;
+                }
         }
 
         // count round dots up to radius pixels (wrapping), each lighter by amount with chance lighter, else darker.
@@ -439,9 +492,30 @@ namespace ProtoHarness.Editor.ChainRush
             }
         }
 
-        // The track's road, wall and paint materials, its lanes (CircuitRace.UseLook) and its sky (RaceAssembler), made at
-        // path or set again.
-        public static void BuildLook(string path, Material road, Material rail, Material markings, Material accent, Lanes lanes, Sky sky)
+        // A track's own light (TrackLook's own light): the sun's colour and intensity and the trilight ambient's sky,
+        // horizon and ground colours.
+        public readonly struct Lighting
+        {
+            public readonly Color Sun;
+            public readonly float Intensity;
+            public readonly Color AmbientSky;
+            public readonly Color AmbientEquator;
+            public readonly Color AmbientGround;
+
+            public Lighting(Color sun, float intensity, Color ambientSky, Color ambientEquator, Color ambientGround)
+            {
+                if (!(intensity > 0f)) throw new ArgumentOutOfRangeException(nameof(intensity), intensity, "The sun must be brighter than 0.");
+                Sun = sun;
+                Intensity = intensity;
+                AmbientSky = ambientSky;
+                AmbientEquator = ambientEquator;
+                AmbientGround = ambientGround;
+            }
+        }
+
+        // The track's road, wall and paint materials, its lanes (CircuitRace.UseLook), its sky and, given one, its own
+        // light (RaceAssembler), made at path or set again; without a light the look keeps the race scene's.
+        public static void BuildLook(string path, Material road, Material rail, Material markings, Material accent, Lanes lanes, Sky sky, Lighting? light = null)
         {
             if (sky.Material == null) throw new ArgumentException("Every track's look has a sky (BuildSky).", nameof(sky));
             TrackLook look = AssetDatabase.LoadAssetAtPath<TrackLook>(path);
@@ -463,6 +537,15 @@ namespace ProtoHarness.Editor.ChainRush
             data.FindProperty("horizon").colorValue = sky.Horizon;
             data.FindProperty("fogStart").floatValue = sky.FogStart;
             data.FindProperty("fogEnd").floatValue = sky.FogEnd;
+            data.FindProperty("ownLight").boolValue = light.HasValue;
+            if (light.HasValue)
+            {
+                data.FindProperty("sunColor").colorValue = light.Value.Sun;
+                data.FindProperty("sunIntensity").floatValue = light.Value.Intensity;
+                data.FindProperty("ambientSky").colorValue = light.Value.AmbientSky;
+                data.FindProperty("ambientEquator").colorValue = light.Value.AmbientEquator;
+                data.FindProperty("ambientGround").colorValue = light.Value.AmbientGround;
+            }
             data.ApplyModifiedPropertiesWithoutUndo();
             if (!look.TryValidate(out string error)) throw new InvalidOperationException(error);
             EditorUtility.SetDirty(look);

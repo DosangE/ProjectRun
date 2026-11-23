@@ -10,7 +10,7 @@ namespace ProtoHarness.ChainRush.Tutorial
     {
         public enum Kind { Goal, Drive, Turn, Reverse, Pole, Rope, Gauge, Boost }
 
-        public static void Draw(Kind kind, Rect area, GUIStyle keys, GUIStyle small, GUIStyle item, Color goalColor)
+        public static void Draw(Kind kind, Rect area, GUIStyle keys, GUIStyle small, GUIStyle poleKey, Color goalColor)
         {
             NightUi.Block(area, NightUi.Background);
             Matrix4x4 previous = GUI.matrix;
@@ -18,6 +18,8 @@ namespace ProtoHarness.ChainRush.Tutorial
             GUI.matrix = previous * Matrix4x4.TRS(
                 new Vector3(area.center.x - 500f * scale, area.center.y - 130f * scale, 0f),
                 Quaternion.identity, new Vector3(scale, scale, 1f));
+            // The briefing can be read while the game waits, so its gauge breathes on the unscaled clock.
+            float breath = ChainRushHud.SlotBreath(Time.unscaledTime);
             switch (kind)
             {
                 case Kind.Goal:
@@ -63,7 +65,7 @@ namespace ProtoHarness.ChainRush.Tutorial
                 case Kind.Pole:
                     NightUi.Block(new Rect(328, 34, 14, 180), NightUi.Muted);
                     Ellipse(new Vector2(335, 214), 54, 14, 0, 360, NightUi.Muted);
-                    ChainRushHud.DrawTarget(335, 118, 2f, NightUi.Accent, 0.08f);
+                    ChainRushHud.DrawPoleMark(335, 118, 1.6f, NightUi.Action, poleKey);
                     Key(610, 90, 150, "SHIFT", keys);
                     GUI.Label(new Rect(590, 190, 320, 28), "누르고 유지하면 줄 연결", small);
                     break;
@@ -80,8 +82,8 @@ namespace ProtoHarness.ChainRush.Tutorial
                     Swing(new Vector2(205, 130));
                     Key(325, 190, 150, "SHIFT", keys);
                     ChainRushHud.DrawArrow(new Vector2(380, 130), Vector2.right, NightUi.Accent);
-                    ChainRushHud.DrawBoostGauge(510, 62, 0.65f, 0f, -1, small, item);
-                    ChainRushHud.DrawBoostGauge(510, 154, 1f, 0f, -1, small, item);
+                    ChainRushHud.DrawBoostGauge(510, 62, 0.65f, 0f, -1, 0f, -1, breath, small);
+                    ChainRushHud.DrawBoostGauge(510, 154, 1f, 0f, -1, 0f, -1, breath, small);
                     GUI.Label(new Rect(510, 222, 430, 28), "스윙 → 게이지 → ▶▶ 한 칸", small);
                     break;
                 case Kind.Boost:
@@ -92,7 +94,7 @@ namespace ProtoHarness.ChainRush.Tutorial
                     Runner(new Vector2(630, 100));
                     for (int i = 0; i < 4; i++)
                         NightUi.Block(new Rect(540, 70 + i * 20, 65, 3), NightUi.Accent);
-                    ChainRushHud.DrawBoostGauge(510, 180, 1f, 0f, -1, small, item);
+                    ChainRushHud.DrawBoostGauge(510, 180, 1f, 0f, -1, 0f, -1, breath, small);
                     GUI.Label(new Rect(100, 194, 370, 28), "↑ 를 떼면 부스터 중단", small);
                     break;
                 default: throw new ArgumentOutOfRangeException(nameof(kind), kind, "TutorialFigures: unknown figure.");
@@ -121,7 +123,7 @@ namespace ProtoHarness.ChainRush.Tutorial
             NightUi.Block(new Rect(center.x - 7, center.y - 7, 14, 14), NightUi.Muted);
             Line(center, center + new Vector2(90, 0), NightUi.Accent);
             Runner(center + new Vector2(90, 0));
-            ChainRushHud.DrawTarget(center.x, center.y, 0.6f, NightUi.Accent, 0f);
+            ChainRushHud.DrawPoleMark(center.x, center.y, 0.6f, NightUi.Action, null);
             ChainRushHud.DrawArrow(center + new Vector2(0, -60), Vector2.right, NightUi.Accent);
         }
 

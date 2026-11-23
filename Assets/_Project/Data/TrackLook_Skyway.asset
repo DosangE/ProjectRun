@@ -24,5 +24,11 @@ MonoBehaviour:
   horizon: {r: 0.8, g: 0.85, b: 0.91, a: 1}
   fogStart: 180
   fogEnd: 620
+  ownLight: 1
+  sunColor: {r: 1, g: 0.97, b: 0.92, a: 1}
+  sunIntensity: 1.4
+  ambientSky: {r: 0.7, g: 0.77, b: 0.86, a: 1}
+  ambientEquator: {r: 0.68, g: 0.68, b: 0.67, a: 1}
+  ambientGround: {r: 0.42, g: 0.41, b: 0.39, a: 1}
   music: {fileID: 0}
   ambience: {fileID: 0}

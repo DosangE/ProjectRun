@@ -39,10 +39,14 @@ namespace ProtoHarness.Tests.PlayMode
         private RaceAssembler lapAssembler;
         private BestRecords lapRecords;
         private GhostFiles lapGhosts;
+        private GameSettings lobbySettings;
 
         [UnitySetUp]
         public IEnumerator SetUp()
         {
+            lobbySettings = new GameSettings("ChainRush.Test.ProbeLobby.");
+            lobbySettings.Clear();
+            LobbyMenu.DefaultSettings = lobbySettings;
             timeScale = Time.timeScale;
 #if UNITY_EDITOR
             yield return EditorSceneManager.LoadSceneAsyncInPlayMode(CircuitScene, new LoadSceneParameters(LoadSceneMode.Single));
@@ -63,16 +67,24 @@ namespace ProtoHarness.Tests.PlayMode
         [UnityTearDown]
         public IEnumerator TearDown()
         {
-            Time.timeScale = timeScale;
-            RaceLaunch.Clear();
-            if (lapRunner != null) UnityEngine.Object.Destroy(lapRunner);
-            if (lapRecords != null)
+            try
             {
-                if (lapSetup.Track != null) lapRecords.Clear(lapSetup.Track.name, lapSetup.Speed);
-                if (System.IO.Directory.Exists(lapGhosts.Folder)) System.IO.Directory.Delete(lapGhosts.Folder, true);
+                Time.timeScale = timeScale;
+                RaceLaunch.Clear();
+                if (lapRunner != null) UnityEngine.Object.Destroy(lapRunner);
+                if (lapRecords != null)
+                {
+                    if (lapSetup.Track != null) lapRecords.Clear(lapSetup.Track.name, lapSetup.Speed);
+                    if (System.IO.Directory.Exists(lapGhosts.Folder)) System.IO.Directory.Delete(lapGhosts.Folder, true);
+                }
+                yield return null;
+                TestLogs.AssertNoUnexpected();
             }
-            yield return null;
-            LogAssert.NoUnexpectedReceived();
+            finally
+            {
+                LobbyMenu.DefaultSettings = null;
+                lobbySettings?.Clear();
+            }
         }
 
         // The bot over the grapple gap: plain, with a booster fired before it, and with the grapple empowered.

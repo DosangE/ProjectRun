@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.Rendering;
@@ -26,6 +27,19 @@ namespace ProtoHarness.Editor.ChainRush
         // slot, pivot at the bounds centre like the built-in shapes, so it replaces a Shape call's mesh without moving it.
         public static Mesh KitMesh(string kit, string name)
         {
+            Mesh mesh = KitPiece(kit, name);
+            // Shape places the mesh's origin, so an origin off the bounds centre would bake every copy floating
+            // or buried without any check catching it (reviewer 2026-11-11).
+            if (mesh.bounds.center.sqrMagnitude > 1e-4f * mesh.bounds.size.sqrMagnitude)
+                throw new InvalidOperationException($"Kit mesh {name} in {ExteriorAssets.ModelFolder}{kit}.fbx has its origin off the bounds centre ({mesh.bounds.center}); export it with the pivot at the centre.");
+            return mesh;
+        }
+
+        // A kit mesh placed by its own origin (Piece), not by its bounds centre: a façade bay's slot objects share the
+        // bay's origin and have different bounds, so only their origins line up (docs/ART_REQUEST_PROPS.md K8). One
+        // material slot, like KitMesh; the caller checks where the origin lies.
+        public static Mesh KitPiece(string kit, string name)
+        {
             if (string.IsNullOrEmpty(kit)) throw new ArgumentException("A kit name is required.", nameof(kit));
             if (string.IsNullOrEmpty(name)) throw new ArgumentException("A mesh name is required.", nameof(name));
             string path = ExteriorAssets.ModelFolder + kit + ".fbx";
@@ -34,10 +48,6 @@ namespace ProtoHarness.Editor.ChainRush
                 {
                     if (mesh.subMeshCount != 1)
                         throw new InvalidOperationException($"Kit mesh {name} in {path} has {mesh.subMeshCount} material slots; a kit mesh has one.");
-                    // Shape places the mesh's origin, so an origin off the bounds centre would bake every copy floating
-                    // or buried without any check catching it (reviewer 2026-11-11).
-                    if (mesh.bounds.center.sqrMagnitude > 1e-4f * mesh.bounds.size.sqrMagnitude)
-                        throw new InvalidOperationException($"Kit mesh {name} in {path} has its origin off the bounds centre ({mesh.bounds.center}); export it with the pivot at the centre.");
                     return mesh;
                 }
             throw new InvalidOperationException($"Missing decoration kit mesh {name} in {path}");
@@ -64,11 +74,20 @@ namespace ProtoHarness.Editor.ChainRush
         // scale is the shape's size in metres: the built-in cube is 1 m, the sphere and the cylinder 2 m.
         public static GameObject Shape(string name, Transform parent, Vector3 position, Vector3 scale, Material material, Mesh mesh)
         {
+            Vector3 meshSize = mesh.bounds.size;
+            return Place(name, parent, position, new Vector3(scale.x / meshSize.x, scale.y / meshSize.y, scale.z / meshSize.z), material, mesh);
+        }
+
+        // A kit piece (KitPiece) at its own size, its origin at position.
+        public static GameObject Piece(string name, Transform parent, Vector3 position, Material material, Mesh mesh)
+            => Place(name, parent, position, Vector3.one, material, mesh);
+
+        private static GameObject Place(string name, Transform parent, Vector3 position, Vector3 localScale, Material material, Mesh mesh)
+        {
             var shape = new GameObject(name);
             shape.transform.SetParent(parent, false);
             shape.transform.localPosition = position;
-            Vector3 meshSize = mesh.bounds.size;
-            shape.transform.localScale = new Vector3(scale.x / meshSize.x, scale.y / meshSize.y, scale.z / meshSize.z);
+            shape.transform.localScale = localScale;
             shape.AddComponent<MeshFilter>().sharedMesh = mesh;
             MeshRenderer renderer = shape.AddComponent<MeshRenderer>();
             renderer.sharedMaterial = material;
@@ -76,6 +95,40 @@ namespace ProtoHarness.Editor.ChainRush
             renderer.receiveShadows = false;
             GameObjectUtility.SetStaticEditorFlags(shape, StaticEditorFlags.BatchingStatic);
             return shape;
+        }
+
+        // The group's parts become one mesh per material, named <prefix>_<key>_<material> (saved as
+        // Art/Models/<that name>.asset by ExteriorAssets.SavePrefab, a rebuild writing over the same assets and keeping
+        // their GUIDs): thousands of plain parts in a few renderers (user 2026-11-02, "메시로 합치고"). The parts'
+        // transforms are baked in; the group keeps its place. A group merged this way spreads round the road, so the
+        // builder checks it vertex by vertex (RoadCorridor.ValidateClearance).
+        public static void MergeByMaterial(Transform group, string prefix, string key)
+        {
+            if (group == null) throw new ArgumentNullException(nameof(group));
+            if (string.IsNullOrEmpty(prefix)) throw new ArgumentException("A mesh name prefix is required.", nameof(prefix));
+            if (string.IsNullOrEmpty(key)) throw new ArgumentException("A merge key is required.", nameof(key));
+            var byMaterial = new Dictionary<Material, List<CombineInstance>>();
+            foreach (MeshFilter filter in group.GetComponentsInChildren<MeshFilter>(true))
+            {
+                Material material = filter.GetComponent<MeshRenderer>().sharedMaterial;
+                if (!byMaterial.TryGetValue(material, out List<CombineInstance> parts)) byMaterial[material] = parts = new List<CombineInstance>();
+                parts.Add(new CombineInstance { mesh = filter.sharedMesh, transform = group.worldToLocalMatrix * filter.transform.localToWorldMatrix });
+            }
+            for (int i = group.childCount - 1; i >= 0; i--) UnityEngine.Object.DestroyImmediate(group.GetChild(i).gameObject);
+            foreach (KeyValuePair<Material, List<CombineInstance>> pair in byMaterial)
+            {
+                var mesh = new Mesh { name = $"{prefix}_{key}_{pair.Key.name}", indexFormat = IndexFormat.UInt32 };
+                mesh.CombineMeshes(pair.Value.ToArray(), true, true);
+                mesh.RecalculateBounds();
+                var part = new GameObject(key + " " + pair.Key.name);
+                part.transform.SetParent(group, false);
+                part.AddComponent<MeshFilter>().sharedMesh = mesh;
+                MeshRenderer renderer = part.AddComponent<MeshRenderer>();
+                renderer.sharedMaterial = pair.Key;
+                renderer.shadowCastingMode = ShadowCastingMode.Off;
+                renderer.receiveShadows = false;
+                GameObjectUtility.SetStaticEditorFlags(part, StaticEditorFlags.BatchingStatic);
+            }
         }
 
         // Facing forward, level.

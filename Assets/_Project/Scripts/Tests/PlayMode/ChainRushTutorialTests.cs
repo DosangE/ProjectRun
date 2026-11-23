@@ -28,10 +28,14 @@ namespace ProtoHarness.Tests.PlayMode
 
         private RunnerProfile runner;
         private float timeScale;
+        private GameSettings lobbySettings;
 
         [SetUp]
         public void SetUp()
         {
+            lobbySettings = new GameSettings("ChainRush.Test.TutorialLobby.");
+            lobbySettings.Clear();
+            LobbyMenu.DefaultSettings = lobbySettings;
             RaceLaunch.Clear();
             timeScale = Time.timeScale;
             runner = ScriptableObject.CreateInstance<RunnerProfile>();
@@ -41,11 +45,19 @@ namespace ProtoHarness.Tests.PlayMode
         [UnityTearDown]
         public IEnumerator TearDown()
         {
-            Time.timeScale = timeScale;
-            RaceLaunch.Clear();
-            if (runner != null) UnityEngine.Object.Destroy(runner);
-            yield return null;
-            LogAssert.NoUnexpectedReceived();
+            try
+            {
+                Time.timeScale = timeScale;
+                RaceLaunch.Clear();
+                if (runner != null) UnityEngine.Object.Destroy(runner);
+                yield return null;
+                TestLogs.AssertNoUnexpected();
+            }
+            finally
+            {
+                LobbyMenu.DefaultSettings = null;
+                lobbySettings?.Clear();
+            }
         }
 
         // ---- the way in ----------------------------------------------------------------------------------

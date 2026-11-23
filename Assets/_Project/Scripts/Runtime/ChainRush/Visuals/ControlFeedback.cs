@@ -43,6 +43,17 @@ namespace ProtoHarness.ChainRush.Visuals
         private bool boosted;
         private float boostedAt;
         private int spentBoostSlot = -1;
+        // A booster lasts while the slingshot pulls or carries, or the grapple is empowered; the screen's edges hold that long.
+        private bool boosting;
+        private bool boostEnded;
+        private float boostEndedAt;
+        // A slot filling is noticed by the gauge's whole part rising; slotsKnown is false until the run's first frame has
+        // taken the gauge as it stands, so a run starting with slots does not pop them.
+        private bool slotsKnown;
+        private int lastSlots;
+        private bool slotGained;
+        private float slotGainedAt;
+        private int gainedSlot = -1;
         // A miss is noticed by its mark moving later, not by JustMissed turning on: a second miss while the first still
         // shows (it lasts 0.75 s and nothing stops another press) must shake again (review 2026-10-29).
         private int lastMissUntil;
@@ -63,6 +74,8 @@ namespace ProtoHarness.ChainRush.Visuals
         public bool SwingTailEmitting => speedTrails != null && speedTrails.SwingTailEmitting;
         public bool SwingBoostTailEmitting => speedTrails != null && speedTrails.SwingBoostTailEmitting;
         public bool WindLinesShown => speedTrails != null && speedTrails.WindLinesShown;
+        public int WindLinesOn => speedTrails != null ? speedTrails.WindLinesOn : 0;
+        public bool LayerTailsEmitting => speedTrails != null && speedTrails.LayerTailsEmitting;
         public SpeedTrails.Style TrailStyle => speedTrails != null ? speedTrails.Current : SpeedTrails.Style.None;
 
         // Seconds since each moment on Time.time, negative when it has not happened in this run.
@@ -74,6 +87,12 @@ namespace ProtoHarness.ChainRush.Visuals
         public float SincePad(float now) => padHit ? now - padAt : -1f;
         // The gauge slot the last booster emptied (the whole slots left after spending it), -1 before any.
         public int SpentBoostSlot => spentBoostSlot;
+        // Whether a booster is on in this frame, and seconds since the last one ended (negative while on or before any).
+        public bool Boosting => boosting;
+        public float SinceBoostEnd(float now) => boostEnded && !boosting ? now - boostEndedAt : -1f;
+        // Seconds since a gauge slot last filled (negative before any in this run), and which slot it was, -1 before any.
+        public float SinceSlotGained(float now) => slotGained ? now - slotGainedAt : -1f;
+        public int GainedSlot => gainedSlot;
 
         // Allocate every renderer and its geometry once; the HUD adds this component after validating its references.
         public void Initialize(ChainRushGame game, RunnerMotor player, GrappleController grapple)
@@ -185,6 +204,22 @@ namespace ProtoHarness.ChainRush.Visuals
                 Vector3 feet = runner.TransformPoint(capsule.center - Vector3.up * (capsule.height * 0.5f));
                 StartRing(BoostRing, feet + Vector3.up * 0.08f, Quaternion.identity, now);
             }
+            bool boostingNow = game.Racer.SlingTicks > 0 || game.Racer.GrappleEmpowered;
+            if (boosting && !boostingNow)
+            {
+                boostEnded = true;
+                boostEndedAt = now;
+            }
+            boosting = boostingNow;
+            int slots = Mathf.FloorToInt(player.Gauge);
+            if (slotsKnown && slots > lastSlots)
+            {
+                slotGained = true;
+                slotGainedAt = now;
+                gainedSlot = Mathf.Min(slots, (int)RacerState.MaxGauge) - 1;
+            }
+            slotsKnown = true;
+            lastSlots = slots;
             int missUntil = game.Racer.MissUntilTick;
             if (missUntil > lastMissUntil)
             {
@@ -227,7 +262,7 @@ namespace ProtoHarness.ChainRush.Visuals
             {
                 swingEffects.Present(swinging, swingBite, body, now);
                 bool swingTail = swinging || (swingEnded && now - swingEndedAt < FeedbackLook.SwingTailAfter);
-                bool booster = game.Racer.SlingTicks > 0 || game.Racer.GrappleEmpowered;
+                bool booster = boosting;
                 float padShare = FeedbackLook.PadShare(game.Racer.BoostZoneCarrySpeed, player.RunSpeed, player.BoostZoneSpeed);
                 speedTrails.Present(SpeedTrails.StyleOf(swingTail, booster, padShare > 0f), padShare, player.Facing, now);
             }
@@ -241,7 +276,8 @@ namespace ProtoHarness.ChainRush.Visuals
                 rings[ReadyRing].transform.SetPositionAndRotation(bite, Quaternion.identity);
                 rings[ReadyRing].transform.localScale = Vector3.one *
                     ((SwingLook.PoleThickness * 0.5f + 0.18f) * FeedbackLook.PoleScale(since));
-                Color color = Color.Lerp(NightUi.Accent, Color.white, FeedbackLook.Fade(since, FeedbackLook.PoleEnterTime));
+                // The same action yellow as the pole's mark on the HUD (ChainRushHud.DrawPoleMark).
+                Color color = Color.Lerp(NightUi.Action, Color.white, FeedbackLook.Fade(since, FeedbackLook.PoleEnterTime));
                 color.a = 0.8f;
                 SetTint(rings[ReadyRing], color);
             }
@@ -256,7 +292,8 @@ namespace ProtoHarness.ChainRush.Visuals
         {
             slingPull = empower = hook = swing = poleReady = default;
             boosted = missed = padHit = wasSwinging = swingEnded = false;
-            spentBoostSlot = -1;
+            boosting = boostEnded = slotsKnown = slotGained = false;
+            spentBoostSlot = gainedSlot = -1;
             lastMissUntil = game.Racer.MissUntilTick;
             lastPadCarry = game.Racer.BoostZoneCarrySpeed;
         }

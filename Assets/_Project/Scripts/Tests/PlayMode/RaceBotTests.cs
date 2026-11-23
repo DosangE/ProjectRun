@@ -25,10 +25,14 @@ namespace ProtoHarness.Tests.PlayMode
         internal const string RacePath = "Assets/_Project/Scenes/ChainRushCircuit.unity";
         private static readonly MethodInfo FieldTick = typeof(RaceField).GetMethod("FixedUpdate", BindingFlags.Instance | BindingFlags.NonPublic);
         private float scale, volume;
+        private GameSettings lobbySettings;
 
         [UnitySetUp]
         public IEnumerator SetUp()
         {
+            lobbySettings = new GameSettings("ChainRush.Test.RaceBotLobby.");
+            lobbySettings.Clear();
+            LobbyMenu.DefaultSettings = lobbySettings;
             scale = Time.timeScale;
             volume = AudioListener.volume;
             Time.timeScale = 0f;
@@ -40,11 +44,19 @@ namespace ProtoHarness.Tests.PlayMode
         [UnityTearDown]
         public IEnumerator TearDown()
         {
-            RaceLaunch.Clear();
-            Time.timeScale = scale;
-            AudioListener.volume = volume;
-            yield return null;
-            LogAssert.NoUnexpectedReceived();
+            try
+            {
+                RaceLaunch.Clear();
+                Time.timeScale = scale;
+                AudioListener.volume = volume;
+                yield return null;
+                TestLogs.AssertNoUnexpected();
+            }
+            finally
+            {
+                LobbyMenu.DefaultSettings = null;
+                lobbySettings?.Clear();
+            }
         }
 
         [UnityTest, Timeout(120000)]

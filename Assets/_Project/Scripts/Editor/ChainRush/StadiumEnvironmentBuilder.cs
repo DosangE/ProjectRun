@@ -250,7 +250,7 @@ namespace ProtoHarness.Editor.ChainRush
 
             private static float SkinOffset(float fraction) => BowlBack + WallFlare * (1f - fraction) * (1f - fraction);
 
-            // Directly accumulate one buffer per material, as SKYWAY's MergeByMaterial does after placing its parts.
+            // Directly accumulate one buffer per material, as ExteriorKit.MergeByMaterial does after the parts are placed.
             // Every quad owns its four vertices: risers never share normals with the horizontal treads.
             private sealed class Surface
             {

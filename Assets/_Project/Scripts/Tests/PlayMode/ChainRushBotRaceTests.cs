@@ -34,11 +34,15 @@ namespace ProtoHarness.Tests.PlayMode
         private RaceWorld player;
         private RaceAssembler assembler;
         private ChainRushHud hud;
+        private GameSettings lobbySettings;
         private RaceField Field => assembler.Field;
 
         [UnitySetUp]
         public IEnumerator SetUp()
         {
+            lobbySettings = new GameSettings("ChainRush.Test.BotRaceLobby.");
+            lobbySettings.Clear();
+            LobbyMenu.DefaultSettings = lobbySettings;
             timeScale = Time.timeScale;
             listenerVolume = AudioListener.volume;
             AudioListener.volume = 0f;
@@ -52,16 +56,24 @@ namespace ProtoHarness.Tests.PlayMode
         [UnityTearDown]
         public IEnumerator TearDown()
         {
-            if (player != null) player.Game.SetInputSource(Idle());
-            if (assembler != null && assembler.Field != null)
-                foreach (RaceWorld world in Field.Opponents) world.Game.SetInputSource(Idle());
-            Time.timeScale = timeScale;
-            AudioListener.volume = listenerVolume;
-            RaceLaunch.Clear();
-            foreach (SpeedClass speed in Enum.GetValues(typeof(SpeedClass))) records.Clear("Circuit_Stadium", speed);
-            if (Directory.Exists(ghosts.Folder)) Directory.Delete(ghosts.Folder, true);
-            yield return null;
-            LogAssert.NoUnexpectedReceived();
+            try
+            {
+                if (player != null) player.Game.SetInputSource(Idle());
+                if (assembler != null && assembler.Field != null)
+                    foreach (RaceWorld world in Field.Opponents) world.Game.SetInputSource(Idle());
+                Time.timeScale = timeScale;
+                AudioListener.volume = listenerVolume;
+                RaceLaunch.Clear();
+                foreach (SpeedClass speed in Enum.GetValues(typeof(SpeedClass))) records.Clear("Circuit_Stadium", speed);
+                if (Directory.Exists(ghosts.Folder)) Directory.Delete(ghosts.Folder, true);
+                yield return null;
+                TestLogs.AssertNoUnexpected();
+            }
+            finally
+            {
+                LobbyMenu.DefaultSettings = null;
+                lobbySettings?.Clear();
+            }
         }
 
         [TestCase(1, "1st"), TestCase(2, "2nd"), TestCase(3, "3rd"), TestCase(4, "4th")]

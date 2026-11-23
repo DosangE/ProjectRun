@@ -169,6 +169,12 @@ namespace ProtoHarness.ChainRush
         public bool IsSwinging => game.Racer.SwingTicks > 0;
         public Vector3 SwingAnchor => swingAnchor;
         public bool IsRespawning => game.Racer.RespawnHoldTicks > 0;
+        // A contact with another runner broke this runner's swing a moment ago: a swing press hooks nothing yet.
+        public bool IsHookCoolingDown => game.Racer.HookCooldownTicks > 0;
+        // How long a runner whose swing another runner's contact broke hooks no pole (user 2026-11-21, swing cooldown
+        // S1-S3): the 25th tick after the contact hooks again, 0.5 s, the wait the bots kept on their own before
+        // (BotTuning.ContactRehookTicks), now the simulation's for every runner.
+        public static readonly int ContactRehookTicks = Ticks.FromSeconds(0.5f);
         // The profile given by Configure; null runs on the scene's values.
         public RunnerProfile Profile => profile;
         public Vector3 ContactCenter => transform.TransformPoint(controller.center);
@@ -274,6 +280,8 @@ namespace ProtoHarness.ChainRush
             if (!game.IsRunning) return;
             NormalizeController();
             RacerState racer = game.Racer;
+            // The wait after a contact broke a swing runs on every tick, a respawn hold's too.
+            if (racer.HookCooldownTicks > 0) racer.HookCooldownTicks--;
             // A runner just put back on the track stands still and ignores its controls until the hold runs out.
             if (racer.RespawnHoldTicks > 0)
             {
@@ -503,15 +511,14 @@ namespace ProtoHarness.ChainRush
             RacerState racer = game.Racer;
             grapple.Release(false);
             double s = racer.LastGroundedS - respawnBackoff;
+            // A landing just beyond a gap must not put the backoff inside that gap, on a loop as on an open course (user
+            // 2026-11-19, Palm Coast: a fall just past the sea came back above it, again and again). The gap comes first so
+            // that the pad that throws over it is then found from its near side.
+            if (game.Circuit.TryGetNextGap(s, out double gapStart, out double gapEnd, out _) && s >= gapStart && s <= gapEnd)
+                s = gapStart - respawnBackoff;
             if (game.Track.TryBoostZoneBehind(s, respawnPadReach, out double pad)) s = pad - respawnBackoff;
-            if (!game.Track.IsLoop)
-            {
-                s = System.Math.Max(0d, System.Math.Min(game.Circuit.Definition.LapLength, s));
-                // A landing just beyond a gap must not put the backoff inside that gap. The open course's start
-                // is also a hard bound: respawning there faces the road ahead rather than the rear end guard.
-                if (game.Circuit.TryGetNextGap(s, out double gapStart, out double gapEnd, out _) && s >= gapStart && s <= gapEnd)
-                    s = System.Math.Max(0d, gapStart - respawnBackoff);
-            }
+            // The open course's start is a hard bound: respawning there faces the road ahead rather than the rear end guard.
+            if (!game.Track.IsLoop) s = System.Math.Max(0d, System.Math.Min(game.Circuit.Definition.LapLength, s));
             TrackFrame frame = game.Track.FrameAt(s);
             controller.enabled = false;
             transform.position = frame.TransformPoint(new Vector3(0f, 1.05f, 0f));
@@ -529,6 +536,7 @@ namespace ProtoHarness.ChainRush
             racer.Heading = Mathf.Atan2(frame.Forward.x, frame.Forward.z) * Mathf.Rad2Deg;
             racer.TurnRate = 0f;
             racer.RespawnHoldTicks = Ticks.FromSeconds(respawnHoldTime);
+            racer.HookCooldownTicks = 0;
             game.PlayCue(RaceCue.Respawn);
         }
 
@@ -552,12 +560,12 @@ namespace ProtoHarness.ChainRush
 
         // A swing key press hooks the corner pole in reach, if there is one, at the rope length and speed of this moment.
         // It costs nothing. In the air (a jump, or past the coyote time off a ledge), while grappling or already swinging,
-        // a press does nothing. Step calls it after the jump, which clears the coyote time, so a press on the takeoff tick
-        // does not hook either.
+        // a press does nothing, and so it does for ContactRehookTicks after a contact broke a swing. Step calls it after
+        // the jump, which clears the coyote time, so a press on the takeoff tick does not hook either.
         private void TryHookPole()
         {
             RacerState racer = game.Racer;
-            if (racer.CoyoteTime <= 0f || grapple.IsAttached || racer.SwingTicks > 0 || !TryFindPole(out Vector3 pole)) return;
+            if (racer.CoyoteTime <= 0f || grapple.IsAttached || racer.SwingTicks > 0 || racer.HookCooldownTicks > 0 || !TryFindPole(out Vector3 pole)) return;
             PoleSwing.Hook(racer, transform.position, pole);
             game.PlayCue(RaceCue.PoleHook);
         }
@@ -692,6 +700,8 @@ namespace ProtoHarness.ChainRush
             if (displacement == Vector3.zero && velocityChange == Vector3.zero) return Vector3.zero;
             RacerState racer = game.Racer;
             racer.Velocity += velocityChange;
+            // A broken swing starts the wait before the next hook; a contact that breaks none starts nothing.
+            if (racer.SwingTicks > 0) racer.HookCooldownTicks = ContactRehookTicks;
             racer.SwingTicks = 0;
             bool grounded = racer.Grounded;
             hitGuard = false;

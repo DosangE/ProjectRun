@@ -97,7 +97,7 @@ namespace ProtoHarness.Tests.PlayMode
         {
             Time.timeScale = previousTimeScale;
             yield return null;
-            LogAssert.NoUnexpectedReceived();
+            TestLogs.AssertNoUnexpected();
         }
 
         [UnityTest]
@@ -140,8 +140,10 @@ namespace ProtoHarness.Tests.PlayMode
             Assert.That(player.Velocity.y, Is.GreaterThanOrEqualTo(7f));
         }
 
+        // The mint edges (user 2026-11-22 "보이는 시간을 좀 더 늘리고"): a burst as the booster fires, held while it lasts,
+        // gone shortly after it ends.
         [UnityTest]
-        public IEnumerator ChainRushHud_BoosterSlotSpent_FlashesThenFades()
+        public IEnumerator ChainRushHud_BoosterSlotSpent_FlashesHoldsWhileItLastsThenFades()
         {
             var input = new FeedbackInputSource();
             game.SetInputSource(input);
@@ -151,9 +153,81 @@ namespace ProtoHarness.Tests.PlayMode
             float deadline = Time.time + 0.5f;
             while (hud.BoostFlash <= 0f && Time.time < deadline) yield return null;
             Assert.That(player.Gauge, Is.EqualTo(0f).Within(0.001f), "The chain action must spend the prepared slot.");
-            Assert.That(hud.BoostFlash, Is.GreaterThan(0f));
+            Assert.That(hud.BoostFlash, Is.GreaterThan(FeedbackLook.BoostEdgeHold), "It fires as a burst.");
             yield return new WaitForSeconds(FeedbackLook.BoostFlashTime + 0.05f);
+            Assert.That(feedback.Boosting, Is.True, "The booster outlasts the burst.");
+            Assert.That(hud.BoostFlash, Is.EqualTo(FeedbackLook.BoostEdgeHold).Within(0.001f), "Held while the booster lasts.");
+            deadline = Time.time + 3f;
+            while (feedback.Boosting && Time.time < deadline) yield return null;
+            Assert.That(feedback.Boosting, Is.False, "The booster must end within 3 s.");
+            Assert.That(hud.BoostFlash, Is.GreaterThan(0f), "It fades out rather than cutting off.");
+            yield return new WaitForSeconds(FeedbackLook.BoostEdgeFadeTime + 0.05f);
             Assert.That(hud.BoostFlash, Is.Zero);
+        }
+
+        [UnityTest]
+        public IEnumerator ChainRushHud_BoostEdge_BurstsThenHoldsThenFades()
+        {
+            Assert.That(FeedbackLook.BoostEdge(-1f, false, -1f), Is.Zero, "No booster yet.");
+            Assert.That(FeedbackLook.BoostEdge(0f, true, -1f), Is.EqualTo(1f));
+            float mid = FeedbackLook.BoostEdge(FeedbackLook.BoostFlashTime * 0.25f, true, -1f);
+            Assert.That(mid, Is.GreaterThan(FeedbackLook.BoostEdgeHold).And.LessThan(1f));
+            Assert.That(FeedbackLook.BoostEdge(1f, true, -1f), Is.EqualTo(FeedbackLook.BoostEdgeHold), "Held while it lasts.");
+            Assert.That(FeedbackLook.BoostEdge(1.2f, false, 0f), Is.EqualTo(FeedbackLook.BoostEdgeHold), "Its end starts the fade.");
+            Assert.That(FeedbackLook.BoostEdge(1.2f + FeedbackLook.BoostEdgeFadeTime * 0.5f, false, FeedbackLook.BoostEdgeFadeTime * 0.5f),
+                Is.EqualTo(FeedbackLook.BoostEdgeHold * 0.5f).Within(1e-4f));
+            Assert.That(FeedbackLook.BoostEdge(2f, false, FeedbackLook.BoostEdgeFadeTime), Is.Zero);
+            Assert.That(FeedbackLook.BoostEdge(0.1f, false, 0f), Is.EqualTo(FeedbackLook.Fade(0.1f, FeedbackLook.BoostFlashTime)),
+                "A booster cut inside its burst still lets the burst run out.");
+            yield break;
+        }
+
+        // A slot filling is a moment of its own (user 2026-11-22 "슬롯 미미하다"): noticed once, naming the slot it filled.
+        [UnityTest]
+        public IEnumerator ControlFeedback_GaugeSlotFills_IsNoticedNamingTheSlot()
+        {
+            game.SetInputSource(new FullThrottleInputSource());
+            game.StartRun();
+            yield return null;
+            Assert.That(player.Gauge, Is.Zero, "The bench starts a run with an empty gauge.");
+            Assert.That(feedback.SinceSlotGained(Time.time), Is.LessThan(0f));
+            Assert.That(feedback.GainedSlot, Is.EqualTo(-1));
+            game.Racer.AddGauge(0.5f);
+            yield return null;
+            yield return null;
+            Assert.That(feedback.SinceSlotGained(Time.time), Is.LessThan(0f), "Half a slot fills none.");
+            game.Racer.AddGauge(0.5f);
+            yield return null;
+            yield return null;
+            Assert.That(feedback.SinceSlotGained(Time.time), Is.GreaterThanOrEqualTo(0f));
+            Assert.That(feedback.GainedSlot, Is.Zero);
+            float firstAt = Time.time - feedback.SinceSlotGained(Time.time);
+            yield return null;
+            Assert.That(Time.time - feedback.SinceSlotGained(Time.time), Is.EqualTo(firstAt).Within(1e-4f), "Noticed once.");
+            game.Racer.AddGauge(1f);
+            yield return null;
+            yield return null;
+            Assert.That(feedback.GainedSlot, Is.EqualTo(1));
+        }
+
+        // As a booster starts every wind line shoots out at once, and its tail is layered (user 2026-11-22 "이펙트가 너무 심심하다").
+        [UnityTest]
+        public IEnumerator SpeedTrails_BoosterStart_ShootsEveryWindLineAndLayersTheTail()
+        {
+            var input = new FeedbackInputSource();
+            game.SetInputSource(input);
+            game.StartRun();
+            yield return null;
+            Assert.That(feedback.WindLinesOn, Is.Zero);
+            Assert.That(feedback.LayerTailsEmitting, Is.False);
+            game.Racer.AddGauge(1f);
+            input.PressBoost();
+            float deadline = Time.time + 0.5f;
+            while (!feedback.Boosting && Time.time < deadline) yield return null;
+            Assert.That(feedback.Boosting, Is.True);
+            Assert.That(feedback.WindLinesOn, Is.EqualTo(SpeedTrails.WindLineCount));
+            Assert.That(feedback.LayerTailsEmitting, Is.True);
+            Assert.That(feedback.TrailEmitting, Is.True);
         }
 
         // A boost pad (user 2026-10-30): the wind is full the moment the pad's carry jumps up, then only as strong as the

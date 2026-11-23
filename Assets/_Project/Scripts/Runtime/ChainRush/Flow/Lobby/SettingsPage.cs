@@ -78,7 +78,7 @@ namespace ProtoHarness.ChainRush.Flow.Lobby
                 var bar = new Rect(face.x + 283, face.y + face.height * .5f - 2, 180, 5);
                 NightUi.Block(bar, LobbyView.Slate);
                 bar.width *= (float)Level(row) / GameSettings.MaxLevel;
-                NightUi.Block(bar, LobbyView.Mint);
+                NightUi.Block(bar, view.Palette.Accent);
             }
             GUI.Label(new Rect(face.x + 383, face.y, 190, face.height), Value(row), view.SettingValue);
         }

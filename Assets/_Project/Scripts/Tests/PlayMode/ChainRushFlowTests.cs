@@ -12,6 +12,8 @@ using ProtoHarness.ChainRush.Race;
 using ProtoHarness.ChainRush.Track;
 using ProtoHarness.ChainRush.Visuals;
 using UnityEngine;
+using UnityEngine.InputSystem;
+using UnityEngine.InputSystem.LowLevel;
 using UnityEngine.SceneManagement;
 using UnityEngine.TestTools;
 #if UNITY_EDITOR
@@ -47,10 +49,14 @@ namespace ProtoHarness.Tests.PlayMode
         private RunnerProfile runner;
         // Ghosts in a folder of the tests' own, emptied after each test, so the player's ghosts are never touched.
         private GhostFiles ghosts;
+        private GameSettings lobbySettings;
 
         [SetUp]
         public void SetUp()
         {
+            lobbySettings = new GameSettings("ChainRush.Test.FlowLobby.");
+            lobbySettings.Clear();
+            LobbyMenu.DefaultSettings = lobbySettings;
             RaceLaunch.Clear();
             runner = ScriptableObject.CreateInstance<RunnerProfile>();
             runner.name = "TestRunner";
@@ -61,12 +67,20 @@ namespace ProtoHarness.Tests.PlayMode
         [UnityTearDown]
         public IEnumerator TearDown()
         {
-            RaceLaunch.Clear();
-            if (made != null) UnityEngine.Object.Destroy(made);
-            if (runner != null) UnityEngine.Object.Destroy(runner);
-            DeleteGhosts();
-            yield return null;
-            LogAssert.NoUnexpectedReceived();
+            try
+            {
+                RaceLaunch.Clear();
+                if (made != null) UnityEngine.Object.Destroy(made);
+                if (runner != null) UnityEngine.Object.Destroy(runner);
+                DeleteGhosts();
+                yield return null;
+                TestLogs.AssertNoUnexpected();
+            }
+            finally
+            {
+                LobbyMenu.DefaultSettings = null;
+                lobbySettings?.Clear();
+            }
         }
 
         // ---- the conditions ------------------------------------------------------------------------------
@@ -198,6 +212,178 @@ namespace ProtoHarness.Tests.PlayMode
             menu.Highlight(3);
             menu.Back();
             Assert.That(menu.SetupRunner, Is.EqualTo(0), "Off the runner page it names the runner last entered with (none yet: the first).");
+        }
+
+        [UnityTest]
+        public IEnumerator Lobby_AfterLaunchingBeta_RestoresBetaOnReopen()
+        {
+            var store = TestSettings();
+            try
+            {
+                LobbyMenu menu = null;
+                yield return Load(LobbyPath, scene => menu = Find<LobbyMenu>(scene));
+                menu.Settings = store;
+                menu.Confirm();
+                menu.Confirm();
+                menu.Confirm();
+                menu.Confirm();
+                Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Runner));
+                menu.Highlight(1);
+                menu.Confirm();
+                Assert.That(store.LastRunner, Is.EqualTo("BETA"));
+
+                float deadline = Time.realtimeSinceStartup + 20f;
+                while (SceneManager.GetActiveScene().name != RaceLaunch.RaceScene && Time.realtimeSinceStartup < deadline)
+                    yield return null;
+                Scene race = SceneManager.GetActiveScene();
+                Assert.That(race.name, Is.EqualTo(RaceLaunch.RaceScene));
+                var assembler = Find<RaceAssembler>(race);
+                assembler.Records = TestRecords();
+                assembler.Ghosts = ghosts;
+                deadline = Time.realtimeSinceStartup + 20f;
+                while (assembler.IsAssembling && Time.realtimeSinceStartup < deadline) yield return null;
+                Assert.That(assembler.IsAssembling, Is.False, "The decoration never finished loading.");
+                Assert.That(assembler.IsLaunched, Is.True);
+                Assert.That(Find<RunnerMotor>(race).Profile.DisplayName, Is.EqualTo("BETA"));
+
+                yield return LeaveLapRace(assembler, assembler.Setup.EnvironmentScene);
+                menu = Find<LobbyMenu>(SceneManager.GetActiveScene());
+                menu.Settings = store;
+                Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Main));
+                Assert.That(menu.SetupRunner, Is.EqualTo(1));
+                menu.Confirm();
+                menu.Confirm();
+                menu.Confirm();
+                menu.Confirm();
+                Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Runner));
+                Assert.That(menu.Cursor, Is.EqualTo(1));
+                Assert.That(menu.Preview.Shown, Is.EqualTo(1));
+                Assert.That(menu.BuildSetup().Runner.DisplayName, Is.EqualTo("BETA"));
+            }
+            finally
+            {
+                store.Clear();
+            }
+        }
+
+        [UnityTest]
+        public IEnumerator Lobby_BackAfterBrowsingRunner_KeepsTheLastRunner()
+        {
+            var store = TestSettings();
+            try
+            {
+                store.SetLastRunner("BETA");
+                LobbyMenu menu = null;
+                yield return Load(LobbyPath, scene => menu = Find<LobbyMenu>(scene));
+                menu.Settings = store;
+                menu.Confirm();
+                menu.Confirm();
+                menu.Confirm();
+                menu.Confirm();
+                Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Runner));
+                menu.Highlight(2);
+                Assert.That(menu.SetupRunner, Is.EqualTo(2));
+                menu.Back();
+
+                Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Track));
+                Assert.That(menu.SetupRunner, Is.EqualTo(1));
+                Assert.That(store.LastRunner, Is.EqualTo("BETA"));
+                Assert.That(RaceLaunch.HasPending, Is.False);
+            }
+            finally
+            {
+                store.Clear();
+            }
+        }
+
+        [UnityTest]
+        public IEnumerator Lobby_RunnerPage_HelpNamesHorizontalArrowsAndDefaultSettingsIsolatesPlayerKey()
+        {
+            string playerKey = GameSettings.Player.LastRunnerKey;
+            bool hadPlayerKey = PlayerPrefs.HasKey(playerKey);
+            string beforePlayerValue = hadPlayerKey ? PlayerPrefs.GetString(playerKey) : null;
+
+            LobbyMenu menu = null;
+            yield return Load(LobbyPath, scene => menu = Find<LobbyMenu>(scene));
+            Assert.That(menu.Settings, Is.SameAs(lobbySettings));
+            Assert.That(menu.CurrentHelp, Does.Contain("↑ / ↓  선택"));
+
+            menu.Confirm();
+            menu.Confirm();
+            menu.Confirm();
+            menu.Confirm();
+            Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Runner));
+            Assert.That(menu.CurrentHelp, Does.Contain("← / →  선택"));
+            Assert.That(menu.CurrentHelp, Does.Not.Contain("↑ / ↓"));
+
+            menu.Highlight(2);
+            menu.Confirm();
+            Assert.That(lobbySettings.LastRunner, Is.EqualTo("THETA"));
+            Assert.That(PlayerPrefs.HasKey(playerKey), Is.EqualTo(hadPlayerKey));
+            if (hadPlayerKey) Assert.That(PlayerPrefs.GetString(playerKey), Is.EqualTo(beforePlayerValue));
+            // Wait for the launched race scene to load before TearDown clears state.
+            float deadline = Time.realtimeSinceStartup + 20f;
+            while (SceneManager.GetActiveScene().name != RaceLaunch.RaceScene && Time.realtimeSinceStartup < deadline)
+                yield return null;
+            var assembler = Find<RaceAssembler>(SceneManager.GetActiveScene());
+            if (assembler != null)
+            {
+                assembler.Records = TestRecords();
+                assembler.Ghosts = ghosts;
+                while (assembler.IsAssembling && Time.realtimeSinceStartup < deadline) yield return null;
+            }
+        }
+
+        [UnityTest]
+        [Category("Device")]
+        public IEnumerator Lobby_RunnerPage_LeftAndRightArrowsChooseRunnerWhileUpAndDownDoNothing()
+        {
+            Keyboard originalKeyboard = Keyboard.current;
+            Keyboard keyboard = InputSystem.AddDevice<Keyboard>();
+            try
+            {
+                keyboard.MakeCurrent();
+                LobbyMenu menu = null;
+                yield return Load(LobbyPath, scene => menu = Find<LobbyMenu>(scene));
+                menu.Confirm();
+                menu.Confirm();
+                menu.Confirm();
+                menu.Confirm();
+                Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Runner));
+                Assert.That(menu.Cursor, Is.EqualTo(0));
+
+                InputSystem.QueueStateEvent(keyboard, new KeyboardState(Key.RightArrow));
+                yield return null;
+                yield return null;
+                Assert.That(menu.Cursor, Is.EqualTo(1), "Right arrow selects the next runner.");
+
+                InputSystem.QueueStateEvent(keyboard, new KeyboardState());
+                yield return null;
+                InputSystem.QueueStateEvent(keyboard, new KeyboardState(Key.LeftArrow));
+                yield return null;
+                yield return null;
+                Assert.That(menu.Cursor, Is.EqualTo(0), "Left arrow selects the previous runner.");
+
+                InputSystem.QueueStateEvent(keyboard, new KeyboardState());
+                yield return null;
+                InputSystem.QueueStateEvent(keyboard, new KeyboardState(Key.DownArrow));
+                yield return null;
+                yield return null;
+                Assert.That(menu.Cursor, Is.EqualTo(0), "Down arrow does not move on the runner page.");
+
+                InputSystem.QueueStateEvent(keyboard, new KeyboardState());
+                yield return null;
+                InputSystem.QueueStateEvent(keyboard, new KeyboardState(Key.UpArrow));
+                yield return null;
+                yield return null;
+                Assert.That(menu.Cursor, Is.EqualTo(0), "Up arrow does not move on the runner page.");
+            }
+            finally
+            {
+                InputSystem.QueueStateEvent(keyboard, new KeyboardState());
+                InputSystem.RemoveDevice(keyboard);
+                if (originalKeyboard != null) originalKeyboard.MakeCurrent();
+            }
         }
 
         [UnityTest]
@@ -1650,6 +1836,87 @@ namespace ProtoHarness.Tests.PlayMode
 #endif
         }
 
+        // A track look's own light (user 2026-11-19, PALM's colours under the scene's cold light): the race scene's sun
+        // takes the look's colour and intensity, its direction kept, and the ambient the look's three colours.
+        [UnityTest]
+        public IEnumerator Race_WithATrackLookLight_LightsTheRaceWithIt()
+        {
+            Quaternion sceneSunTurn = default;
+            yield return RaceWithLookLight(true, sun =>
+            {
+                Assert.That(sun.color, Is.EqualTo(LookSun), "The sun is the look's colour.");
+                Assert.That(sun.intensity, Is.EqualTo(1.3f), "The sun is the look's intensity.");
+                Assert.That(RenderSettings.ambientMode, Is.EqualTo(UnityEngine.Rendering.AmbientMode.Trilight));
+                Assert.That(RenderSettings.ambientSkyColor, Is.EqualTo(LookAmbientSky));
+                Assert.That(RenderSettings.ambientEquatorColor, Is.EqualTo(LookAmbientEquator));
+                Assert.That(RenderSettings.ambientGroundColor, Is.EqualTo(LookAmbientGround));
+                sceneSunTurn = sun.transform.rotation;
+            });
+            yield return RaceWithLookLight(false, sun =>
+                Assert.That(Quaternion.Angle(sun.transform.rotation, sceneSunTurn), Is.LessThan(0.01f), "The look's light keeps the scene's sun direction."));
+        }
+
+        // A look without its own light leaves the race scene's sun and ambient as they are, whatever colours it holds.
+        [UnityTest]
+        public IEnumerator Race_WithATrackLookWithoutItsOwnLight_KeepsTheScenesLight()
+        {
+            yield return RaceWithLookLight(false, sun =>
+            {
+                Assert.That(sun.color, Is.Not.EqualTo(LookSun), "The scene's sun keeps its colour.");
+                Assert.That(sun.intensity, Is.Not.EqualTo(1.3f), "The scene's sun keeps its intensity.");
+                Assert.That(RenderSettings.ambientSkyColor, Is.Not.EqualTo(LookAmbientSky), "The scene's ambient stays.");
+            });
+        }
+
+        private static readonly Color LookSun = new Color(0.9f, 0.6f, 0.3f, 1f);
+        private static readonly Color LookAmbientSky = new Color(0.2f, 0.7f, 0.4f, 1f);
+        private static readonly Color LookAmbientEquator = new Color(0.6f, 0.3f, 0.5f, 1f);
+        private static readonly Color LookAmbientGround = new Color(0.1f, 0.2f, 0.6f, 1f);
+
+        // A PALM COAST race with a look holding the light above, its own or not; check reads the race scene's sun.
+        private IEnumerator RaceWithLookLight(bool ownLight, Action<Light> check)
+        {
+#if UNITY_EDITOR
+            var store = TestRecords();
+            TrackDefinition palm = PalmCoast();
+            Shader lit = Shader.Find("Universal Render Pipeline/Lit");
+            Assert.That(lit, Is.Not.Null);
+            var road = new Material(lit) { name = "Test look road" };
+            var rail = new Material(lit) { name = "Test look rail" };
+            TrackLook look = ScriptableObject.CreateInstance<TrackLook>();
+            var data = new SerializedObject(look);
+            data.FindProperty("road").objectReferenceValue = road;
+            data.FindProperty("rail").objectReferenceValue = rail;
+            data.FindProperty("ownLight").boolValue = ownLight;
+            data.FindProperty("sunColor").colorValue = LookSun;
+            data.FindProperty("sunIntensity").floatValue = 1.3f;
+            data.FindProperty("ambientSky").colorValue = LookAmbientSky;
+            data.FindProperty("ambientEquator").colorValue = LookAmbientEquator;
+            data.FindProperty("ambientGround").colorValue = LookAmbientGround;
+            data.ApplyModifiedPropertiesWithoutUndo();
+            try
+            {
+                RaceLaunch.Request(new RaceSetup(palm, "PALM COAST", "", RaceMode.Single, SpeedClass.Fast, runner, look));
+                RaceAssembler assembler = null;
+                yield return Load(RacePath, scene => assembler = Find<RaceAssembler>(scene));
+                assembler.Records = store;
+                assembler.Ghosts = ghosts;
+                Assert.That(RenderSettings.sun, Is.Not.Null, "The race scene has a sun (Lighting > Sun Source).");
+                check(RenderSettings.sun);
+            }
+            finally
+            {
+                store.Clear(palm.name, SpeedClass.Fast);
+                UnityEngine.Object.Destroy(look);
+                UnityEngine.Object.Destroy(road);
+                UnityEngine.Object.Destroy(rail);
+            }
+#else
+            Assert.Fail("This test requires the Unity Editor.");
+            yield break;
+#endif
+        }
+
         // Read every tick directly: no render frame may skip the crossing's immediate speed or the booster's cut.
         [UnityTest]
         public IEnumerator BoostZone_PalmCoastZ1_RaisesSpeedAtOnceAndCutsARunningBooster([Values(false, true)] bool booster,
@@ -1812,6 +2079,70 @@ namespace ProtoHarness.Tests.PlayMode
                 double back = game.Track.Project(player.transform.position).S;
                 Assert.That(back, Is.EqualTo(zones[3] - 4d).Within(0.5d), "Back before the last pad, not at rest past it.");
                 Assert.That(player.ForwardSpeed, Is.Zero);
+                bool crossed = false;
+                for (int more = 0; more < 1000 && game.IsRunning; more++)
+                {
+                    bool held = player.IsRespawning;
+                    game.StepTick(bot);
+                    Assert.That(held || !player.IsRespawning, Is.True, $"It fell again, {more} ticks after coming back.");
+                    if (game.Track.Project(player.transform.position).S >= seaEnd + 20d)
+                    {
+                        crossed = true;
+                        break;
+                    }
+                }
+                Assert.That(crossed, Is.True, "From rest before the last pad that pad carries the runner over the sea.");
+            }
+            finally
+            {
+                Time.timeScale = scale;
+                store.Clear(palm.name, speed);
+            }
+        }
+
+        // A fall into the sea having last stood just past it (user 2026-11-19: landed, ran back and fell): the backoff from
+        // there lands inside the sea and the last pad is more than respawnPadReach back, yet the runner must come back on
+        // the road before that pad, not above the water where it would fall again and again (RunnerMotor.RespawnOnTrack).
+        [UnityTest, Timeout(120000)]
+        public IEnumerator Respawn_FallJustPastThePalmCoastSea_ComesBackBeforeTheLastPad(
+            [Values(SpeedClass.Normal, SpeedClass.Fast, SpeedClass.VeryFast)] SpeedClass speed)
+        {
+            var store = TestRecords();
+            TrackDefinition palm = PalmCoast();
+            RaceLaunch.Request(new RaceSetup(palm, "PALM COAST", "", RaceMode.Single, speed, runner));
+            RaceAssembler assembler = null;
+            yield return Load(RacePath, scene => assembler = Find<RaceAssembler>(scene));
+            assembler.Records = store;
+            assembler.Ghosts = ghosts;
+            Scene scene = assembler.gameObject.scene;
+            ChainRushGame game = Find<ChainRushGame>(scene);
+            RunnerMotor player = Find<RunnerMotor>(scene);
+            CircuitRace circuit = Find<CircuitRace>(scene);
+            var zones = new System.Collections.Generic.List<double>();
+            game.Track.GetBoostZones(zones);
+            (double seaStart, double seaEnd) = palm.Gaps()[0];
+            const double backoff = 4d, padReach = 50d; // the circuit scene's respawnBackoff and respawnPadReach
+            float scale = Time.timeScale;
+            try
+            {
+                Time.timeScale = 0f;
+                game.StartRun();
+                var bot = new CircuitBot(game, player, player.GetComponent<GrappleController>(), circuit);
+                SimSnapshot now = game.CaptureSnapshot();
+                RacerState.Snapshot racer = now.Racer;
+                racer.LastGroundedS = seaEnd + 1d;
+                racer.Grounded = false;
+                racer.Velocity = Vector3.zero;
+                Assert.That(racer.LastGroundedS - backoff, Is.InRange(seaStart, seaEnd), "precondition: the backoff lands in the sea.");
+                Assert.That(racer.LastGroundedS - backoff - zones[3], Is.GreaterThan(padReach), "precondition: the last pad is out of reach.");
+                CircuitRace.Snapshot past = now.Circuit;
+                past.LastS = seaEnd + 1d;
+                TrackFrame sea = game.Track.FrameAt((seaStart + seaEnd) * 0.5d);
+                game.RestoreSnapshot(new SimSnapshot(now.Tick, racer, sea.Position + Vector3.down * 40f, past));
+                game.StepTick(bot);
+                Assert.That(player.IsRespawning, Is.True, "The runner in the sea comes back.");
+                double back = game.Track.Project(player.transform.position).S;
+                Assert.That(back, Is.EqualTo(zones[3] - backoff).Within(0.5d), "Back before the last pad, not above the sea.");
                 bool crossed = false;
                 for (int more = 0; more < 1000 && game.IsRunning; more++)
                 {

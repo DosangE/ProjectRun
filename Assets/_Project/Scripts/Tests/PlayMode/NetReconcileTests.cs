@@ -146,7 +146,7 @@ namespace ProtoHarness.Tests.PlayMode
             if (game != null) game.SetInputSource(new InputReplay(new InputLog()));
             Time.timeScale = timeScale;
             yield return null;
-            LogAssert.NoUnexpectedReceived();
+            TestLogs.AssertNoUnexpected();
         }
 
         // ---- the snapshot as bytes ---------------------------------------------------------------

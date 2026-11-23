@@ -60,7 +60,7 @@ namespace ProtoHarness.Tests.PlayMode
         {
             Time.timeScale = timeScale;
             yield return null;
-            LogAssert.NoUnexpectedReceived();
+            TestLogs.AssertNoUnexpected();
         }
 
         private static double Microseconds(long ticks) => ticks * 1000000.0 / Stopwatch.Frequency;
