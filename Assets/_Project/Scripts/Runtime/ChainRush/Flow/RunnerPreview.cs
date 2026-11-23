@@ -42,9 +42,11 @@ namespace ProtoHarness.ChainRush.Flow
             turntable = new GameObject("Turntable").transform;
             turntable.SetParent(stage.transform, false);
 
-            // Each copy is centred on the turntable's axis, measured before any turn.
+            // Each copy is centred on the turntable's axis (XZ) and stands with its feet (bounds.min.y) on a shared
+            // floor at -halfHeight, so taller helmets or antennas do not push a runner's feet below the others.
             models = new GameObject[looks.Length];
-            float radius = 0f, halfHeight = 0f, ring = 0f;
+            var measured = new Bounds[looks.Length];
+            float maxHeight = 0f, ring = 0f;
             for (int i = 0; i < looks.Length; i++)
             {
                 if (looks[i] == null) continue;
@@ -65,12 +67,25 @@ namespace ProtoHarness.ChainRush.Flow
                     Release();
                     throw new ArgumentException($"RunnerPreview: the look '{looks[i].name}' has nothing to draw.", nameof(looks));
                 }
-                model.transform.localPosition = turntable.InverseTransformVector(turntable.position - bounds.center);
-                radius = Mathf.Max(radius, bounds.extents.magnitude);
-                halfHeight = Mathf.Max(halfHeight, bounds.extents.y);
+                measured[i] = bounds;
+                maxHeight = Mathf.Max(maxHeight, bounds.size.y);
                 ring = Mathf.Max(ring, new Vector2(bounds.extents.x, bounds.extents.z).magnitude);
                 model.SetActive(false);
                 models[i] = model;
+            }
+            float halfHeight = maxHeight * 0.5f;
+            float floorY = turntable.position.y - halfHeight;
+            float radius = 0f;
+            for (int i = 0; i < models.Length; i++)
+            {
+                if (models[i] == null) continue;
+                Bounds bounds = measured[i];
+                Vector3 shift = new Vector3(
+                    turntable.position.x - bounds.center.x,
+                    floorY - bounds.min.y,
+                    turntable.position.z - bounds.center.z);
+                models[i].transform.localPosition += turntable.InverseTransformVector(shift);
+                radius = Mathf.Max(radius, new Vector3(bounds.extents.x, halfHeight, bounds.extents.z).magnitude);
             }
 
             texture = new RenderTexture(width, height, 24) { name = "Runner preview", antiAliasing = 4 };

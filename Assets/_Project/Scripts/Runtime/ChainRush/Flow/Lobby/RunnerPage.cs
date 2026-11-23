@@ -28,7 +28,7 @@ namespace ProtoHarness.ChainRush.Flow.Lobby
         private bool dragging;
 
         public RunnerPage(LobbyContext context)
-            : base(context, LobbyMenu.Page.Runner, "RUNNER", ListHelp + "      마우스 드래그  회전")
+            : base(context, LobbyMenu.Page.Runner, "RUNNER", "← / →  선택      ENTER  결정      ESC  뒤로      마우스 드래그  회전")
         {
             int count = Context.Runners.Count;
             labels = new string[count];
@@ -55,6 +55,7 @@ namespace ProtoHarness.ChainRush.Flow.Lobby
         public override string Heading => "CHOOSE YOUR RUNNER";
         public override int Count => labels.Length;
         public override string Label(int row) => labels[row];
+        public override bool HorizontalSelection => true;
         public override bool ClickChooses => false;
 
         public override Step Confirm(int row)

@@ -44,6 +44,8 @@ namespace ProtoHarness.ChainRush.Flow.Lobby
         private float transitionStart;
         private bool transitioning;
         private float stripeScale = 1f;
+        private float stripeBounceStart = 1f;
+        private readonly GUIContent helpContent = new GUIContent();
         // Each locked label is formatted once per lobby.
         private readonly Dictionary<string, string> lockedLabels = new Dictionary<string, string>();
         private readonly Font font;
@@ -139,6 +141,7 @@ namespace ProtoHarness.ChainRush.Flow.Lobby
 
                 shownRunner = runnerIndex;
                 previousColors = drawnColors;
+                stripeBounceStart = stripeScale;
                 transitionStart = now;
                 transitioning = true;
             }
@@ -149,20 +152,25 @@ namespace ProtoHarness.ChainRush.Flow.Lobby
             {
                 ApplyColors(targetColors);
                 stripeScale = 1f;
+                stripeBounceStart = 1f;
                 transitioning = false;
                 return;
             }
 
             ApplyColors(RunnerColors.Lerp(previousColors, targetColors, elapsed / TransitionDuration));
+            stripeScale = EvaluateStripeScale(stripeBounceStart, elapsed);
+        }
+
+        public static float EvaluateStripeScale(float startScale, float elapsed)
+        {
+            if (elapsed <= 0f) return startScale;
+            if (elapsed >= TransitionDuration) return 1f;
             if (elapsed < BounceRise)
             {
                 float remaining = 1f - elapsed / BounceRise;
-                stripeScale = Mathf.Lerp(1f, BouncePeak, 1f - remaining * remaining);
+                return Mathf.Lerp(startScale, BouncePeak, 1f - remaining * remaining);
             }
-            else
-            {
-                stripeScale = Mathf.SmoothStep(BouncePeak, 1f, (elapsed - BounceRise) / (TransitionDuration - BounceRise));
-            }
+            return Mathf.SmoothStep(BouncePeak, 1f, (elapsed - BounceRise) / (TransitionDuration - BounceRise));
         }
 
         private void ApplyColors(RunnerColors colors)
@@ -202,11 +210,18 @@ namespace ProtoHarness.ChainRush.Flow.Lobby
             return NightUi.CardButton(backRect, "←  이전   ESC", backButton, palette: Palette);
         }
 
-        // The last refusal over the back button, and the page's key help.
+        // The last refusal over the back button, and the page's key help on a light card over the diagonal stripe.
         public void DrawFooter(string notice, string help, float width, float height)
         {
             GUI.Label(new Rect(64, height - 140, 1000, 28), notice, Body);
-            GUI.Label(new Rect(width * .5f, height - 74, width * .5f - 64, 28), help, helpLine);
+            if (string.IsNullOrEmpty(help)) return;
+            helpContent.text = help;
+            const float padX = 18f, chipHeight = 38f;
+            float maxWidth = Mathf.Max(0f, width - 330f);
+            float chipWidth = Mathf.Min(helpLine.CalcSize(helpContent).x + padX * 2f, maxWidth);
+            var chipRect = new Rect(width - 64f - chipWidth, height - 79f, chipWidth, chipHeight);
+            NightUi.Card(chipRect, NightUi.CardLook.Plain, palette: Palette);
+            GUI.Label(new Rect(chipRect.x + padX, chipRect.y, chipRect.width - padX * 2f, chipRect.height), helpContent, helpLine);
         }
 
         // The page's rows as pressable cards. Returns the row clicked, or -1: the click is acted on after drawing, since

@@ -34,13 +34,15 @@ namespace ProtoHarness.Tests.PlayMode
         private RaceWorld player;
         private RaceAssembler assembler;
         private ChainRushHud hud;
-        private string savedLastRunner;
+        private GameSettings lobbySettings;
         private RaceField Field => assembler.Field;
 
         [UnitySetUp]
         public IEnumerator SetUp()
         {
-            ChainRushFlowTests.RememberAndClearPlayerLastRunner(out savedLastRunner);
+            lobbySettings = new GameSettings("ChainRush.Test.BotRaceLobby.");
+            lobbySettings.Clear();
+            LobbyMenu.DefaultSettings = lobbySettings;
             timeScale = Time.timeScale;
             listenerVolume = AudioListener.volume;
             AudioListener.volume = 0f;
@@ -69,7 +71,8 @@ namespace ProtoHarness.Tests.PlayMode
             }
             finally
             {
-                ChainRushFlowTests.RestorePlayerLastRunner(savedLastRunner);
+                LobbyMenu.DefaultSettings = null;
+                lobbySettings?.Clear();
             }
         }
 

@@ -12,6 +12,8 @@ using ProtoHarness.ChainRush.Race;
 using ProtoHarness.ChainRush.Track;
 using ProtoHarness.ChainRush.Visuals;
 using UnityEngine;
+using UnityEngine.InputSystem;
+using UnityEngine.InputSystem.LowLevel;
 using UnityEngine.SceneManagement;
 using UnityEngine.TestTools;
 #if UNITY_EDITOR
@@ -47,12 +49,14 @@ namespace ProtoHarness.Tests.PlayMode
         private RunnerProfile runner;
         // Ghosts in a folder of the tests' own, emptied after each test, so the player's ghosts are never touched.
         private GhostFiles ghosts;
-        private string savedLastRunner;
+        private GameSettings lobbySettings;
 
         [SetUp]
         public void SetUp()
         {
-            RememberAndClearPlayerLastRunner(out savedLastRunner);
+            lobbySettings = new GameSettings("ChainRush.Test.FlowLobby.");
+            lobbySettings.Clear();
+            LobbyMenu.DefaultSettings = lobbySettings;
             RaceLaunch.Clear();
             runner = ScriptableObject.CreateInstance<RunnerProfile>();
             runner.name = "TestRunner";
@@ -74,7 +78,8 @@ namespace ProtoHarness.Tests.PlayMode
             }
             finally
             {
-                RestorePlayerLastRunner(savedLastRunner);
+                LobbyMenu.DefaultSettings = null;
+                lobbySettings?.Clear();
             }
         }
 
@@ -288,6 +293,96 @@ namespace ProtoHarness.Tests.PlayMode
             finally
             {
                 store.Clear();
+            }
+        }
+
+        [UnityTest]
+        public IEnumerator Lobby_RunnerPage_HelpNamesHorizontalArrowsAndDefaultSettingsIsolatesPlayerKey()
+        {
+            string playerKey = GameSettings.Player.LastRunnerKey;
+            bool hadPlayerKey = PlayerPrefs.HasKey(playerKey);
+            string beforePlayerValue = hadPlayerKey ? PlayerPrefs.GetString(playerKey) : null;
+
+            LobbyMenu menu = null;
+            yield return Load(LobbyPath, scene => menu = Find<LobbyMenu>(scene));
+            Assert.That(menu.Settings, Is.SameAs(lobbySettings));
+            Assert.That(menu.CurrentHelp, Does.Contain("↑ / ↓  선택"));
+
+            menu.Confirm();
+            menu.Confirm();
+            menu.Confirm();
+            menu.Confirm();
+            Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Runner));
+            Assert.That(menu.CurrentHelp, Does.Contain("← / →  선택"));
+            Assert.That(menu.CurrentHelp, Does.Not.Contain("↑ / ↓"));
+
+            menu.Highlight(2);
+            menu.Confirm();
+            Assert.That(lobbySettings.LastRunner, Is.EqualTo("THETA"));
+            Assert.That(PlayerPrefs.HasKey(playerKey), Is.EqualTo(hadPlayerKey));
+            if (hadPlayerKey) Assert.That(PlayerPrefs.GetString(playerKey), Is.EqualTo(beforePlayerValue));
+            // Wait for the launched race scene to load before TearDown clears state.
+            float deadline = Time.realtimeSinceStartup + 20f;
+            while (SceneManager.GetActiveScene().name != RaceLaunch.RaceScene && Time.realtimeSinceStartup < deadline)
+                yield return null;
+            var assembler = Find<RaceAssembler>(SceneManager.GetActiveScene());
+            if (assembler != null)
+            {
+                assembler.Records = TestRecords();
+                assembler.Ghosts = ghosts;
+                while (assembler.IsAssembling && Time.realtimeSinceStartup < deadline) yield return null;
+            }
+        }
+
+        [UnityTest]
+        [Category("Device")]
+        public IEnumerator Lobby_RunnerPage_LeftAndRightArrowsChooseRunnerWhileUpAndDownDoNothing()
+        {
+            Keyboard originalKeyboard = Keyboard.current;
+            Keyboard keyboard = InputSystem.AddDevice<Keyboard>();
+            try
+            {
+                keyboard.MakeCurrent();
+                LobbyMenu menu = null;
+                yield return Load(LobbyPath, scene => menu = Find<LobbyMenu>(scene));
+                menu.Confirm();
+                menu.Confirm();
+                menu.Confirm();
+                menu.Confirm();
+                Assert.That(menu.CurrentPage, Is.EqualTo(LobbyMenu.Page.Runner));
+                Assert.That(menu.Cursor, Is.EqualTo(0));
+
+                InputSystem.QueueStateEvent(keyboard, new KeyboardState(Key.RightArrow));
+                yield return null;
+                yield return null;
+                Assert.That(menu.Cursor, Is.EqualTo(1), "Right arrow selects the next runner.");
+
+                InputSystem.QueueStateEvent(keyboard, new KeyboardState());
+                yield return null;
+                InputSystem.QueueStateEvent(keyboard, new KeyboardState(Key.LeftArrow));
+                yield return null;
+                yield return null;
+                Assert.That(menu.Cursor, Is.EqualTo(0), "Left arrow selects the previous runner.");
+
+                InputSystem.QueueStateEvent(keyboard, new KeyboardState());
+                yield return null;
+                InputSystem.QueueStateEvent(keyboard, new KeyboardState(Key.DownArrow));
+                yield return null;
+                yield return null;
+                Assert.That(menu.Cursor, Is.EqualTo(0), "Down arrow does not move on the runner page.");
+
+                InputSystem.QueueStateEvent(keyboard, new KeyboardState());
+                yield return null;
+                InputSystem.QueueStateEvent(keyboard, new KeyboardState(Key.UpArrow));
+                yield return null;
+                yield return null;
+                Assert.That(menu.Cursor, Is.EqualTo(0), "Up arrow does not move on the runner page.");
+            }
+            finally
+            {
+                InputSystem.QueueStateEvent(keyboard, new KeyboardState());
+                InputSystem.RemoveDevice(keyboard);
+                if (originalKeyboard != null) originalKeyboard.MakeCurrent();
             }
         }
 
@@ -2624,23 +2719,6 @@ namespace ProtoHarness.Tests.PlayMode
                    Time.realtimeSinceStartup < deadline) yield return null;
             Assert.That(SceneManager.GetActiveScene().name, Is.EqualTo(RaceLaunch.LobbyScene));
             Assert.That(SceneManager.GetSceneByName(environment).isLoaded, Is.False, "The exterior must leave with the race.");
-        }
-
-        // Lobbies opened by these fixtures read the player's settings in Awake.
-        // Null represents an absent key, so cleanup can also restore a stored empty string.
-        internal static void RememberAndClearPlayerLastRunner(out string savedLastRunner)
-        {
-            string key = GameSettings.Player.LastRunnerKey;
-            savedLastRunner = PlayerPrefs.HasKey(key) ? PlayerPrefs.GetString(key) : null;
-            PlayerPrefs.DeleteKey(key);
-        }
-
-        internal static void RestorePlayerLastRunner(string savedLastRunner)
-        {
-            string key = GameSettings.Player.LastRunnerKey;
-            if (savedLastRunner == null) PlayerPrefs.DeleteKey(key);
-            else PlayerPrefs.SetString(key, savedLastRunner);
-            PlayerPrefs.Save();
         }
 
         private static IEnumerator Load(string path, Action<Scene> found)

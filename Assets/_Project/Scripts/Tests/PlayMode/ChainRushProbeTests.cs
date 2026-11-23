@@ -39,12 +39,14 @@ namespace ProtoHarness.Tests.PlayMode
         private RaceAssembler lapAssembler;
         private BestRecords lapRecords;
         private GhostFiles lapGhosts;
-        private string savedLastRunner;
+        private GameSettings lobbySettings;
 
         [UnitySetUp]
         public IEnumerator SetUp()
         {
-            ChainRushFlowTests.RememberAndClearPlayerLastRunner(out savedLastRunner);
+            lobbySettings = new GameSettings("ChainRush.Test.ProbeLobby.");
+            lobbySettings.Clear();
+            LobbyMenu.DefaultSettings = lobbySettings;
             timeScale = Time.timeScale;
 #if UNITY_EDITOR
             yield return EditorSceneManager.LoadSceneAsyncInPlayMode(CircuitScene, new LoadSceneParameters(LoadSceneMode.Single));
@@ -80,7 +82,8 @@ namespace ProtoHarness.Tests.PlayMode
             }
             finally
             {
-                ChainRushFlowTests.RestorePlayerLastRunner(savedLastRunner);
+                LobbyMenu.DefaultSettings = null;
+                lobbySettings?.Clear();
             }
         }
 
