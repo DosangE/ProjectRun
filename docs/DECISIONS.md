@@ -10,6 +10,25 @@
 
 ---
 
+## 2026-11-23 · main v0.7.1: M5 뒤 싱글 다듬기 — `dev` 를 `main` 에 병합하고 태그 `v0.7.1` (`feature/v071-release-prep`)
+
+- **결정 (사용자, 2026-11-23)**: "지금까지 된 작업 main으로 병합시키자" → `main` 은 마일스톤에서만 갱신한다(`CLAUDE.md` §9)는 규칙과 다음 태그 v0.8 = M7 을 들어 물은 데 "마일스톤으로 진행", 태그 "v0.7.1". README 화면은 "트랙 화면까지" 다시 찍기. 플레이 확인 "플레이 잘 나오는데"(타이틀 v0.7.1·로비 팔레트·←/→, 봇전 한 판, 네 트랙 장식을 부탁한 데 대한 답). 절차는 "main v0.7" 과 같다: `feature/v071-release-prep`(타이틀 `0.7.1`·README·화면·이 기록) → `dev` → `main` `--no-ff`, 주석 태그 `v0.7.1`. v0.8 = M7 은 그대로다(2026-11-18 "태그: M7(멀티 재개) = v0.8").
+- **v0.7.1 에 든 것** (`main` v0.7 뒤 `dev` 병합 27개 + 아래 고침): 장식 보충(PALM K8 마을집·K9 도시 타워·트랙 조명과 타워 색, FINGER·SKYWAY K8 마을집, SKYWAY K9 고가 옆 아파트·K10 스카이라인·장식 보충 1단계, SUMMIT 계곡 소나무·K11 오두막·K12 길가 소품, FINGER 장식 보충 1단계), 로비·타이틀 밝은 B 팔레트와 후속 ①~⑤, 부스터 표시·이펙트, 봉 표시 노란 마름모 + SHIFT, 스윙 접촉 대기 0.5 s, PALM 복귀 바다 위 수정, 테스트 로그 검사의 AI 패키지 경고 예외. 각각 이 문서의 같은 이름 항목.
+- **게이트 1회차 실패와 고침 (`fix/swing-test-lobby-colors`)**: `ChainRushCornerSwingTests.Swing_BoosterOnAShortenedRope_GoesAtTheHooksSpeed` (11:13:19Z) `Unhandled log message: '[Error] RunnerProfile '': lobbyColor must have alpha 1.'`, 스택 `RunnerProfile:OnValidate () (at Assets/_Project/Scripts/Runtime/ChainRush/RunnerProfile.cs:63)` ← `ChainRushCornerSwingTests.cs:335` `ApplyModifiedPropertiesWithoutUndo`. 원인: `79628b9`(로비 B 팔레트)가 로비 색 3개(기본 `Color.clear`)와 `OnValidate` 검사를 더했고, 이 테스트는 `CreateInstance` 한 프로필의 가속만 `SerializedObject` 로 바꿔 검사가 에러를 남겼다. 그 병합의 영향 범위(②)에는 `ChainRushCornerSwingTests.SpeedTrails_` 만 있었다 — ② 가 게이트 없이 쌓인 데서 나온 회귀다. 사용자가 고른 대로(보기: 테스트 임시 프로필을 유효하게 / 로비 색 기본값 불투명 / 검사를 `OnValidate` 에서 빼기) 테스트의 임시 프로필에 불투명 로비 색 3개를 넣었다 — 테스트가 보는 값(가속 0.1배)은 그대로다. 고친 뒤 그 테스트 `testcasecount="1" result="Passed" passed="1" failed="0"` (11:31:04Z). 다른 `CreateInstance<RunnerProfile>` + `SerializedObject` 테스트는 `ChainRushProfileTests`(기대 로그에 이미 있음)뿐이다(`grep ApplyModifiedProperties` 결과).
+- **마일스톤 조건 (`CLAUDE.md` §9-2 ③)** — 에디터 **6000.3.19f1**(이 PC). 실행마다 `test-runs.ps1 -Record`. 시각은 UTC(결과 XML). 2·3회차·Device·EditMode 2회차는 같은 코드: `697ea64`(`dev`, 고침 병합) + `TitleScreen.Version` 한 줄 + Unity 가 바꾼 `M_PalmTower*.mat` 7개(`_Color` 를 `_BaseColor` 와 같게 — 커밋하지 않음).
+  - EditMode (`!Enemy`) 1회차 (고치기 전 `46e170b` + 버전 줄): `testcasecount="442" result="Passed" passed="442" failed="0" skipped="0"` (11:09:37Z~11:09:47Z).
+  - PlayMode 게이트 1회차 (`Run PlayMode Tests`, 고치기 전): `testcasecount="402" result="Failed(Child)" passed="365" failed="1" skipped="36"` (11:10:22Z~11:28:40Z) — 위 실패.
+  - PlayMode 게이트 2회차: `testcasecount="402" result="Passed" passed="366" failed="0" skipped="36"` (11:31:58Z~11:50:41Z, 1123.8초).
+  - PlayMode 게이트 3회차: `testcasecount="402" result="Passed" passed="366" failed="0" skipped="36"` (11:51:21Z~12:09:44Z, 1103.5초). 2·3회차 서킷 지문 `hash 0xEF92FB76BFD1D767` 2번씩(기준과 같다). skipped 36 은 v0.7 과 같은 `[Explicit]` 묶음이다(확인은 개수로만 했다).
+  - `Run Device Input Tests`: `testcasecount="4" result="Passed" passed="4" failed="0" skipped="0"` (12:18:39Z~12:18:58Z, 시작 때 focused=True). 4번째는 로비 후속의 `Lobby_RunnerPage_LeftAndRightArrowsChooseRunnerWhileUpAndDownDoNothing`. 그 전 두 번의 시작(12:10 포커스 대기 콜백, 12:15 메뉴 실행)은 테스트가 돌지 않았다 — 결과 XML 이 바뀌지 않았고 Play 에 들어가지 않았다. 원인은 확인하지 못했다(12:18 에 `ExecuteMenuItem` 이 `True` 를 돌려주며 시작).
+  - EditMode (`!Enemy`) 2회차 (같은 코드): `testcasecount="442" result="Passed" passed="442" failed="0" skipped="0"` (12:19:17Z~12:19:21Z).
+  - 하지 않은 것: 네트워크 레이스(M7 부터), 플레이어 빌드(③ 조건이 아니다).
+- **README 화면** (사용자 "트랙 화면까지"): "main v0.7" 방식 그대로 — Play 중 `Unity_RunCommand` 로 단계 목록을 `Application.onBeforeRender` 에서 진행, 메뉴는 `TitleScreen.Enter`·`LobbyMenu.Confirm`, 레이스는 `RaceLaunch.Request` + 런타임 `RaceBot`(`BotTuning.Hard`)·ALPHA·빠름·타임어택, 기록·고스트는 임시 저장소(`BestRecords("ProtoHarness.ReadmeCapture.")`, 스크래치패드). Game 뷰 1281×721, 정지 화면은 1배. 사용자가 Unity 를 앞에 두고 찍었다.
+  - 다시 찍음: `title.png`(v0.7.1 표기, 밝은 팔레트), `lobby-mode.png`, `lobby.png`(마지막 러너 BETA 가 복원된 러너 선택), `palm-coast.png`(20.9초, 틱 1046), `finger-lanes.png`(13.7초, 틱 685), `race.gif`(SUMMIT DROP 틱 1805~2655, 171프레임, 600px·64색, 9.3 MB).
+  - 그대로: `tutorial.png`·`swing.gif`·`bot-race.gif`·`bot-result.png`(v0.7) — README 화면 설명 줄에 적었다.
+  - 기록 보호: GIF 뒤에도 봇이 달려 임시 저장소에 SUMMIT 결승이 남아(정리 단계보다 늦게) 따로 지웠고 임시 고스트 폴더도 지웠다. 사용자 기록 SUMMIT DROP 빠름 3222틱 OMEGA·고스트 파일 수정 시각(2026-11-23 14:26 KST)은 캡처 전 그대로다.
+- **README 글**: 현재 버전 줄, "v0.7.1에서 바뀐 것", 버전표 `v0.7.1` 줄. 조작 표의 `Space | 공격` 줄을 뺐다 — 게임 키 안내에서는 2026-11-18 "화면 텍스트 정리" 로 이미 빠졌다.
+
 ## 2026-11-23 · 로비 UI 후속 ①~⑤: 키 안내 바탕, 러너 ←/→ 선택, 프리뷰 발 높이 통일, 띠 튐 수정, 테스트 격리 (`feature/lobby-followup`)
 
 - **결정 (사용자 2026-11-23 Antigravity 첫 작업 — Unity MCP 연결 + HANDOFF 2절 8번 로비 후속 ①~⑤ "1,2 둘다 좋다" → §3-2 요청서 "작업 진행해봐 mcp 등록도 했다" → 플레이 확인 "좋다 커밋 푸시하라")**: 표현·로비 입력·테스트 격리만 바꿨다. 시뮬·씬·에셋은 그대로다.
