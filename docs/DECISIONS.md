@@ -10,7 +10,7 @@
 
 ---
 
-## 2026-11-23 · 로비·타이틀 밝은 B 팔레트 + 띠·선택 색은 마지막 러너 색, 마지막 러너 저장 (`feature/lobby-bright-theme`, 커밋 전)
+## 2026-11-23 · 로비·타이틀 밝은 B 팔레트 + 띠·선택 색은 마지막 러너 색, 마지막 러너 저장 (`feature/lobby-bright-theme`)
 
 - **결정 (사용자 2026-11-23 HANDOFF "다음작업 후보" → "A 해봐"(로비 UI) → 로비 9화면 캡처 조사 → "색상이 남색이라 뭔가 피곤한거같은데 조금 더 밝은 느낌은 어떨지 … 카트라이더 드리프트 UI 참고해봐 또는 현재 러너 모델을 보고 어울릴만하게 추천안들" → 시안 A 스카이 / B 피트 화이트 / C 밝힌 밤(디자인 캔버스 https://claude.ai/artifact/A8t4DWpCs7naCc73zNXHBV) → "B 바탕으로 하되 러너 바꿀때마다 뒤의 색이 바뀌게" → "전체에 남게 해줘 … 살짝 확대되었다가 원래 크기로 돌아가는 이펙트 … 가장 최근에 골랐던 러너 선택에 대한 데이터가 게임에 남아야겠다" → 질문에 "사선 색 띠"·"띠·선택·막대만"·"레이스 시작할 때" → 요청서(대화) "ㄱㄱ" → "codex로 구현해보아라" → 테스트 격리 "추천대로해봐" → 기대 로그 "ㄱㄱ")**: 표현 계층과 설정 저장만 바꿨다. 시뮬은 그대로다.
   - **팔레트**: 바탕 `#F2F4F7` + 아래 `#1E2630` 띠, 흰 카드(테두리 `#DCE1E7`, 그림자 오프셋 (0,4)), 글자 먹색 `#1E2630`/`#22262E`·회색 `#5E6673`, 노랑 버튼 그대로. 오른쪽 사선 띠 2줄(22°, 폭 375 + 안 줄 65)은 코드로 그린다(`LobbyView.DrawBackdrop`). `T_NightCity.png` 는 더 그리지 않지만 지우지 않았다.
@@ -26,8 +26,13 @@
 - **영향 평가**: `NightUi`(HUD·입력 표시) → `ChainRushPresentationTests`·`ChainRushInputSourceTests`·`ChainRushTests.ChainRushHud_`; 로비·타이틀·`GameSettings` → `ChainRushFlowTests`·`ChainRushBotRaceTests`; `RunnerProfile` → `ChainRushProfileTests`; 테스트 파일의 메서드 밖 변경 → 그 클래스 전체. 에셋은 색 필드만이라 Lap 제외, 시뮬 무변경이라 서킷 지문 제외. 도구의 "전체" 는 에디터 버전 차이 파일 때문.
 - **검증 (에디터 6000.3.19f1, Unity MCP, 모두 `test-runs.ps1 -Record`)**: 컴파일 `*** Tundra build success (2.12 seconds), 5 items updated, 1618 evaluated`, Console Error 0. EditMode 전체(`!Enemy`) `testcasecount="440" result="Passed" passed="440" failed="0" skipped="0"` (04:21:38Z~04:21:48Z). PlayMode 위 클래스 8개 + `ChainRushTests.ChainRushHud_`(`!Device !Enemy !NetEndReplay !^Lap$`) `testcasecount="162" result="Failed(Child)" passed="157" failed="1" skipped="4"` (04:22:38Z~04:27:47Z) — 실패는 위 기대 로그 1건(`Unhandled log message: '[Error] RunnerProfile '': lobbyColor must have alpha 1.'`), skipped 4 는 `Probe_*`. 고친 뒤 그 테스트 `testcasecount="1" result="Passed" passed="1" failed="0"` (04:30:45Z). 테스트·캡처 뒤 플레이어 `LastRunner` 키 없음(시작 전과 같음). 캡처(타이틀·메인·난이도·트랙·러너 ALPHA→DELTA·설정)에서 띠·선택·막대가 청록 → 보라로 바뀜을 확인.
 - **사용자 플레이 확인 (2026-11-23)**: "괜찮네".
-- **확인 못 한 것**: 띠 튕김 자체(에디터가 백그라운드라 캡처로 중간 프레임을 못 잡음 — 사용자 "괜찮네" 가 그것까지 봤는지는 답에 없다), 레이스 뒤 로비로 돌아왔을 때 색이 남는지의 화면(테스트로만), 경로 표시 `SINGLE RACE /` 버그(`LobbyPage.cs:48`, 범위 밖). 병합 전 리뷰(Codex 설계 + `unity-reviewer`) 아직.
-- **남은 것 (사용자 2026-11-23 "위 작업들은 새로운 세션에서 하도록 기록해놔")**: ① 오른쪽 아래 키 안내가 사선 띠에 겹쳐 안 읽힌다 → "그 주변에 바탕을 추가" ② 러너 선택을 ↑/↓ 대신 ←/→ 로 ③ 러너 프리뷰에서 러너마다 보이는 높이가 다르다 → 발 위치(높이)를 통일.
+- **확인 못 한 것**: 띠 튕김 자체(에디터가 백그라운드라 캡처로 중간 프레임을 못 잡음 — 사용자 "괜찮네" 가 그것까지 봤는지는 답에 없다), 레이스 뒤 로비로 돌아왔을 때 색이 남는지의 화면(테스트로만), 경로 표시 `SINGLE RACE /` 버그(`LobbyPage.cs:48`, 범위 밖).
+- **병합 전 리뷰 (커밋 `79628b9` 대상, 리뷰 동안 무관한 `M_PalmTower*.mat` 7개는 stash 로 비켜 둠)**:
+  - `unity-reviewer` (diff 파일 전달, 작업 트리 = HEAD): 치명·중대·보통 0, 제안 5 — ① HANDOFF·DECISIONS 의 "커밋 안 함" 문구(병합 전 고침) ② 씬에 지운 필드 `nightBackground` 참조가 남음(`ChainRushLobby.unity:178`, `ChainRushTitle.unity:151` — 런타임은 무시, 빌드가 `T_NightCity.png` 를 넣는지 미확인, 씬 재저장은 에디터 몫) ③ `LobbyMenu.cs:125` `TryValidate(out _)` 가 에러 원문을 버림(기존부터) ④ 테스트 준비가 키를 지운 뒤 예외면 정리가 안 돈다 ⑤ `LobbyView` 잠김 라벨 캐시가 줄지 않음(라벨 고정이라 문제없음). 비용 `subagent_tokens` 89,090.
+  - Codex `adversarial-review --base dev`: **needs-attention** — [medium] 테스트 중 에디터 강제 종료면 플레이어 `LastRunner` 가 사라질 수 있다(`ChainRushFlowTests.cs:2631-2643`, 위 ④와 같은 틈), [medium] 키 안내가 띠에 묻힌다(`LobbyView.cs:205-210`, DELTA 위 대비 약 1.03:1 — 이미 남은 것 ①), [low] 빠르게 연달아 바꾸면 띠 크기가 1.08 → 1.0 으로 튄다(`LobbyView.cs:140-164`). HUD 기본 팔레트·그리기 수치는 일치한다고 확인. 세 지적 모두 메인이 코드로 다시 확인했다(실제 결함). 5시간 `used_percent` 는 사용자 수치 없음.
+  - 분담 비교: 실제 결함 — Codex 3(그중 1은 사용자가 이미 본 것), reviewer 0 + 같은 틈 1(제안 ④) / 규칙 위반 — 둘 다 0 / 오탐 — 둘 다 0.
+  - **사용자 결정 "가"**: 그대로 병합·푸시하고 Codex [low]·테스트 격리 틈을 남은 것 ④⑤ 로. reviewer 제안 ②③⑤ 는 두는 것.
+- **남은 것 (사용자 2026-11-23 "위 작업들은 새로운 세션에서 하도록 기록해놔", ④⑤ 는 병합 전 리뷰)**: ① 오른쪽 아래 키 안내가 사선 띠에 겹쳐 안 읽힌다 → "그 주변에 바탕을 추가" ② 러너 선택을 ↑/↓ 대신 ←/→ 로 ③ 러너 프리뷰에서 러너마다 보이는 높이가 다르다 → 발 위치(높이)를 통일 ④ 연달아 바꿀 때 띠 크기 튐 ⑤ 테스트 격리의 틈.
 
 ## 2026-11-23 · 봉 표시는 노란 마름모 + SHIFT, 부스터 바람 선은 가늘고 대칭 없이 (`feature/hud-pole-trails`)
 
