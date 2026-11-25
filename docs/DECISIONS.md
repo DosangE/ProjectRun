@@ -10,21 +10,25 @@
 
 ---
 
-## 2026-11-25 · Claude ↔ Antigravity 자동 중계 스크립트 `tools/agent-relay.ps1` (`feature/agent-relay`)
+## 2026-11-25 · Claude 비대화형 교차 검토 중계 스크립트 `tools/agent-relay.ps1` (`feature/agent-relay`)
 
-- **결정 (사용자, 2026-11-25)**: 시범 ① 뒤 "중계 스크립트를 두면 복사·붙여넣기 없이 검토 지시·결과를 주고받는 자동화 이거 해봐 난 자동화를 원한다" → §3-2 요청서에서 **A(단발 중계 + 제한된 `-RoundTrip` 왕복 루프)** 승인("A 해봐") + Claude 검토·재개 지시 8건 반영.
-  - `tools/agent-relay.ps1` (UTF-8 with BOM, `tools/codex-unity.ps1` 출력 규약 계승): `claude -p --output-format json` 및 `agy -p --output-format json` 을 비대화형으로 호출하고 `.sent.md`·`.out.md`·`.stderr.log`·`.raw.json`·`.diff.patch`(추적 안 된 텍스트 파일 본문 포함)·`.result.json`(브랜치·승인·모델·세션ID·판정·토큰·비용 포함)을 남긴다.
-  - 안전 가드: 동시 실행 잠금(`Local\protoharness-agent-relay` 뮤텍스), 시작 시 `main`/`dev`·detached HEAD 거부(exit 2), `--dangerously-skip-permissions`·`bypassPermissions` 금지, `-MaxRounds` 상한 2, `-Role fix`·`-RoundTrip` 은 `-Approval "<날짜, 사용자 말>"` 필수(`승인:`·`브랜치:` 줄과 `.result.json` 기록), `fix` 전후 `HEAD`·브랜치 비교(변경 시 exit 12), `claude` review/ask 는 `--tools "Read,Grep,Glob"` + `--permission-mode dontAsk`, `claude` fix 는 `--disallowedTools` 로 `git commit`/`merge`/`push`/`reset`/`clean` 차단, `agy` 는 `^gemini-` 모델만 허용(생략 시 `gemini-4-neon-*` 명시), `Parse-Verdict` 마지막 비어 있지 않은 줄만 검사, 타임아웃 시 `taskkill /T /F` 트리 종료 및 예외 로깅, git 오류 시 exit 13 및 중간 결과 보존. `docs/RULES/SUBAGENTS.md` §7-6 에 `-RoundTrip` 예외(사용자 승인·최대 2회)와 제약을 적었다.
-- **이유**: 시범 ①에서 검토 지시문을 사람이 복사·붙여넣기하다 전달이 누락됐고, Claude 토큰 수치도 agy 쪽에서 확인하지 못했다.
-- **버린 대안**: 단발 전용(B안 — 왕복 지적이 나오면 다시 수동 전달 필요) · 무제한/무인 루프 및 자동 커밋·병합(`CLAUDE.md` §0 Git·`SUBAGENTS.md` §7-6 위반) · `Temp/` 아래 결과 저장(`CLAUDE.md` §0 Unity 폴더 보호 → `%TEMP%\protoharness-agent-relay` 사용) · `claude --permission-mode plan`(계획 파일/`ExitPlanMode` 가 판정 줄 형식과 충돌).
+- **결정 (사용자, 2026-11-25)**: 시범 ① 뒤 자동 중계 요청 → 초판(`d1d879b`·`edcbb96`)에 대한 Codex(`needs-attention` 높음 6·중간 3) 및 Claude 검토 결과에 따라 **범위를 읽기 전용 `review`/`ask` 로 축소**하고 `-Role fix` 와 `-RoundTrip` 을 제거했다.
+  - `tools/agent-relay.ps1` (UTF-8 with BOM): `claude -p --output-format json --restricted --strict-mcp-config --tools "Read,Grep,Glob" --permission-mode dontAsk --permission-prompts none --add-dir <산출물폴더>` 를 호출해 `%TEMP%\protoharness-agent-relay\<RunId>\` 아래 새 폴더에 `sent.md`·`out.md`·`stderr.log`·`raw.json`·`diff.patch`·`result.json` 을 남긴다.
+  - `-Target agy` 는 2026-11-25 실측에서 `agy --mode plan` 이 `write_file` 을 막지 못해 거부(exit 2)한다.
+  - 기본 diff 는 커밋 간(`Base...HEAD`)만 생성하며, 미커밋·미추적 포함은 `-IncludeWorktree` 를 명시할 때만. git 출력은 `Process` 스트림에서 UTF-8(`core.quotepath=false`, `core.safecrlf=false`)로 직접 읽는다.
+  - `-Role review` 응답 마지막 비어 있지 않은 줄에 `RELAY-VERDICT: PASS|NEEDS_FIX` 가 없거나 JSON 필수 필드(`session_id`·`result`·`is_error`)가 빠지면 exit 12. stdin 쓰기 10초 타임아웃·stdout/stderr 비동기 읽기·예외/타임아웃 시 `taskkill /T /F` 프로세스 트리 정리. `docs/RULES/SUBAGENTS.md` §7-6 에 사용법·제약 및 "§7-6 표와 다른 조합은 병합 검토로 세지 않음"을 적었다.
+- **이유**: Codex·Claude 검토에서 ① 실제 작업 트리 자동 `fix` 가 셸 쓰기·푸시·브랜치 전환을 막지 못함 ② PowerShell 5.1 기본 git 출력 인코딩으로 한글 diff 깨짐 ③ `dontAsk` 가 `.claude/settings.local.json` 의 `Unity_RunCommand` 를 통과시킴이 드러났다. 자동 수정은 격리 작업 공간이 생긴 뒤 별도로 다룬다.
+- **버린 대안**: `-Role fix`·`-RoundTrip` 유지(격리 작업 공간 없이 쓰기 차단이 불완전) · `agy --mode plan` 허용(실측에서 `write_file` 성공) · 저장소 안 산출물 생성.
 - **검증 (문서·도구 검증, `CLAUDE.md` §9-2)**:
-  - UTF-8 BOM(`EF BB BF`) 확인. 가드·잠금 8종(`MaxRounds=3`, `-Approval` 누락 2종, `agy` 에 `fable`/`gpt` 모델, `-RoundTrip` 잉여 `-Target`/`-Resume`, 동시 실행 뮤텍스) 모두 `exit=2` 거부 확인.
-  - **호출 동작 확인(코드 검토 아님 — 짧은 플래그 실측, 샌드박스 밖, `-Effort low`)**:
-    - 초판(스크립트 untracked 상태): `claude` (`exit=0`, 10.97s, `costUsd=0.4765`, `in=4 / cacheCreate=56,897 / cacheRead=47,982 / out=588`), `agy` (`exit=0`, 19.01s, `totalTok=27,087`), `claude -Resume` (`exit=0`, 6.11s, 같은 세션에서 `tools/agent-relay.ps1` 응답).
-    - 수정판(`--tools Read,Grep,Glob`, `gemini-4-neon-low`): `claude` (`exit=0`, 10.71s, `costUsd=1.1586`, `in=4 / cacheCreate=140,024 / cacheRead=132,226 / out=597`), `agy` (`exit=0`, `PASS`, `model=gemini-4-neon-low`, 17.93s, `totalTok=29,521`).
-  - **Claude 교차 검토 (`d1d879b`, `review-d1d879b`, 66.52s, `costUsd=0.8118`, `NEEDS_FIX`)**: 치명 1·중대 8·보통 5·제안 3건 지적 → 8개 재개 지시와 함께 모두 반영.
+  - **도구·쓰기 차단 실측 (샌드박스 밖)**:
+    - `claude --restricted --strict-mcp-config --tools Read,Grep,Glob --permission-mode dontAsk`: 사용 가능 도구 목록 응답 `Glob`, `Grep`, `Read` 3개뿐(`Bash`·`Edit`·`Write`·`Unity_RunCommand` 등 MCP 도구 모두 제거).
+    - `agy --mode plan --model gemini-4-neon-low`: `write_file` 호출 시 `%TEMP%\protoharness-agy-plan-probe.txt` 실제 생성(`file_exists=True`) → 쓰기 차단 실패 확인, `-Target agy` 거부로 반영.
+  - **가드·UTF-8 diff 검증**: UTF-8 BOM(`EF BB BF`), `-Target agy`(exit 2), `-Role fix`(파라미터 거부), `-Model gemini-*`(exit 2), 동시 실행 뮤텍스(exit 2). `docs/DECISIONS.md` 13행 git UTF-8 diff 와 파일 직접 읽기 일치(`diffLen=95 == fileLen=95`, 한글 무손상).
+  - **호출 동작 실측(코드 검토 아님, 샌드박스 밖, `-Effort low`)**:
+    - 정상 `review`(`ro-ok-163224`): `exit=0`, `verdict=PASS`, 4.74s, `costUsd=0.2282`, `in=4 / cacheCreate=27,775 / cacheRead=10,049 / out=197`, `diff.patch` 한글 정상.
+    - 판정 줄 누락 `review`(`ro-nov-163224`): `exit=12`, 2.15s, `"review 응답의 마지막 줄에 'RELAY-VERDICT: PASS|NEEDS_FIX' 가 없다"`.
   - **커밋 기준** `Assets/`·`Packages/`·`ProjectSettings/` 무변경(`git diff --name-only dev...HEAD`). 작업 트리의 `packages-lock.json`·`ProjectVersion.txt`·`ProtoHarness.slnx` 는 기존 에디터 버전 차이다.
-- **확인 못 한 것**: `-RoundTrip` 의 실제 `NEEDS_FIX → fix → 재검토` 다회전 루프, `agy --mode plan` 이 실제 쓰기 도구를 막는지(실측 전), `agy` 샌드박스 안에서의 직접 실행(`~/.gemini/antigravity-cli/installation_id: Access is denied` 로 샌드박스 밖 실행 필요).
+- **확인 못 한 것**: `-IncludeWorktree` 의 비ASCII untracked 파일 경로 실측, 타임아웃 시 `Stop-ProcessTree` 실제 발동, `agy` 샌드박스 안 직접 실행(`~/.gemini/antigravity-cli/installation_id: Access is denied` 로 샌드박스 밖 실행 필요).
 
 ## 2026-11-25 · `select-tests.ps1` CRLF 경고 중단 수정: `Invoke-GitLines` 에 `-c core.safecrlf=false` 추가 (`fix/select-tests-crlf`)
 

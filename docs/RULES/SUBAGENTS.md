@@ -128,13 +128,13 @@ Antigravity(`agy`)는 세 번째 모델 계열(Gemini)이다 (`docs/DECISIONS.md
 - codex 가 구현한 브랜치에서는 §7-5 의 병합 전 Codex 리뷰가 같은 계열이라 `검토:` 로 세지 않는다. Claude 검토는 메인이 체크리스트로 직접 한다(파견은 §7-3 대로 사용자가 지시할 때).
 - 검토자는 지적만 하고 고치지 않는다. 고치는 것은 구현한 쪽이거나 사용자가 정한다.
 
-**자동 중계 (`tools/agent-relay.ps1`)** — Claude Code 와 Antigravity(`agy`) 사이에서 복사·붙여넣기 없이 비대화형으로 검토 지시·수정 요청·결과를 주고받는다 (`docs/DECISIONS.md` 2026-11-25 "Claude ↔ Antigravity 자동 중계 스크립트").
-- 단발/이어가기: `powershell -NoProfile -ExecutionPolicy Bypass -File tools/agent-relay.ps1 -Target claude|agy -Role review|fix|ask -Base dev -RunId <이름> [-PromptFile <파일>] [-Resume <세션ID>]`
-- 제한된 교차 검토 왕복(`-RoundTrip`, **위 "무인 실행 금지" 의 예외**: 사용자 승인 `-Approval "<날짜, 사용자 말>"` 필수, 최대 2회(`-MaxRounds` 상한 2), 자동 커밋·병합·푸시 금지): `powershell -NoProfile -ExecutionPolicy Bypass -File tools/agent-relay.ps1 -RoundTrip -Impl agy|claude -Reviewer claude|agy -Base dev -RunId <이름> -MaxRounds 2 -Approval "<날짜, 사용자 말>"`
+**자동 중계 (`tools/agent-relay.ps1`, `review`/`ask` 전용)** — 비대화형 읽기 전용 교차 검토·질의와 결과(세션ID·토큰·비용)를 파일로 주고받는다 (`docs/DECISIONS.md` 2026-11-25 "Claude 비대화형 교차 검토 중계 스크립트"). 쓰기(`fix`)·자동 왕복 루프는 두지 않는다.
+- 실행: `powershell -NoProfile -ExecutionPolicy Bypass -File tools/agent-relay.ps1 -Target claude -Role review|ask -Base dev -RunId <이름> [-PromptFile <파일>] [-IncludeWorktree] [-Resume <세션ID>]`
 - 가드:
-  - 동시 실행 잠금(`Local\protoharness-agent-relay` 뮤텍스) 및 시작 시 `main`/`dev`·detached HEAD 거부(exit 2).
-  - `--dangerously-skip-permissions`·`bypassPermissions` 는 쓰지 않는다.
-  - `-Role review`/`ask`: `claude` 는 `--tools "Read,Grep,Glob"` + `--permission-mode dontAsk`(Bash·Edit·Write 없음). `agy` 는 `--mode plan` 을 넘기나 실제 쓰기 차단은 실측 전 **확인 못 함**.
-  - `-Role fix` 와 `-RoundTrip`: `-Approval "<날짜, 사용자 말>"` 필수(프롬프트의 `승인:`·`브랜치:` 줄과 `.result.json` 에 기록), 하네스 파일 수정 금지, `fix` 턴 전후 `HEAD`·브랜치 비교(달라지면 exit 12), `claude` fix 는 `--disallowedTools` 로 `git commit`/`merge`/`push`/`reset`/`clean` 차단.
-  - `agy` 는 Gemini 모델(`^gemini-`)만 허용하며 생략 시 `gemini-4-neon-*` 를 명시 전달한다. `-RoundTrip` 에서 `-Impl`=`-Reviewer` 이거나 `-Target`·`-Model`·`-Resume` 을 함께 주면 거부(exit 2).
-  - 결과·세션ID·토큰·비용은 `<prefix>.<RunId>.result.json` 에 남긴다. `agy` 세션 안에서 부를 때는 샌드박스 밖 실행이 필요하다.
+  - 동시 실행 잠금(`Local\protoharness-agent-relay` 뮤텍스), `--dangerously-skip-permissions`·`bypassPermissions` 금지.
+  - `-Target claude`: `--restricted --strict-mcp-config --tools "Read,Grep,Glob" --permission-mode dontAsk --permission-prompts none --add-dir <산출물폴더>` (2026-11-25 실측: `Glob`·`Grep`·`Read` 3개만 남고 `Bash`·`Edit`·`Write`·MCP 도구 모두 제거됨).
+  - `-Target agy`: 2026-11-25 실측에서 `agy --mode plan` 이 `write_file` 을 막지 못해 거부(exit 2)한다.
+  - 기본 diff 는 커밋 간(`Base...HEAD`)만 본다. 미커밋·미추적 포함은 `-IncludeWorktree` 를 줄 때만. git 출력은 UTF-8 스트림으로 직접 읽는다.
+  - 산출물은 항상 저장소 밖 새 폴더(`%TEMP%\protoharness-agent-relay\<RunId>\`)에만 쓴다. `-Role review` 응답 마지막 줄에 `RELAY-VERDICT: PASS|NEEDS_FIX` 가 없거나 JSON 필수 필드가 빠지면 exit 12.
+  - §7-6 교차 검토 표와 다른 조합(예: 시각 작업이 아닌 `claude` 구현을 `agy` 가 검토)은 병합의 독립 검토(`검토:`)로 세지 않는다.
+  - `agy` 세션 안에서 부를 때는 샌드박스 밖 실행이 필요하다.
