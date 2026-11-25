@@ -1,7 +1,7 @@
-# 서브에이전트 운영 — CLAUDE.md §7-1 · §7-2 · §7-4 · §7-5
+# 서브에이전트 운영 — CLAUDE.md §7-1 · §7-2 · §7-4 · §7-5 · §7-6
 
 > **CLAUDE.md 의 일부다. 구속력은 CLAUDE.md 와 같다.** § 번호는 CLAUDE.md 의 번호를 그대로 쓴다.
-> **읽는 시점**: 서브에이전트를 파견하거나 Codex 를 부르기 전.
+> **읽는 시점**: 서브에이전트를 파견하거나 Codex·Antigravity 를 부르기 전, 그 둘로 작업하거나 교차 검토하기 전.
 > 파견할지 말지(§7-3 파견 기준)와 **병렬 절대 금지**는 CLAUDE.md §7 에 있다. 파견 여부는 그쪽에서 먼저 판단한다.
 > 이 내용을 고칠 때는 이 파일만 고친다. CLAUDE.md 에 사본을 두지 않는다.
 
@@ -95,3 +95,35 @@
   - **사용자가 Codex 를 직접 쓸 때**(Claude 한도·토큰 불균형): 설정은 `enabled = false` 그대로 두고 그 세션만 `codex -c mcp_servers.blender.enabled=true` 로 켠다(`-c` 는 그 실행에만 `config.toml` 값을 덮어쓴다). 자주 쓰면 같은 값을 `~/.codex/<이름>.config.toml` 에 두고 `codex -p <이름>` 으로 얹어도 된다. 설정 파일의 `enabled` 를 손으로 `true` 로 바꿔 두지 않는다 — 닫힌 동안에도 `search_assets`·`generate_3d` 가 목록에 남는다. 대화형이라 도구 승인은 사용자가 그때마다 한다. 이때도 Blender 는 하나다 — Claude 는 그동안 Blender 를 부르지 않는다 (`docs/DECISIONS.md` 2026-11-14 "Codex 직접 사용 때 Blender MCP").
   - 실측 (2026-11-14, `D:/PCUBE`, codex-cli 0.165.0, 읽기 실행 `-Effort low`): ① 닫힘 — `blender` 서버가 도구 목록에 없음 ② `-Blender` — `get_addon_status` 성공(`5.2.3 LTS`, 텔레메트리 false, 라이브러리·생성기 off), 승인 안 한 `search_assets` 는 `MCP tool call requires approval, but approval policy is never` ③ 다시 닫힘 — 서버 없음. 실행 뒤 설정 파일은 열기 전과 같았다(`-Status` `closed`).
 - **stop 리뷰 게이트(`/codex:setup --enable-review-gate`)는 켜지 않는다.** 파일을 고친 턴마다 끝에서 Codex 리뷰가 돌고 최대 900초를 기다린다(플러그인 `hooks/hooks.json`). 켜려면 합의한다.
+
+### 7-6. Antigravity·교차 검토
+
+Antigravity(`agy`)는 세 번째 모델 계열(Gemini)이다 (`docs/DECISIONS.md` 2026-11-25 "Antigravity 편입과 교차 검토"). 설정·훅 사실은 `AGENTS.md` 에 있다. Claude·Codex 와 같은 규칙(`CLAUDE.md`, `docs/RULES/`)을 따르고 사본을 만들지 않는다.
+
+**쓰는 곳** — 모두 사용자가 지시할 때만 쓴다.
+
+| 용도 | 쓰기 | 지키는 것 |
+|---|---|---|
+| 조사 (외부 API·패키지 문서·레퍼런스가 필요한 작업) | ❌ | 출처 URL 을 붙인다. 코드에 대한 말은 `경로:줄` (§7-4) |
+| 시각 검수 (렌더·스크린샷) | ❌ | 지적만 한다. 채택은 사용자가 정한다 |
+| 막혔을 때 진단 (§4-5 에서 3번 실패한 뒤) | ❌ | 가설과 확인 방법을 나눠 적는다 |
+| 작은 구현 (UI·`tools/`·`fix/`) | ✅ | §3 합의와 §9 브랜치. 시뮬·씬·프리팹·에셋은 맡기지 않는다 |
+
+- 무인 실행(`/goal`·`/schedule`)과 병렬 쓰기는 하지 않는다. `--dangerously-skip-permissions`·Turbo·`always-proceed` 로 돌리지 않는다.
+- 검토·검수는 **Gemini 모델로** 한다. Antigravity 안에서 Claude 모델을 고르면 다른 계열이 아니다.
+- Antigravity 가 만든 커밋에는 `Assisted-by: Antigravity (<모델 이름>)` 줄을 붙인다. git 작성자가 사용자와 같아 이 줄이 없으면 누가 썼는지 남지 않는다.
+- Unity·Blender MCP 는 사용자가 그 작업에서 허락할 때만 쓴다. 에디터와 Blender 는 한 번에 한쪽만 쓴다 (CLAUDE.md §7 병렬 절대 금지).
+- 작업 트리에 쓰는 도구는 한 번에 하나다. 다른 도구로 넘길 때는 쓰던 쪽이 커밋하거나 남은 변경을 보고한 뒤 넘긴다.
+
+**교차 검토** — 구현한 모델 계열은 그 변경의 검토자가 될 수 없다. 병합 메시지에 `구현:`·`검토:` 를 적는다 (CLAUDE.md §9-2).
+
+| 구현 | 검토 |
+|---|---|
+| claude | codex. 시각 작업이면 antigravity 도 된다 |
+| antigravity | claude (`.claude/agents/unity-reviewer.md` 체크리스트). §7-5 "리뷰 규모" 의 "그 밖" 이면 codex 도 |
+| codex | claude |
+| 하네스 파일 | 구현하지 않은 모델 **+ 사용자 승인** |
+
+- 하네스 파일: `CLAUDE.md`, `AGENTS.md`, `.claude/settings*.json`, `.claude/agents/`, `.codex/`, `.agents/`, `tools/hooks/`. `tools/hooks/guard.ps1` 이 파일 편집 도구로 고치는 것을 Claude 는 ask, Codex·Antigravity 는 deny 로 잡는다. 셸로 쓰는 것은 잡지 못한다 — 셸로 돌아가지 않는다 (CLAUDE.md §3-4).
+- codex 가 구현한 브랜치에서는 §7-5 의 병합 전 Codex 리뷰가 같은 계열이라 `검토:` 로 세지 않는다. Claude 검토는 메인이 체크리스트로 직접 한다(파견은 §7-3 대로 사용자가 지시할 때).
+- 검토자는 지적만 하고 고치지 않는다. 고치는 것은 구현한 쪽이거나 사용자가 정한다.
