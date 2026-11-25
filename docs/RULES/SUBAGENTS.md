@@ -127,3 +127,15 @@ Antigravity(`agy`)는 세 번째 모델 계열(Gemini)이다 (`docs/DECISIONS.md
 - 하네스 파일: `CLAUDE.md`, `AGENTS.md`, `.claude/settings*.json`, `.claude/agents/`, `.codex/`, `.agents/`, `tools/hooks/`. `tools/hooks/guard.ps1` 이 파일 편집 도구로 고치는 것을 Claude 는 ask, Codex·Antigravity 는 deny 로 잡는다. 셸로 쓰는 것은 잡지 못한다 — 셸로 돌아가지 않는다 (CLAUDE.md §3-4).
 - codex 가 구현한 브랜치에서는 §7-5 의 병합 전 Codex 리뷰가 같은 계열이라 `검토:` 로 세지 않는다. Claude 검토는 메인이 체크리스트로 직접 한다(파견은 §7-3 대로 사용자가 지시할 때).
 - 검토자는 지적만 하고 고치지 않는다. 고치는 것은 구현한 쪽이거나 사용자가 정한다.
+
+**자동 중계 (`tools/agent-relay.ps1`, `review`/`ask` 전용)** — 비대화형 읽기 전용 교차 검토·질의와 결과(세션ID·토큰·비용)를 파일로 주고받는다 (`docs/DECISIONS.md` 2026-11-25 "Claude 비대화형 교차 검토 중계 스크립트"). 쓰기(`fix`)·자동 왕복 루프는 두지 않는다.
+- 실행: `powershell -NoProfile -ExecutionPolicy Bypass -File tools/agent-relay.ps1 -Target claude -Role review|ask -Base dev -RunId <이름> [-PromptFile <파일>] [-IncludeWorktree] [-Resume <세션ID>]`
+- 가드:
+  - 동시 실행 잠금(`Local\protoharness-agent-relay` 뮤텍스), `--dangerously-skip-permissions`·`bypassPermissions` 금지.
+  - `-Target claude`: `--restricted --strict-mcp-config --tools "Read,Grep,Glob" --permission-mode dontAsk --permission-prompts none --add-dir <산출물폴더>` (2026-11-25 실측: `Glob`·`Grep`·`Read` 3개만 남고 `Bash`·`Edit`·`Write`·MCP 도구 모두 제거됨).
+  - `-Target agy`: 2026-11-25 실측에서 `agy --mode plan` 이 `write_file` 을 막지 못해 거부(exit 2)한다.
+  - 기본 diff 는 시작 시 한 번만 확정한 `base`·`merge-base`·`HEAD` 전체 해시와 브랜치로 만들고(`merge-base..HEAD`), 그 값을 `result.json` 에 기록한다. 미커밋·미추적 포함은 `-IncludeWorktree` 를 줄 때만. `review` 이고 `-IncludeWorktree` 가 아닐 때 `merge-base..HEAD` 변경 파일 중 하나라도 미커밋 변경(스테이지 포함)이 있으면 `claude` 를 부르지 않고 exit 2. 호출이 끝난 뒤 `HEAD` 나 브랜치가 시작과 다르면 exit 12(`verdict` `null`). git 출력은 UTF-8 스트림으로 직접 읽는다.
+  - 산출물 폴더(`%TEMP%\protoharness-agent-relay\<RunId>\`)는 잠금을 잡은 뒤에 존재를 검사하고 새로 만든다(이미 있으면 기존 내용을 손대지 않고 exit 2).
+  - 종료 코드와 판정: 정상 `PASS` 와 정상 `NEEDS_FIX` 모두 exit 0(판정은 `verdict` 로 구분). `-Role review` 응답 마지막 줄에 `RELAY-VERDICT: PASS|NEEDS_FIX` 가 없거나 JSON 필수 필드가 빠지거나 실행 중 `HEAD`/브랜치가 바뀌면 exit 12. CLI 실패·git 오류·타임아웃·stdout/stderr 읽기 시간 초과·프로세스 트리 종료/확인 실패는 exit 13(잠금을 풀기 전에 원문을 stderr 와 `result.json` `error` 에 남김). `exitCode` 가 0 이 아니면 `result.json` 과 콘솔 요약의 `verdict` 는 `null`(빈 값)이다. 남는 한계: `taskkill /PID <부모PID> /T /F` 는 부모 프로세스가 먼저 끝난 뒤 남은 손자 프로세스를 잡지 못할 수 있다.
+  - §7-6 교차 검토 표와 다른 조합(예: 시각 작업이 아닌 `claude` 구현을 `agy` 가 검토)은 병합의 독립 검토(`검토:`)로 세지 않는다.
+  - `agy` 세션 안에서 부를 때는 샌드박스 밖 실행이 필요하다.
