@@ -4,9 +4,12 @@
   판정만 한다. 파일·git 상태를 바꾸지 않는다.
     deny      : 되돌릴 수 없는 git 명령(reset --hard, checkout -- ., restore ., clean, 강제 푸시),
                 main/dev 에서의 git commit                                 (§0 Git, §9-2)
-    ask  : 승인 후에만 건드릴 수 있는 파일에 Claude Edit/Write/NotebookEdit (§0 파일·에셋, 설정)
+    ask  : 승인 후에만 건드릴 수 있는 파일에 Claude Edit/Write/NotebookEdit
+           (§0 파일·에셋, 설정 / 하네스 파일 §3-1, docs/RULES/SUBAGENTS.md §7-6)
     deny : 같은 파일에 Codex apply_patch 및 Antigravity edit_file/write_file
-           (Codex 는 ask 미지원; Antigravity 는 2026-11-25 실측에서 edit_file 의 force_ask 가 프롬프트 없이 통과됨)
+           (Codex 는 ask 미지원. Antigravity 의 ask·force_ask 가 확인 창을 띄우는지는 확인 못 함 —
+            2026-11-24 시험은 없는 파일이 대상이라 "파일 없음" 오류가 먼저 났을 수 있다)
+    deny : 경로나 명령이 비어 판정할 수 없는 Antigravity 호출
   해당 없으면 Claude/Codex 는 아무것도 출력하지 않고 exit 0 (= 판정 없음, 평소 권한 흐름),
   Antigravity 는 {"decision":"allow"} 를 출력하고 exit 0.
 
@@ -66,17 +69,29 @@ function Get-ProtectedReason([string]$path, [string]$root) {
     catch {
         return "경로를 판정할 수 없어 보호 파일로 본다 ($($_.Exception.Message)). 대상: $path"
     }
+    # \\?\, \\.\, \\서버\공유 로 쓰면 같은 파일인데 아래 접두사 비교가 빗나간다. 판정할 수 없으므로 보호 파일로 본다.
+    if ($full.StartsWith('\\')) {
+        return "확장·장치·UNC 경로는 판정할 수 없어 보호 파일로 본다. 드라이브 경로로 적는다. 대상: $path (CLAUDE.md §0)"
+    }
     $p = $full
-    if ($full.StartsWith($rootFull + [char]92, [System.StringComparison]::OrdinalIgnoreCase)) {
-        $p = $full.Substring($rootFull.Length + 1)
+    # 저장소 루트(이 스크립트의 두 단계 위)를 먼저 뗀다. cwd 가 하위 폴더여도 ^ 로 시작하는 판정이 맞게 한다.
+    $repoFull = [System.IO.Path]::GetFullPath((Split-Path -Parent (Split-Path -Parent $PSScriptRoot))).TrimEnd([char]92, [char]47)
+    foreach ($base in @($repoFull, $rootFull)) {
+        if ($full.StartsWith($base + [char]92, [System.StringComparison]::OrdinalIgnoreCase)) {
+            $p = $full.Substring($base.Length + 1)
+            break
+        }
     }
     $p = $p.Replace([char]92, [char]47)
 
-    if     ($p -match '\.meta$')                                    { return ".meta 는 직접 만들거나 고치지 않는다. GUID 는 Unity 만 발급한다. 대상: $p" }
-    elseif ($p -match '^(Library|Temp|obj|Build|UserSettings)/')    { return "Library/Temp/obj/Build/UserSettings 는 건드리지 않는다. 대상: $p" }
-    elseif ($p -match '^ProjectSettings/')                          { return "ProjectSettings/ 변경은 승인 후에만 한다. 대상: $p" }
-    elseif ($p -match '^Packages/manifest\.json$')                  { return "Packages/manifest.json 변경은 승인 후에만 한다. 대상: $p" }
-    elseif ($p -match '\.(unity|prefab|asset|inputactions)$')       { return "씬·프리팹·에셋·입력 YAML 은 텍스트로 수정하지 않는다. 에디터에서 한다. 대상: $p" }
+    if     ($p -match '\.meta$')                                    { return ".meta 는 직접 만들거나 고치지 않는다. GUID 는 Unity 만 발급한다. 대상: $p (CLAUDE.md §0)" }
+    elseif ($p -match '^(Library|Temp|obj|Build|UserSettings)/')    { return "Library/Temp/obj/Build/UserSettings 는 건드리지 않는다. 대상: $p (CLAUDE.md §0)" }
+    elseif ($p -match '^ProjectSettings/')                          { return "ProjectSettings/ 변경은 승인 후에만 한다. 대상: $p (CLAUDE.md §0)" }
+    elseif ($p -match '^Packages/manifest\.json$')                  { return "Packages/manifest.json 변경은 승인 후에만 한다. 대상: $p (CLAUDE.md §0)" }
+    elseif ($p -match '\.(unity|prefab|asset|inputactions)$')       { return "씬·프리팹·에셋·입력 YAML 은 텍스트로 수정하지 않는다. 에디터에서 한다. 대상: $p (CLAUDE.md §0)" }
+    elseif ($p -match '^((CLAUDE|AGENTS)\.md$|\.claude/(settings[^/]*\.json$|agents/)|\.codex/|\.agents/|tools/hooks/)') {
+        return "하네스 파일은 승인 후에만 고치고, 구현하지 않은 모델이 검토한다. 대상: $p (CLAUDE.md §3-1, SUBAGENTS.md §7-6)"
+    }
     return $null
 }
 
@@ -98,8 +113,13 @@ try {
     if ($tool -eq 'Bash' -or $tool -eq 'PowerShell' -or ($script:IsAntigravity -and $tool -eq 'run_command')) {
         $cmd = if ($script:IsAntigravity) { [string]$in.toolCall.args.CommandLine } else { [string]$in.tool_input.command }
 
+        if ($script:IsAntigravity -and [string]::IsNullOrWhiteSpace($cmd)) {
+            Write-Decision 'deny' 'run_command 인데 CommandLine 이 비어 판정할 수 없다. 입력 형식을 확인하라 (tools/hooks/guard.ps1).'; exit 0
+        }
+
         # 명령 시작 위치에 있는 git 만 본다. 따옴표 안 문장이 우연히 걸리는 것을 줄인다.
-        $g = '(?im)(^|[;&|(]\s*)git\s+(-[cC]\s+\S+\s+)*'
+        # { 와 줄 앞 들여쓰기도 시작으로 본다: if (...) { git ... } 블록 안의 명령.
+        $g = '(?im)(^|[;&|({])\s*git\s+(-[cC]\s+\S+\s+)*'
 
         if ($cmd -match ($g + 'reset\s+(\S+\s+)*--hard')) {
             Write-Decision 'deny' 'git reset --hard 는 금지선이다 (CLAUDE.md §0 Git).'; exit 0
@@ -138,11 +158,13 @@ try {
 
     if ($script:IsAntigravity -and ($tool -eq 'edit_file' -or $tool -eq 'write_file')) {
         $path = [string]$in.toolCall.args.Path
-        if ([string]::IsNullOrWhiteSpace($path)) { Write-PassThrough; exit 0 }
+        if ([string]::IsNullOrWhiteSpace($path)) {
+            Write-Decision 'deny' "$tool 인데 Path 가 비어 판정할 수 없다. 입력 형식을 확인하라 (tools/hooks/guard.ps1)."; exit 0
+        }
 
         $reason = Get-ProtectedReason $path $cwd
         if ($reason) {
-            Write-Decision 'deny' "$reason (CLAUDE.md §0). 승인이 있으면 사용자에게 에디터에서 하거나 직접 고치도록 청한다."
+            Write-Decision 'deny' "$reason. 승인이 있으면 사용자에게 에디터에서 하거나 직접 고치도록 청한다."
             exit 0
         }
         Write-PassThrough
@@ -159,7 +181,7 @@ try {
 
         $reason = Get-ProtectedReason $path $root
         if ($reason) {
-            Write-Decision 'ask' "$reason (CLAUDE.md §0)."
+            Write-Decision 'ask' "$reason."
         }
         exit 0
     }
@@ -179,7 +201,7 @@ try {
         foreach ($path in $paths) {
             $reason = Get-ProtectedReason $path $cwd
             if ($reason) {
-                Write-Decision 'deny' "$reason (CLAUDE.md §0). 승인이 있으면 사용자에게 에디터에서 하거나 직접 고치도록 청한다."; exit 0
+                Write-Decision 'deny' "$reason. 승인이 있으면 사용자에게 에디터에서 하거나 직접 고치도록 청한다."; exit 0
             }
         }
         exit 0

@@ -1,4 +1,4 @@
-# ProtoHarness — 에이전트 지침 (Codex 진입점)
+# ProtoHarness — 에이전트 지침 (Codex·Antigravity 진입점)
 
 ## 규칙 본문은 여기 없다
 
@@ -47,3 +47,27 @@
 위 표의 첫 항목이 중요하다. `unity-verifier` 는 Claude Code 에서 `tools:` 로 쓰기 도구가 구조적으로 차단되지만,
 **Codex 에서는 그 차단이 걸려 있지 않다.** 그러니 Codex 로 검증 에이전트를 돌릴 때는
 `developer_instructions` 의 금지 조항이 유일한 방어선이다. 더 강한 보장이 필요하면 Codex 쪽 권한 설정을 먼저 확인하라.
+
+---
+
+## Antigravity 전용 사항
+
+역할·교차 검토·커밋 표시는 `docs/RULES/SUBAGENTS.md` §7-6 이 원본이다. 여기에는 도구 사실만 둔다.
+
+### 확인한 것 (2026-11-25, agy 1.5.15, 이 머신의 세션 기록과 설정)
+
+| 항목 | 내용 |
+|---|---|
+| 규칙 읽기 | 새 세션 둘 다 첫 단계들에서 `CLAUDE.md` 를 읽었다(`transcript.jsonl`) |
+| 권한 | Auto 모드(`permissionPreset: AGENT_PERMISSION_PRESET_AUTO`). 작업 폴더 편집은 자동, 명령은 샌드박스 안에서 자동이다. 샌드박스 안의 git 쓰기는 `.git/index.lock: Permission denied` 로 실패해 샌드박스 밖(`BypassSandbox`)으로 다시 실행했다 |
+| 훅 | `.agents/hooks.json` 이 `PreToolUse`(`run_command`·`edit_file`·`write_file`)에 `tools/hooks/guard.ps1`, `SessionStart` 에 `session-start.ps1 -Format antigravity` 를 건다. 훅의 작업 폴더는 `hooks.json` 이 있는 폴더다. `deny` 는 실제 세션에서 막혔고(`git clean --dry-run`, `.meta` 편집), `SessionStart` 알림은 새 세션에 주입됐다 |
+
+### 확인 못 한 것 — 단정하지 마라 (§4-1)
+
+| 항목 | 상태 |
+|---|---|
+| 훅의 `allow` 가 권한 확인을 건너뛰는지 | **확인 못 함.** 내장 문서(`agy-customizations/docs/hooks.md`)는 "Automatically allow the tool execution", 웹 문서(`antigravity.google/docs/hooks.md`)는 "delegating to the next hook or default policy" 로 서로 다르다 |
+| `ask`·`force_ask` 가 `edit_file` 에서 확인 창을 띄우는지 | **확인 못 함.** 2026-11-24 시험은 없는 파일이 대상이라 "파일 없음" 오류가 먼저 났을 수 있다. 그래서 보호 파일은 `deny` 로 둔다 |
+| 훅이 0 이 아닌 코드로 끝나거나 빈 출력을 낼 때 | **확인 못 함.** 두 문서 모두 적지 않았다 |
+| `run_command`·`edit_file`·`write_file` 이 아닌 쓰기 도구 | **확인 못 함.** 매처에 없는 도구에는 훅이 돌지 않는다 |
+| 이미지 생성, `--mode plan` 의 쓰기 차단, 영상 입력 | **확인 못 함.** |
