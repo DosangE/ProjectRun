@@ -18,10 +18,10 @@
 - **검증 (문서·도구 검증, `CLAUDE.md` §9-2)**:
   - 기본 범위(`$ErrorActionPreference = 'Stop'` + `2>&1`): `exit=0`, CRLF 경고 없음.
   - `-Range dev...HEAD`(`exit=0`, 3개: `docs/DECISIONS.md`·`docs/HANDOFF.md`·`tools/select-tests.ps1`) · `-Range HEAD~1..HEAD`(커밋 `1b73f9f` 에서 `exit=0`, 3개. 커밋 전 `HEAD` 가 `4dcf4bc` 일 때는 병합이 바꾼 7개) 정상 출력.
-  - 잘못된 `-Range nonexistent-ref-xyz..HEAD`: `exit=1`. 리디렉션 없이 돌리면 git 의 `fatal: ambiguous argument …` 뒤에 `git diff --name-only nonexistent-ref-xyz..HEAD 실패 (exit 128)` 예외, 호출자가 `Stop` + `2>&1` 이면 `fatal: ambiguous argument …` 로 끝난다.
+  - 잘못된 `-Range nonexistent-ref-xyz..HEAD`: 모두 `exit 1` 이고 오류를 삼키지 않는다. 최종 오류는 호출 방식에 따라 다르다(PowerShell 5.1, 2026-11-25 claude 재확인). 자식 프로세스(`powershell.exe -File … -Range …`)를 `Continue` 에서 부르면 git 의 `fatal: ambiguous argument …` 뒤에 `select-tests.ps1:110` 의 `실패 (exit 128)` 예외. 같은 세션에서 `& 스크립트 -Range … 2>&1`(`Continue`·`Stop` 모두), 그리고 자식 프로세스를 `Stop` + `2>&1` 로 부르면 `fatal: ambiguous argument …` 의 `NativeCommandError`. codex 는 같은 세션의 `2>&1` 에서 `:110` 예외까지 갔다고 했으나 재현되지 않았다.
   - UTF-8 BOM(`EF BB BF`) 및 한글 출력 유지. `Assets/`·`Packages/`·`ProjectSettings/` 무변경.
 - **함께 확인한 것**: 이 agy 새 세션에서 `tools/hooks/guard.ps1` `edit_file` 호출이 PreToolUse 훅에서 `deny` 로 막히는 것을 실측했다(`docs/HANDOFF.md` 2절 7번 대기 확인 해소).
-- **구현·검토**: `구현: antigravity` (Gemini 4 Neon), `검토: codex, claude`. 코드 지적 0건, 문서 지적 2건 — codex 1건(커밋 전 검증 수치와 검증 환경 구분), claude 1건("교차 검토 대기" 문구·시범 ① 지표 기록). claude 것은 `d6ffb2c`, codex 것은 일부만 전달돼 `docs/trial1-records` 에서 마저 반영했다. codex 는 `1b73f9f` 까지만 봤고 `d6ffb2c` 의 문서는 claude 만 대조했다. 병합 메시지(`2463bff`)는 본문에 `검토:` 로 시작하는 줄이 하나 더 있어(claude 실수) 훅이 기록 오류로 알린다 — `docs/trial1-records` 병합에 `사후 검토: 2463bff 구현 antigravity 검토 codex, claude` 를 쓴다. 시범 ① 요약은 아래 "Antigravity 편입과 교차 검토" 항목에 기록했다.
+- **구현·검토**: `구현: antigravity` (Gemini 4 Neon), `검토: codex, claude`. 코드 지적 0건, 문서 지적 2건 — codex 1건(커밋 전 검증 수치와 검증 환경 구분), claude 1건("교차 검토 대기" 문구·시범 ① 지표 기록). claude 것은 `d6ffb2c`, codex 것은 일부만 전달돼 `docs/trial1-records` 에서 마저 반영했다. codex 는 `1b73f9f` 까지만 봤고 `d6ffb2c` 의 문서는 claude 만 대조했다. 병합 메시지(`2463bff`)는 본문에 `검토:` 로 시작하는 줄이 하나 더 있어(claude 실수) 훅이 기록 오류로 알린다. 병합 뒤 claude 가 `2463bff^1..2463bff` 를 다시 대조했다(병합 트리 = `d6ffb2c`, `tools/` 는 리뷰한 +2/−1 줄 그대로). 그래서 `docs/trial1-records` 병합에 `사후 검토: 2463bff 구현 antigravity 검토 claude` 를 쓴다 — codex 의 `1b73f9f` 검토는 병합 전이라 이 줄에 적지 않는다. 시범 ① 요약은 아래 "Antigravity 편입과 교차 검토" 항목에 기록했다.
 
 ## 2026-11-25 · Antigravity 편입과 교차 검토: 세 번째 모델 계열, 구현한 쪽은 검토자가 못 된다, 하네스 파일 보호, 병합 메시지 `구현:`·`검토:` 줄 (`feature/cross-agent-checks`)
 
@@ -39,7 +39,7 @@
   - 두는 것 (이번에 생기지 않은 것, HANDOFF 2절 7번): `git.exe` 와 경로로 부른 git, `git -C <다른 작업 트리> commit` 의 브랜치, `git checkout -- .gitattributes` 오탐. 따옴표 안의 `{ git clean` 오탐은 이번에 넓어졌지만 막는 쪽이라 둔다.
 - **검증**: 훅 모의 입력 150건 통과(세 도구의 보호 파일·git 명령, 임시 저장소의 실제 병합으로 알림·사후 검토·컷오프). 같은 테스트의 첫 판(130건)을 바꾸기 전 `guard.ps1` 로 돌리면 46건 실패. 스크립트는 scratchpad 에 두고 커밋하지 않았다. 더한 줄의 `§` 참조 모두 해석됨.
 - **확인 못 한 것**: ~~agy 실제 세션에서 `tools/hooks/` 편집이 막히는지~~ (2026-11-25 agy 새 세션에서 `tools/hooks/guard.ps1` `edit_file` `deny` 실측 확인). 셸로 쓰는 것은 여전히 판정하지 않는다. 같은 Windows 계정이라 실수를 막는 장치이지 보안 경계는 아니다.
-- **시범 ① 결과 (`fix/select-tests-crlf`, 2026-11-25)**: `select-tests.ps1` CRLF 중단 수정(`구현: antigravity`, `검토: codex, claude`). 실제 결함: 코드 0건 / 문서 2건(codex 1·claude 1, 위 "select-tests.ps1 CRLF" 항목). 오탐 0건. 되돌린 줄 0줄. 사용자 개입: agy 세션 5회(합의 요청·승인·커밋 지시·검토 전달 2회). Claude 토큰: 재지 않음. 겪은 것: 검토 지적을 사용자가 붙여 옮기는 과정에서 codex 지적과 지시문이 빠져 한 번에 반영되지 않았다(사용자 "근데 너희 둘이 소통하며 할순없나?"). agy 의 git 쓰기는 샌드박스 안에서 실패하고 밖에서 다시 실행됐다.
+- **시범 ① 결과 (`fix/select-tests-crlf`, 2026-11-25)**: `select-tests.ps1` CRLF 중단 수정(`구현: antigravity`, `검토: codex, claude`). 실제 결함: 코드 0건 / 문서 2건(codex 1·claude 1, 위 "select-tests.ps1 CRLF" 항목). 오탐 0건. 되돌린 줄 0줄(세 값은 이 세션에서 센 것이며 git 으로는 확인되지 않는다). 사용자 개입: agy 세션 5회(합의 요청·승인·커밋 지시·검토 전달 2회). Claude 토큰: 재지 않음. 겪은 것: 검토 지적을 사용자가 붙여 옮기는 과정에서 codex 지적과 지시문이 빠져 한 번에 반영되지 않았다(사용자 "근데 너희 둘이 소통하며 할순없나?"). agy 의 git 쓰기는 샌드박스 안에서 실패하고 밖에서 다시 실행됐다.
 
 ## 2026-11-23 · main v0.7.1: M5 뒤 싱글 다듬기 — `dev` 를 `main` 에 병합하고 태그 `v0.7.1` (`feature/v071-release-prep`)
 
