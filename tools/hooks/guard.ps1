@@ -23,6 +23,7 @@
   한계: 셸 명령(sed -i, 리다이렉트, rm 등)으로 보호 파일을 바꾸는 것은 판정하지 않는다.
     git 은 변수(& $g clean)·별칭(-c alias.x=)·스크립트 파일 안의 것, 절대 경로로 적은 저장소 루트,
     같은 명령에서 먼저 옮긴 폴더(cd)나 브랜치(git switch dev && git commit)를 모른다.
+    Claude 의 Bash 는 settings.json 의 if 필터(*git*)를 지난 것만 온다 — g"it" 처럼 끊어 쓴 이름은 오지 않을 수 있다.
 
   주의: 이 파일은 UTF-8 with BOM 으로 저장한다. Windows PowerShell 5.1 은 BOM 이 없으면
         .ps1 을 ANSI(cp949)로 읽어 한글이 깨진다.
@@ -103,11 +104,18 @@ function Get-ProtectedReason([string]$path, [string]$root) {
 $script:rxPlain   = New-Object regex '\G[^\s''"\\`$;&|<>(){}#@]+'
 $script:rxDqPlain = New-Object regex '\G[^"\\`$]+'
 $script:shells    = '^(bash|sh|dash|zsh|ksh|pwsh|powershell|cmd)$'
+$script:clock     = [System.Diagnostics.Stopwatch]::StartNew()
+
+# 훅 제한(15초)을 넘기면 판정 없이 지나간다. 그 전에 던져서 막는다.
+function Assert-Time() {
+    if ($script:clock.ElapsedMilliseconds -gt 8000) { throw '명령이 너무 길거나 복잡해 8초 안에 읽지 못했다. 나눠서 실행한다.' }
+}
 
 # 큰따옴표 안(또는 따옴표 없는 heredoc 본문, $q 가 빈 문자열)을 읽는다. 글자는 $sb 에, 안의 명령 치환은 $out 에 넣는다.
 function Read-Quoted([string]$t, [int]$i, [string]$q, [bool]$ps, $out, $sb) {
     $n = $t.Length
     while ($i -lt $n) {
+        Assert-Time
         $m = $script:rxDqPlain.Match($t, $i)
         if ($m.Success) { [void]$sb.Append($m.Value); $i += $m.Length; continue }
         $c = [string]$t[$i]
@@ -158,6 +166,7 @@ function Read-Commands([string]$t, [int]$i, [string]$close, [bool]$ps, $out) {
     }
 
     while ($i -lt $n) {
+        Assert-Time
         $m = $script:rxPlain.Match($t, $i)
         if ($m.Success) { [void]$sb.Append($m.Value); $has = $true; $i += $m.Length; continue }
         $c = [string]$t[$i]
@@ -231,8 +240,17 @@ function Read-Commands([string]$t, [int]$i, [string]$close, [bool]$ps, $out) {
             [void]$sb.Append($c); $has = $true; $i++; continue
         }
         if ($c -eq '(') {
-            if ($ps) { $i = Read-Commands $t ($i + 1) ')' $ps $out; [void]$sb.Append('$()'); $has = $true; continue }
-            $m = [regex]::new('\G\(\((?:[^()]|\([^()]*\))*\)\)').Match($t, $i)
+            if ($ps) {
+                # git @('commit', '-m') 처럼 괄호 안의 낱말이 그대로 인자가 되기도 한다. 명령으로도, 인자로도 본다.
+                $group = New-Object System.Collections.Generic.List[object]
+                $i = Read-Commands $t ($i + 1) ')' $ps $group
+                $out.AddRange($group)
+                if ($words.Count -gt 0) {
+                    foreach ($item in $group) { foreach ($w in $item) { foreach ($part in $w.Split(',')) { if ($part -ne '') { $words.Add($part) } } } }
+                }
+                [void]$sb.Append('$()'); $has = $true; continue
+            }
+            $m =[regex]::new('\G\(\((?:[^()]|\([^()]*\))*\)\)').Match($t, $i)
             . $endCmd
             if ($m.Success) { $i += $m.Length } else { $i = Read-Commands $t ($i + 1) ')' $ps $out }
             continue
@@ -299,16 +317,22 @@ function Test-ShortFlag([string]$arg, [char]$flag, [string]$valued) {
     return $false
 }
 
-# 작업 트리 전체(또는 위 폴더 전체)를 가리키는 pathspec 인가: . ./ .. :/ :(top) *
+# 작업 트리 전체(또는 위 폴더 전체)를 가리키는 pathspec 인가: . ./ .. * **/* :/ :(top,glob)**
 function Test-WholeTree([string]$arg) {
     $p = $arg.Replace('\', '/')
-    return ($p -match '^(\.{1,2}/*)+$') -or ($p -match '^:(/|\(top\))[./]*\**$') -or ($p -match '^(\./+)*\*+$')
+    $path = $p -replace '^:(\([^)]*\)|/)', ''   # 매직 접두사
+    if ($path -eq '') { return $p -ne '' }
+    foreach ($part in $path.Split('/')) { if ($part -notmatch '^(\.{0,2}|\*+)$') { return $false } }
+    return -not $path.StartsWith('/')
 }
 
-# Git Bash 경로를 Windows 경로로: /c/x → c:/x, ~ → 홈
+# Git Bash 경로를 Windows 경로로: /c/x → c:/x, /tmp → TEMP, ~ → 홈.
+# \ 를 / 로 바꾼다: Windows PowerShell 5.1 은 빈칸과 끝의 \ 가 같이 있는 인자를 잘못 넘긴다.
 function ConvertTo-WinPath([string]$path) {
+    $path = $path.Replace('\', '/')
     if ($path -match '^/([A-Za-z])(/.*)?$') { return $Matches[1] + ':' + $(if ($Matches[2]) { $Matches[2] } else { '/' }) }
-    if ($path -match '^~(?=$|[/\\])') { return $HOME + $path.Substring(1) }
+    if ($path -match '^/tmp(?=$|/)') { return $env:TEMP.Replace('\', '/') + $path.Substring(4) }
+    if ($path -match '^~(?=$|/)') { return $HOME.Replace('\', '/') + $path.Substring(1) }
     return $path
 }
 
@@ -317,10 +341,12 @@ function Get-GitReason([string[]]$a, [string]$cwd, [string]$gitDir) {
     $where = New-Object System.Collections.Generic.List[string]   # 커밋 대상을 정하는 -C, --git-dir
     if ($gitDir) { $where.Add("--git-dir=$(ConvertTo-WinPath $gitDir)") }
     $k = 0
+    $forceConfig = $false
     while ($k -lt $a.Count -and $a[$k].StartsWith('-')) {
         $opt = $a[$k]; $k++
         if ($opt -cmatch '^(-C|-c|--git-dir|--work-tree|--namespace|--super-prefix|--config-env|--attr-source)$' -and $k -lt $a.Count) {
-            if ($opt -ceq '-C') { $where.Add('-C'); $where.Add((ConvertTo-WinPath $a[$k])) }
+            if ($opt -ceq '-C') { if ($a[$k] -ne '') { $where.Add('-C'); $where.Add((ConvertTo-WinPath $a[$k])) } }   # 빈 -C 는 git 도 무시한다
+            elseif ($opt -ceq '-c') { if ($a[$k] -match '^remote\..+\.(mirror($|=(?!false|no|off|0|$))|push=\+)') { $forceConfig = $true } }
             elseif ($opt -eq '--git-dir') { $where.Add("--git-dir=$(ConvertTo-WinPath $a[$k])") }
             $k++
         }
@@ -337,8 +363,9 @@ function Get-GitReason([string[]]$a, [string]$cwd, [string]$gitDir) {
         if ($opts -cmatch '^--h(a(rd?)?)?$') { return 'git reset --hard 는 금지선이다 (CLAUDE.md §0 Git).' }
     }
     elseif ($sub -eq 'push') {
+        if ($forceConfig) { return '-c remote.*.mirror, push=+ 는 강제 푸시다. 금지선이다 (CLAUDE.md §0 Git).' }
         foreach ($o in $opts) {
-            if ($o -cmatch '^--(forc|mi)' -or (Test-ShortFlag $o 'f' 'o')) { return '강제 푸시는 금지선이다 (CLAUDE.md §0 Git).' }
+            if ($o -cmatch '^--(forc|force|force-w.*|mi.*)$' -or (Test-ShortFlag $o 'f' 'o')) { return '강제 푸시는 금지선이다 (CLAUDE.md §0 Git).' }
         }
         foreach ($o in $rest) {
             if ($o.StartsWith('+')) { return '앞에 + 를 붙인 refspec 은 강제 푸시다. 금지선이다 (CLAUDE.md §0 Git).' }
@@ -370,12 +397,10 @@ function Get-GitReason([string[]]$a, [string]$cwd, [string]$gitDir) {
         }
     }
     elseif ($sub -eq 'commit') {
-        # -C 나 --git-dir 이 가리키는 곳의 브랜치를 본다. 변수라서 못 풀거나 아직 없는 곳이면 훅의 cwd 로 판정한다.
+        # -C 나 --git-dir 이 가리키는 곳의 브랜치를 본다. 변수가 들어 있으면 훅이 풀 수 없어 cwd 로 판정한다.
+        if (($where -join ' ') -match '[$%]') { $where.Clear() }
         $gitArgs = @('-C', $cwd) + $where.ToArray() + @('branch', '--show-current')
         $branch = & { $ErrorActionPreference = 'Continue'; & git @gitArgs 2>&1 }
-        if ($LASTEXITCODE -ne 0 -and $where.Count -gt 0) {
-            $branch = & { $ErrorActionPreference = 'Continue'; & git -C $cwd branch --show-current 2>&1 }
-        }
         if ($LASTEXITCODE -ne 0) { throw "현재 브랜치를 읽지 못했다: $branch" }
         $branch = ([string]$branch).Trim()
         if ($branch -eq 'main' -or $branch -eq 'dev') {
@@ -427,8 +452,9 @@ function Get-ShellReason([string]$cmd, [bool]$ps, [string]$cwd, [int]$depth) {
             # 문자열을 명령으로 실행하는 것: 예전 판정은 이 안의 "; git ..." 도 잡았다.
             $inner = ''; $innerPs = $ps
             for ($k = 1; $k -lt $w.Count; $k++) {
-                if ($name -match '^(bash|sh|dash|zsh|ksh)$' -and $w[$k] -cmatch '^-[a-z]*c$') {
-                    if ($k + 1 -lt $w.Count) { $inner = $w[$k + 1]; $innerPs = $false }
+                if ($name -match '^(bash|sh|dash|zsh|ksh)$' -and $w[$k] -cmatch '^-[A-Za-z]*c[A-Za-z]*$') {
+                    # -c 뒤에도 옵션(-e, --, -o 이름)이 올 수 있다. 옵션이 아닌 낱말을 모두 명령으로 본다.
+                    $inner = @($w | Select-Object -Skip ($k + 1) | Where-Object { $_ -notmatch '^[-+]' }) -join "`n"; $innerPs = $false
                     break
                 }
                 if (($name -match '^(pwsh|powershell)$' -and $w[$k] -match '^[-/]c(o[a-z]*)?$') -or ($name -eq 'cmd' -and $w[$k] -match '^/{1,2}[ck]$')) {
@@ -469,7 +495,7 @@ try {
         # 글자 모양이 아니라 명령 단위로 본다: 명령을 나누고 낱말로 풀어 git 인자를 판정한다.
         # Claude 의 Bash 는 bash 로, PowerShell 은 PowerShell 로 읽는다. Codex·Antigravity 는 어느 셸인지 입력에 없어
         # 둘 다로 읽고 하나라도 걸리면 막는다.
-        if ($cmd -match 'git') {
+        if (($cmd -replace '["''`\\^]', '') -match 'git') {
             $isClaude = -not [string]::IsNullOrEmpty($env:CLAUDE_PROJECT_DIR) -and $null -eq $in.PSObject.Properties['turn_id']
             $modes = if ($tool -eq 'PowerShell') { @($true) } elseif ($tool -eq 'Bash' -and $isClaude) { @($false) } else { @($false, $true) }
             foreach ($ps in $modes) {
