@@ -17,6 +17,11 @@
   - `-Target agy` 는 2026-11-25 실측에서 `agy --mode plan` 이 `write_file` 을 막지 못해 거부(exit 2)한다.
   - 기본 diff 는 커밋 간(`Base...HEAD`)만 생성하며, 미커밋·미추적 포함은 `-IncludeWorktree` 를 명시할 때만. git 출력은 `Process` 스트림에서 UTF-8(`core.quotepath=false`, `core.safecrlf=false`)로 직접 읽는다.
   - `-Role review` 응답 마지막 비어 있지 않은 줄에 `RELAY-VERDICT: PASS|NEEDS_FIX` 가 없거나 JSON 필수 필드(`session_id`·`result`·`is_error`)가 빠지면 exit 12. stdin 쓰기 10초 타임아웃·stdout/stderr 비동기 읽기·예외/타임아웃 시 `taskkill /T /F` 프로세스 트리 정리. `docs/RULES/SUBAGENTS.md` §7-6 에 사용법·제약 및 "§7-6 표와 다른 조합은 병합 검토로 세지 않음"을 적었다.
+  - **Codex 재검토 지적 4건 반영 (2026-11-25, 사용자 "추천대로 다 하자")**:
+    1. `exitCode` 가 0 이 아니면 `result.json` 과 콘솔 요약의 `verdict` 를 `null`(빈 값)로 고정하고, 정상 `NEEDS_FIX` 는 exit 0 임을 스크립트 머리 주석과 `SUBAGENTS.md` §7-6 에 명시했다(이유: CLI 오류나 실행 중 상태 변질에도 응답 본문의 `RELAY-VERDICT:` 가 살아남아 판정으로 오인되는 것을 막기 위해).
+    2. 시작 시 `base`·`merge-base`·`HEAD` 전체 해시와 브랜치를 한 번만 확정해 `diff --stat`·`diff` 와 `result.json` 에 기록한다. `review` 이고 `-IncludeWorktree` 가 아닐 때 `merge-base..HEAD` 변경 파일 중 하나라도 미커밋 변경(스테이지 포함)이 있으면 `claude` 를 부르지 않고 exit 2, 호출 후 `HEAD` 나 브랜치가 시작과 다르면 exit 12·`verdict` `null`(이유: diff 생성·검토 중 ref 이동이나 작업 트리 불일치로 검토 대상이 어긋나는 것을 막기 위해).
+    3. 산출물 폴더 존재 검사와 생성을 뮤텍스 잠금 안으로 옮기고 `-Force` 를 뺐다(이미 있으면 기존 내용을 손대지 않고 exit 2. 이유: 잠금 전 검사 TOCTOU 와 기존 산출물 덮어쓰기 방지).
+    4. stdout/stderr 읽기 5초 시간 초과와 프로세스 트리 종료 실패·종료 확인(`WaitForExit`·`HasExited`) 실패를 모두 exit 13 으로 승격하고, 잠금을 풀기 전에 원문을 stderr 와 `result.json` `error` 에 남긴다(이유: 파이프 읽기 초과나 정리 실패가 exit 0/12 로 묻히거나 에러 원문이 유실되는 것을 막기 위해). 남는 한계: `taskkill /PID <부모PID> /T /F` 는 부모가 먼저 끝난 뒤 살아남은 손자 프로세스를 잡지 못할 수 있다.
 - **이유**: Codex·Claude 검토에서 ① 실제 작업 트리 자동 `fix` 가 셸 쓰기·푸시·브랜치 전환을 막지 못함 ② PowerShell 5.1 기본 git 출력 인코딩으로 한글 diff 깨짐 ③ `dontAsk` 가 `.claude/settings.local.json` 의 `Unity_RunCommand` 를 통과시킴이 드러났다. 자동 수정은 격리 작업 공간이 생긴 뒤 별도로 다룬다.
 - **버린 대안**: `-Role fix`·`-RoundTrip` 유지(격리 작업 공간 없이 쓰기 차단이 불완전) · `agy --mode plan` 허용(실측에서 `write_file` 성공) · 저장소 안 산출물 생성.
 - **검증 (문서·도구 검증, `CLAUDE.md` §9-2)**:
@@ -28,7 +33,16 @@
     - 정상 `review`(`ro-ok-163224`): `exit=0`, `verdict=PASS`, 4.74s, `costUsd=0.2282`, `in=4 / cacheCreate=27,775 / cacheRead=10,049 / out=197`, `diff.patch` 한글 정상.
     - 판정 줄 누락 `review`(`ro-nov-163224`): `exit=12`, 2.15s, `"review 응답의 마지막 줄에 'RELAY-VERDICT: PASS|NEEDS_FIX' 가 없다"`.
   - **커밋 기준** `Assets/`·`Packages/`·`ProjectSettings/` 무변경(`git diff --name-only dev...HEAD`). 작업 트리의 `packages-lock.json`·`ProjectVersion.txt`·`ProtoHarness.slnx` 는 기존 에디터 버전 차이다.
-- **확인 못 한 것**: `-IncludeWorktree` 의 비ASCII untracked 파일 경로 실측, 타임아웃 시 `Stop-ProcessTree` 실제 발동, `agy` 샌드박스 안 직접 실행(`~/.gemini/antigravity-cli/installation_id: Access is denied` 로 샌드박스 밖 실행 필요).
+  - **Codex 재검토 4건 반영분 동작 검증 (2026-11-25, Claude 가 임시 저장소와 가짜 `claude.cmd` 로 실행, 26개 모두 통과)**:
+    - PowerShell 5.1 구문 검사(`[System.Management.Automation.Language.Parser]::ParseFile`): `ParseErrors: 0`, 빈 `catch` 0건, UTF-8 BOM(`EF BB BF`).
+    - exit 0: `PASS`, `NEEDS_FIX`, 대상이 아닌 파일의 미커밋 변경, `-IncludeWorktree`, 대량 stderr.
+    - exit 2 (`claude` 호출 0회): 대상 파일의 미커밋 수정(한글 경로 포함)·스테이지·삭제·이름 변경, 같은 `RunId` 다시(기존 산출물 그대로), 같은 `RunId` 동시(하나만 실행).
+    - exit 12 (`verdict` `null`): 판정 줄 없음, JSON 필드 누락, 깨진 JSON, 실행 중 `HEAD` 변경, 실행 중 브랜치 변경.
+    - exit 13 (`verdict` `null`): `is_error`, 종료 코드 3, 없는 `base`, 30초 타임아웃(32초에 끝남), 손자 프로세스가 파이프를 잡고 있음.
+    - 해시 기록, 한글 diff 확인. 시험 뒤 남은 프로세스 0. `-IncludeWorktree` 의 비ASCII 미추적 파일은 앞 판(`fe8e007`)에서 한글 이름·본문 포함을 Claude 가 확인.
+    - 실제 `claude` 를 같은 옵션으로 켠 init 기록: `tools = Glob, Grep, Read` / `mcp_servers` 없음.
+- **Claude → agy 첫 직접 호출 (2026-11-25)**: `agy -p --sandbox --model gemini-4-neon-high`, 827초, 입력 185,543·출력 83,998·캐시 읽기 2,139,417 토큰, 지정한 파일 4개만 바뀌었고 브랜치·git 설정·하네스 파일은 그대로(앞뒤 상태 비교), 샌드박스 안의 셸 쓰기는 거부됨(`WriteAllText` `Access denied`), 줄바꿈 CRLF 는 맞추지 못해 보고함(git 색인은 LF 라 커밋에는 영향 없음). 이 대화를 `--conversation` 으로 이어 문서 갱신 지시를 보냈다.
+- **확인 못 한 것**: 실패 경로의 종료 코드·산출물 계약 통일(Codex 지적, 남은 작업), `agy` 샌드박스 안 직접 실행(`~/.gemini/antigravity-cli/installation_id: Access is denied` 로 샌드박스 밖 실행 필요).
 
 ## 2026-11-25 · `select-tests.ps1` CRLF 경고 중단 수정: `Invoke-GitLines` 에 `-c core.safecrlf=false` 추가 (`fix/select-tests-crlf`)
 

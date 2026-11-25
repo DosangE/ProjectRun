@@ -11,17 +11,21 @@
       (2026-11-25 실측: 사용 가능 도구 Glob·Grep·Read 3개뿐, Bash·Edit·Write·MCP 도구 모두 제거됨).
     - -Target agy: 2026-11-25 실측에서 agy --mode plan 이 write_file 을 막지 못해 거부(exit 2)한다.
     - 동시 실행 잠금(Local\protoharness-agent-relay 뮤텍스), --dangerously-skip-permissions / bypassPermissions 금지.
-    - 기본 diff 는 커밋 간(Base...HEAD)만 본다. 미커밋·미추적 포함은 -IncludeWorktree 를 명시할 때만.
+    - 시작 시점에 base, merge-base, HEAD 전체 해시와 브랜치를 한 번만 확정해 stat·patch 와 result.json 에 사용한다.
+    - 기본 diff 는 커밋 간(merge-base..HEAD)만 본다. 미커밋·미추적 포함은 -IncludeWorktree 를 명시할 때만.
+      review 이고 -IncludeWorktree 가 아닐 때 merge-base..HEAD 변경 파일 중 하나라도 미커밋 변경(스테이지 포함)이 있으면 CLI 미호출로 거부(exit 2)한다.
     - git 출력은 Process 스트림에서 UTF-8 로 직접 읽어 한글 본문·비ASCII 경로 깨짐을 막는다.
-    - 산출물은 항상 저장소 밖 새 폴더(%TEMP%\protoharness-agent-relay\<RunId>\)에만 쓴다.
+    - 산출물 폴더(%TEMP%\protoharness-agent-relay\<RunId>\)는 잠금을 잡은 뒤에 존재를 검사하고 새로 만든다. 이미 있으면 기존 내용은 손대지 않고 exit 2.
+    - 한계: taskkill /PID <부모PID> /T /F 는 부모가 먼저 종료된 뒤 살아남은 손자 프로세스를 잡지 못할 수 있다.
 
   종료 코드:
-    0  성공 (review 는 RELAY-VERDICT: PASS 또는 NEEDS_FIX 확인됨)
-    2  인자·가드·잠금·대상 거부 (CLI 미호출)
-    12 계약 위반 (JSON 파싱/필수 필드 누락, 또는 -Role review 응답 마지막 줄에 RELAY-VERDICT: 누락)
-    13 CLI 실행 실패, git 오류, stdin 쓰기 실패, 또는 타임아웃
+    0  성공 (review 는 정상 PASS 와 정상 NEEDS_FIX 모두 exit 0; 판정은 verdict 로 구분)
+    2  인자·가드·잠금·대상 거부·기존 RunId 폴더 존재·미커밋 변경 충돌 (CLI 미호출)
+    12 계약 위반 (JSON 파싱/필수 필드 누락, -Role review 응답 마지막 줄에 RELAY-VERDICT: 누락, 또는 실행 중 HEAD/브랜치 변경; verdict 는 null)
+    13 CLI 실행 실패, git 오류, stdin 쓰기 실패, stdout/stderr 읽기 시간 초과, 프로세스 트리 종료/확인 실패, 또는 타임아웃 (verdict 는 null; 잠금 해제 전 원문을 stderr 와 result.json error 에 기록)
+    ※ exitCode 가 0 이 아니면 result.json 과 콘솔 요약의 verdict 는 항상 null(빈 값)이다.
 
-  주의: 이 파일은 UTF-8 with BOM 으로 저장한다 (Windows PowerShell 5.1 한글 깨짐 방지).
+  주의: 이 파일은 UTF-8 with BOM, CRLF 로 저장한다 (Windows PowerShell 5.1 한글 깨짐 방지).
 #>
 
 param(
@@ -71,25 +75,103 @@ function Quote-Arg([string]$arg) {
 }
 
 function Stop-ProcessTree([System.Diagnostics.Process]$proc) {
-    $notes = New-Object System.Collections.Generic.List[string]
+    $ok = $true
+    $details = New-Object System.Collections.Generic.List[string]
+
+    $pidVal = $null
     try {
-        $tkOut = & taskkill /PID $proc.Id /T /F 2>&1
-        if ($LASTEXITCODE -ne 0) {
-            $notes.Add("taskkill 종료 코드 ${LASTEXITCODE}: $($tkOut -join ' ')")
-        }
+        $pidVal = $proc.Id
     }
     catch {
-        $notes.Add("taskkill 예외: $($_.Exception.Message)")
+        $ok = $false
+        $details.Add("프로세스 PID 조회 실패: $($_.Exception.Message)")
     }
+
+    if ($null -ne $pidVal) {
+        $tkPsi = New-Object System.Diagnostics.ProcessStartInfo
+        $tkPsi.FileName               = 'taskkill.exe'
+        $tkPsi.Arguments              = "/PID $pidVal /T /F"
+        $tkPsi.UseShellExecute        = $false
+        $tkPsi.RedirectStandardOutput = $true
+        $tkPsi.RedirectStandardError  = $true
+
+        $tkProc = New-Object System.Diagnostics.Process
+        $tkProc.StartInfo = $tkPsi
+        try {
+            $null = $tkProc.Start()
+            $tkOutTask = $tkProc.StandardOutput.ReadToEndAsync()
+            $tkErrTask = $tkProc.StandardError.ReadToEndAsync()
+            if (-not $tkProc.WaitForExit(10000)) {
+                $ok = $false
+                $details.Add("taskkill /PID $pidVal /T /F 10초 타임아웃")
+                try {
+                    if (-not $tkProc.HasExited) { $tkProc.Kill() }
+                }
+                catch {
+                    $details.Add("taskkill 자체 종료 실패: $($_.Exception.Message)")
+                }
+            }
+            else {
+                $tkOut = ''
+                $tkErr = ''
+                if ($tkOutTask.Wait(3000)) {
+                    $tkOut = $tkOutTask.Result.Trim()
+                }
+                else {
+                    $ok = $false
+                    $details.Add("taskkill stdout 읽기 3초 초과 (PID=$pidVal)")
+                }
+                if ($tkErrTask.Wait(3000)) {
+                    $tkErr = $tkErrTask.Result.Trim()
+                }
+                else {
+                    $ok = $false
+                    $details.Add("taskkill stderr 읽기 3초 초과 (PID=$pidVal)")
+                }
+                if ($tkProc.ExitCode -ne 0) {
+                    $ok = $false
+                    $msgParts = @($tkOut, $tkErr) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+                    $details.Add("taskkill 종료 코드 $($tkProc.ExitCode): $($msgParts -join ' | ')")
+                }
+            }
+        }
+        catch {
+            $ok = $false
+            $details.Add("taskkill 실행 예외: $($_.Exception.Message)")
+        }
+        finally {
+            $tkProc.Dispose()
+        }
+    }
+
     try {
         if (-not $proc.HasExited) {
-            $proc.Kill()
+            try {
+                $proc.Kill()
+            }
+            catch {
+                $ok = $false
+                $details.Add("Process.Kill 예외: $($_.Exception.Message)")
+            }
+        }
+        if (-not $proc.WaitForExit(5000)) {
+            $ok = $false
+            $details.Add("프로세스 종료 확인 5초 타임아웃 (PID=$pidVal)")
+        }
+        elseif (-not $proc.HasExited) {
+            $ok = $false
+            $details.Add("프로세스 종료 확인 실패: HasExited=false (PID=$pidVal)")
         }
     }
     catch {
-        $notes.Add("Process.Kill 예외: $($_.Exception.Message)")
+        $ok = $false
+        $details.Add("프로세스 종료 확인 예외: $($_.Exception.Message)")
     }
-    return ($notes -join '; ')
+
+    return [pscustomobject]@{
+        Succeeded = $ok
+        Detail    = ($details -join '; ')
+    }
 }
 
 # git 출력을 PowerShell 5.1 콘솔 코드페이지가 아니라 UTF-8 스트림으로 직접 읽는다.
@@ -109,33 +191,72 @@ function Invoke-GitUtf8([string[]]$gitArgs, [int]$timeoutMs = 30000) {
 
     $proc = New-Object System.Diagnostics.Process
     $proc.StartInfo = $psi
-    $started = $false
+    $started      = $false
+    $resultStdout = $null
+    $tryError     = $null
+    $cleanupError = $null
     try {
         $started = $proc.Start()
         $outTask = $proc.StandardOutput.ReadToEndAsync()
         $errTask = $proc.StandardError.ReadToEndAsync()
         if (-not $proc.WaitForExit($timeoutMs)) {
-            $killNote = Stop-ProcessTree $proc
-            throw "git $($gitArgs -join ' ') 타임아웃 (${timeoutMs}ms, $killNote)"
+            $killRes = Stop-ProcessTree $proc
+            $killMsg = if (-not [string]::IsNullOrWhiteSpace($killRes.Detail)) { " | $($killRes.Detail)" } else { '' }
+            throw "git $($gitArgs -join ' ') 타임아웃 (${timeoutMs}ms)$killMsg"
         }
-        $stdout = if ($outTask.Wait(5000)) { $outTask.Result } else { throw "git stdout 읽기 5초 초과" }
-        $stderr = if ($errTask.Wait(5000)) { $errTask.Result } else { '(git stderr 읽기 5초 초과)' }
+
+        $ioErrors = New-Object System.Collections.Generic.List[string]
+        $stdout = $null
+        $stderr = $null
+        if ($outTask.Wait(5000)) {
+            $stdout = $outTask.Result
+        }
+        else {
+            $ioErrors.Add('git stdout 읽기 5초 시간 초과')
+        }
+        if ($errTask.Wait(5000)) {
+            $stderr = $errTask.Result
+        }
+        else {
+            $ioErrors.Add('git stderr 읽기 5초 시간 초과')
+        }
+        if ($ioErrors.Count -gt 0) {
+            $killRes = Stop-ProcessTree $proc
+            if (-not $killRes.Succeeded -and -not [string]::IsNullOrWhiteSpace($killRes.Detail)) {
+                $ioErrors.Add("프로세스 트리 종료/확인 실패: $($killRes.Detail)")
+            }
+            throw "git $($gitArgs -join ' ') $($ioErrors -join ' | ')"
+        }
         if ($proc.ExitCode -ne 0) {
             throw "git $($gitArgs -join ' ') 실패 (exit $($proc.ExitCode)): $($stderr.Trim())"
         }
-        return $stdout
+        $resultStdout = $stdout
+    }
+    catch {
+        $tryError = $_.Exception.Message
     }
     finally {
         if ($started) {
             try {
-                if (-not $proc.HasExited) { $null = Stop-ProcessTree $proc }
+                if (-not $proc.HasExited) {
+                    $killRes = Stop-ProcessTree $proc
+                    if (-not $killRes.Succeeded) {
+                        $cleanupError = "git 프로세스 트리 종료/확인 실패: $($killRes.Detail)"
+                    }
+                }
             }
             catch {
-                [Console]::Error.WriteLine("agent-relay git 정리 예외: $($_.Exception.Message)")
+                $cleanupError = "git 프로세스 정리 예외: $($_.Exception.Message)"
             }
         }
         $proc.Dispose()
     }
+
+    if ($null -ne $tryError -or $null -ne $cleanupError) {
+        $combined = @($tryError, $cleanupError) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+        throw ($combined -join ' | ')
+    }
+    return $resultStdout
 }
 
 function Split-NonEmptyLines([string]$text) {
@@ -143,21 +264,87 @@ function Split-NonEmptyLines([string]$text) {
     return @($text -split "\r?\n" | Where-Object { $_ -ne '' })
 }
 
-function Build-DiffArtifact([string]$baseRef, [bool]$includeWorktree, [string]$diffPath) {
-    $baseHash  = (Invoke-GitUtf8 @('rev-parse', '--verify', "$baseRef^{commit}")).Trim()
-    $headHash  = (Invoke-GitUtf8 @('rev-parse', '--verify', 'HEAD^{commit}')).Trim()
-    $branch    = (Invoke-GitUtf8 @('branch', '--show-current')).Trim()
-    $mergeBase = (Invoke-GitUtf8 @('merge-base', $baseHash, $headHash)).Trim()
+function Get-ChangedFilesBetween([string]$fromCommit, [string]$toCommit) {
+    $raw = Invoke-GitUtf8 @('diff', '--name-only', '-z', '--no-renames', $fromCommit, $toCommit)
+    $files = New-Object System.Collections.Generic.List[string]
+    if ([string]::IsNullOrEmpty($raw)) { return $files }
+    foreach ($t in $raw.Split([char]0)) {
+        if (-not [string]::IsNullOrWhiteSpace($t)) {
+            $files.Add($t.Replace('\', '/'))
+        }
+    }
+    return $files
+}
 
+function Get-DirtyPaths() {
+    $raw = Invoke-GitUtf8 @('status', '--porcelain=v1', '-z', '-uall')
+    $dirtySet = @{}
+    if ([string]::IsNullOrEmpty($raw)) { return $dirtySet }
+
+    $tokens = $raw.Split([char]0)
+    $i = 0
+    while ($i -lt $tokens.Length) {
+        $entry = $tokens[$i]
+        $i++
+        if ($entry.Length -lt 4) { continue }
+        $xy = $entry.Substring(0, 2)
+        $p1 = $entry.Substring(3).Replace('\', '/')
+        if (-not [string]::IsNullOrWhiteSpace($p1)) {
+            $dirtySet[$p1] = $true
+        }
+        # porcelain -z 에서 R(이름 변경) 또는 C(복사) 는 다음 NUL 토큰에 원본 경로가 온다.
+        if ($xy[0] -eq 'R' -or $xy[0] -eq 'C' -or $xy[1] -eq 'R' -or $xy[1] -eq 'C') {
+            if ($i -lt $tokens.Length) {
+                $p2 = $tokens[$i].Replace('\', '/')
+                $i++
+                if (-not [string]::IsNullOrWhiteSpace($p2)) {
+                    $dirtySet[$p2] = $true
+                }
+            }
+        }
+    }
+    return $dirtySet
+}
+
+function New-RunDirStrict([string]$rootDir, [string]$targetDir) {
+    if (-not (Test-Path -LiteralPath $rootDir)) {
+        New-Item -ItemType Directory -Path $rootDir -ErrorAction Stop | Out-Null
+    }
+    if (Test-Path -LiteralPath $targetDir) {
+        Exit-Guard "이미 같은 RunId 의 산출물 폴더가 있다: $targetDir (새 -RunId 를 쓴다)"
+    }
+    try {
+        New-Item -ItemType Directory -Path $targetDir -ErrorAction Stop | Out-Null
+    }
+    catch {
+        if (Test-Path -LiteralPath $targetDir) {
+            Exit-Guard "이미 같은 RunId 의 산출물 폴더가 있다: $targetDir (새 -RunId 를 쓴다)"
+        }
+        throw
+    }
+}
+
+function Build-DiffArtifact(
+    [string]$baseRef,
+    [string]$baseHash,
+    [string]$mergeBase,
+    [string]$headHash,
+    [string]$branch,
+    [bool]$includeWorktree,
+    [string]$diffPath
+) {
     $chunks = New-Object System.Collections.Generic.List[string]
     if ($includeWorktree) {
-        $scopeDesc = "$baseRef..working-tree (merge-base $($mergeBase.Substring(0, 7)), HEAD $($headHash.Substring(0, 7)), -IncludeWorktree 지정)"
+        $scopeDesc = "$baseRef..working-tree (base $($baseHash.Substring(0, 7)), merge-base $($mergeBase.Substring(0, 7)), HEAD $($headHash.Substring(0, 7)), -IncludeWorktree 지정)"
         $statText  = Invoke-GitUtf8 @('diff', '--stat', $mergeBase)
         $diffText  = Invoke-GitUtf8 @('diff', $mergeBase)
         $untracked = @(Split-NonEmptyLines (Invoke-GitUtf8 @('ls-files', '--others', '--exclude-standard')))
 
         $chunks.Add("# Diff scope: $scopeDesc")
         $chunks.Add("# Branch: $branch")
+        $chunks.Add("# Base: $baseRef ($baseHash)")
+        $chunks.Add("# Merge-Base: $mergeBase")
+        $chunks.Add("# HEAD: $headHash")
         $chunks.Add('')
         $chunks.Add('## git diff --stat')
         $chunks.Add($statText.TrimEnd("`r", "`n"))
@@ -195,12 +382,15 @@ function Build-DiffArtifact([string]$baseRef, [bool]$includeWorktree, [string]$d
         $chunks.Add($diffText.TrimEnd("`r", "`n"))
     }
     else {
-        $scopeDesc = "$baseRef...HEAD (merge-base $($mergeBase.Substring(0, 7)), HEAD $($headHash.Substring(0, 7)), 커밋 간 diff)"
-        $statText  = Invoke-GitUtf8 @('diff', '--stat', "$baseRef...HEAD")
-        $diffText  = Invoke-GitUtf8 @('diff', "$baseRef...HEAD")
+        $scopeDesc = "$baseRef...HEAD (base $($baseHash.Substring(0, 7)), merge-base $($mergeBase.Substring(0, 7)), HEAD $($headHash.Substring(0, 7)), 커밋 간 diff)"
+        $statText  = Invoke-GitUtf8 @('diff', '--stat', $mergeBase, $headHash)
+        $diffText  = Invoke-GitUtf8 @('diff', $mergeBase, $headHash)
 
         $chunks.Add("# Diff scope: $scopeDesc")
         $chunks.Add("# Branch: $branch")
+        $chunks.Add("# Base: $baseRef ($baseHash)")
+        $chunks.Add("# Merge-Base: $mergeBase")
+        $chunks.Add("# HEAD: $headHash")
         $chunks.Add('')
         $chunks.Add('## git diff --stat')
         $chunks.Add($statText.TrimEnd("`r", "`n"))
@@ -334,10 +524,13 @@ function Invoke-ClaudeReadOnly(
     $sw = [System.Diagnostics.Stopwatch]::StartNew()
     $proc = New-Object System.Diagnostics.Process
     $proc.StartInfo = $psi
-    $started = $false
-    $stdout = ''
-    $stderr = ''
-    $code   = -1
+    $started      = $false
+    $stdout       = ''
+    $stderr       = ''
+    $code         = -1
+    $execExit     = 0
+    $execError    = $null
+    $cleanupError = $null
 
     try {
         $started = $proc.Start()
@@ -348,44 +541,84 @@ function Invoke-ClaudeReadOnly(
         $promptBytes = $utf8NoBom.GetBytes($promptText)
         $writeTask = $proc.StandardInput.BaseStream.WriteAsync($promptBytes, 0, $promptBytes.Length)
         if (-not $writeTask.Wait(10000)) {
-            $killNote = Stop-ProcessTree $proc
-            throw "claude stdin 쓰기 10초 타임아웃 ($killNote)"
+            $killRes = Stop-ProcessTree $proc
+            $killMsg = if (-not [string]::IsNullOrWhiteSpace($killRes.Detail)) { " | $($killRes.Detail)" } else { '' }
+            throw "claude stdin 쓰기 10초 타임아웃$killMsg"
         }
         $proc.StandardInput.BaseStream.Flush()
         $proc.StandardInput.Close()
 
         if (-not $proc.WaitForExit($timeoutSeconds * 1000)) {
-            $killNote = Stop-ProcessTree $proc
+            $killRes = Stop-ProcessTree $proc
             $sw.Stop()
             $partialErr = if ($stderrTask.Wait(3000)) { $stderrTask.Result } else { '(stderr 파이프 3초 내 닫히지 않음)' }
             $errDetail = "Timeout after ${timeoutSeconds}s"
-            if (-not [string]::IsNullOrWhiteSpace($killNote)) { $errDetail += " | kill: $killNote" }
-            Write-Utf8File $errPath ($errDetail + "`n" + $partialErr)
-            return [pscustomobject]@{
-                ExitCode    = 13
-                SessionId   = $null
-                Verdict     = $null
-                Response    = ''
-                Usage       = $null
-                CostUsd     = $null
-                DurationSec = [Math]::Round($sw.Elapsed.TotalSeconds, 2)
-                Error       = "claude 실행이 ${timeoutSeconds}초 타임아웃을 초과했다 ($errDetail)."
-                SentPath    = $sentPath
-                OutPath     = $outPath
-                ErrPath     = $errPath
-                RawPath     = $rawPath
+            if (-not $killRes.Succeeded -or -not [string]::IsNullOrWhiteSpace($killRes.Detail)) {
+                $errDetail += " | kill: $($killRes.Detail)"
+            }
+            $stderr    = $errDetail + "`n" + $partialErr
+            $execExit  = 13
+            $execError = "claude 실행이 ${timeoutSeconds}초 타임아웃을 초과했다 ($errDetail)."
+        }
+        else {
+            $sw.Stop()
+            $code = $proc.ExitCode
+            $ioErrors = New-Object System.Collections.Generic.List[string]
+            if ($stdoutTask.Wait(5000)) {
+                $stdout = $stdoutTask.Result
+            }
+            else {
+                $ioErrors.Add('claude stdout 읽기 5초 시간 초과')
+            }
+            if ($stderrTask.Wait(5000)) {
+                $stderr = $stderrTask.Result
+            }
+            else {
+                $ioErrors.Add('claude stderr 읽기 5초 시간 초과')
+            }
+            if ($ioErrors.Count -gt 0) {
+                $killRes = Stop-ProcessTree $proc
+                if (-not $killRes.Succeeded -and -not [string]::IsNullOrWhiteSpace($killRes.Detail)) {
+                    $ioErrors.Add("프로세스 트리 종료/확인 실패: $($killRes.Detail)")
+                }
+                $execExit  = 13
+                $execError = $ioErrors -join ' | '
             }
         }
-
-        $sw.Stop()
-        $stdout = if ($stdoutTask.Wait(5000)) { $stdoutTask.Result } else { '' }
-        $stderr = if ($stderrTask.Wait(5000)) { $stderrTask.Result } else { '(stderr 읽기 5초 초과)' }
-        $code   = $proc.ExitCode
     }
     catch {
         $sw.Stop()
-        $exMsg = "claude 프로세스 실행 예외: $($_.Exception.Message)"
-        Write-Utf8File $errPath ($exMsg + "`n" + $stderr)
+        $execExit  = 13
+        $execError = "claude 프로세스 실행 예외: $($_.Exception.Message)"
+    }
+    finally {
+        if ($started) {
+            try {
+                if (-not $proc.HasExited) {
+                    $killRes = Stop-ProcessTree $proc
+                    if (-not $killRes.Succeeded) {
+                        $cleanupError = "claude 프로세스 트리 종료/확인 실패: $($killRes.Detail)"
+                    }
+                }
+            }
+            catch {
+                $cleanupError = "claude 프로세스 정리 예외: $($_.Exception.Message)"
+            }
+        }
+        $proc.Dispose()
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($cleanupError)) {
+        $execExit  = 13
+        $execError = if ([string]::IsNullOrWhiteSpace($execError)) { $cleanupError } else { "$execError | $cleanupError" }
+    }
+
+    if ($execExit -eq 13) {
+        $errLogBody = if ([string]::IsNullOrWhiteSpace($stderr)) { $execError } else { $execError + "`n" + $stderr }
+        Write-Utf8File $errPath $errLogBody
+        if (-not [string]::IsNullOrEmpty($stdout)) {
+            Write-Utf8File $rawPath $stdout
+        }
         return [pscustomobject]@{
             ExitCode    = 13
             SessionId   = $null
@@ -394,28 +627,12 @@ function Invoke-ClaudeReadOnly(
             Usage       = $null
             CostUsd     = $null
             DurationSec = [Math]::Round($sw.Elapsed.TotalSeconds, 2)
-            Error       = $exMsg
+            Error       = $execError
             SentPath    = $sentPath
             OutPath     = $outPath
             ErrPath     = $errPath
             RawPath     = $rawPath
         }
-    }
-    finally {
-        if ($started) {
-            try {
-                if (-not $proc.HasExited) {
-                    $cleanupNote = Stop-ProcessTree $proc
-                    if (-not [string]::IsNullOrWhiteSpace($cleanupNote)) {
-                        [Console]::Error.WriteLine("agent-relay 정리 경고: $cleanupNote")
-                    }
-                }
-            }
-            catch {
-                [Console]::Error.WriteLine("agent-relay 프로세스 정리 예외: $($_.Exception.Message)")
-            }
-        }
-        $proc.Dispose()
     }
 
     Write-Utf8File $errPath $stderr
@@ -511,7 +728,7 @@ function Invoke-ClaudeReadOnly(
     return [pscustomobject]@{
         ExitCode    = $finalCode
         SessionId   = $sessionId
-        Verdict     = $verdict
+        Verdict     = if ($finalCode -eq 0) { $verdict } else { $null }
         Response    = $response
         Usage       = $usage
         CostUsd     = $costUsd
@@ -556,13 +773,6 @@ if ([string]::IsNullOrWhiteSpace($basePrompt) -and $Role -ne 'review') {
     Exit-Guard '-Role ask 에는 PromptFile 또는 Prompt 가 필요하다.'
 }
 
-# 산출물은 항상 저장소 밖 새 폴더(%TEMP%\protoharness-agent-relay\<RunId>\)에만 쓴다.
-$relayRoot = Join-Path ([System.IO.Path]::GetTempPath()) 'protoharness-agent-relay'
-$runDir    = Join-Path $relayRoot $RunId
-if (Test-Path -LiteralPath $runDir) {
-    Exit-Guard "이미 같은 RunId 의 산출물 폴더가 있다: $runDir (새 -RunId 를 쓴다)"
-}
-
 # --- 2. 동시 실행 잠금 ---
 $mutex = New-Object System.Threading.Mutex($false, 'Local\protoharness-agent-relay')
 $lockHeld = $false
@@ -577,21 +787,57 @@ try {
         Exit-Guard '다른 agent-relay 실행이 이미 진행 중이다. 동시 실행은 금지한다 (SUBAGENTS.md §7-6).'
     }
 
-    New-Item -ItemType Directory -Path $runDir -Force | Out-Null
+    # 산출물 폴더는 잠금을 잡은 뒤에 존재를 검사하고 새로 만든다 (이미 있으면 기존 내용을 손대지 않고 exit 2).
+    $relayRoot      = Join-Path ([System.IO.Path]::GetTempPath()) 'protoharness-agent-relay'
+    $runDir         = Join-Path $relayRoot $RunId
+    if (Test-Path -LiteralPath $runDir) {
+        Exit-Guard "이미 같은 RunId 의 산출물 폴더가 있다: $runDir (새 -RunId 를 쓴다)"
+    }
     $resultJsonPath = Join-Path $runDir 'result.json'
 
-    $diffInfo   = $null
-    $turn       = $null
-    $finalExit  = 13
-    $finalError = $null
-    $branchName = $null
+    $startBranch    = $null
+    $startBaseRef   = if ([string]::IsNullOrWhiteSpace($Base)) { $null } else { $Base }
+    $startBaseHash  = $null
+    $startMergeBase = $null
+    $startHeadHash  = $null
+    $diffInfo       = $null
+    $turn           = $null
+    $finalExit      = 13
+    $finalError     = $null
+    $runDirCreated  = $false
 
     try {
-        $branchName = (Invoke-GitUtf8 @('branch', '--show-current')).Trim()
+        # 시작할 때 base, merge-base, HEAD 전체 해시와 브랜치를 한 번만 확정한다.
+        $startBranch   = (Invoke-GitUtf8 @('branch', '--show-current')).Trim()
+        $startHeadHash = (Invoke-GitUtf8 @('rev-parse', '--verify', 'HEAD^{commit}')).Trim()
+        if ($null -ne $startBaseRef) {
+            $startBaseHash  = (Invoke-GitUtf8 @('rev-parse', '--verify', "${startBaseRef}^{commit}")).Trim()
+            $startMergeBase = (Invoke-GitUtf8 @('merge-base', $startBaseHash, $startHeadHash)).Trim()
+        }
+
+        if ($Role -eq 'review' -and -not $IncludeWorktree -and $null -ne $startMergeBase) {
+            $changedFiles = @(Get-ChangedFilesBetween $startMergeBase $startHeadHash)
+            if ($changedFiles.Count -gt 0) {
+                $dirtyPaths = Get-DirtyPaths
+                $overlap = New-Object System.Collections.Generic.List[string]
+                foreach ($f in $changedFiles) {
+                    if ($dirtyPaths.ContainsKey($f)) {
+                        $overlap.Add($f)
+                    }
+                }
+                if ($overlap.Count -gt 0) {
+                    Exit-Guard "review(커밋 간 diff) 대상 파일에 미커밋 변경(스테이지 포함)이 있다: $($overlap -join ', ') (커밋·정리하거나 -IncludeWorktree 를 지정하라)"
+                }
+            }
+        }
+
+        New-RunDirStrict $relayRoot $runDir
+        $runDirCreated = $true
+
         $finalPrompt = $basePrompt
         if ($Role -eq 'review') {
-            if (-not [string]::IsNullOrWhiteSpace($Base)) {
-                $diffInfo = Build-DiffArtifact $Base ([bool]$IncludeWorktree) (Join-Path $runDir 'diff.patch')
+            if ($null -ne $startMergeBase) {
+                $diffInfo = Build-DiffArtifact $startBaseRef $startBaseHash $startMergeBase $startHeadHash $startBranch ([bool]$IncludeWorktree) (Join-Path $runDir 'diff.patch')
             }
             $finalPrompt = Build-ReviewPrompt $basePrompt $diffInfo
         }
@@ -599,22 +845,44 @@ try {
         $turn = Invoke-ClaudeReadOnly $Role $finalPrompt $runDir $Resume $Model $Effort $TimeoutSec
         $finalExit  = $turn.ExitCode
         $finalError = $turn.Error
+
+        # claude 호출 종료 뒤 HEAD 또는 브랜치가 시작과 다르면 exit 12, verdict null.
+        $endHeadHash = (Invoke-GitUtf8 @('rev-parse', '--verify', 'HEAD^{commit}')).Trim()
+        $endBranch   = (Invoke-GitUtf8 @('branch', '--show-current')).Trim()
+        if ($endHeadHash -ne $startHeadHash -or $endBranch -ne $startBranch) {
+            $driftMsg = "claude 실행 중 git 상태가 바뀌었다: 시작(branch='$startBranch', HEAD=$startHeadHash) -> 종료(branch='$endBranch', HEAD=$endHeadHash)"
+            if ($finalExit -eq 0 -or $finalExit -eq 12) {
+                $finalExit = 12
+            }
+            $finalError = if ([string]::IsNullOrWhiteSpace($finalError)) { $driftMsg } else { "$finalError | $driftMsg" }
+        }
     }
     catch {
         $finalExit  = 13
         $finalError = "실행 중 예외: $($_.Exception.Message)"
     }
 
+    if (-not $runDirCreated) {
+        New-RunDirStrict $relayRoot $runDir
+        $runDirCreated = $true
+    }
+
+    $finalVerdict = if ($finalExit -eq 0 -and $turn) { $turn.Verdict } else { $null }
+
     $summary = [ordered]@{
         mode            = 'readonly'
         runId           = $RunId
-        branch          = $branchName
+        branch          = $startBranch
+        base            = $startBaseRef
+        baseHash        = $startBaseHash
+        mergeBase       = $startMergeBase
+        headHash        = $startHeadHash
         target          = $Target
         role            = $Role
         includeWorktree = [bool]$IncludeWorktree
         model           = if ([string]::IsNullOrWhiteSpace($Model)) { 'default' } else { $Model }
         exitCode        = $finalExit
-        verdict         = if ($turn) { $turn.Verdict } else { $null }
+        verdict         = $finalVerdict
         sessionId       = if ($turn) { $turn.SessionId } else { $null }
         durationSec     = if ($turn) { $turn.DurationSec } else { 0 }
         costUsd         = if ($turn) { $turn.CostUsd } else { $null }
@@ -631,6 +899,10 @@ try {
         }
     }
     Write-Utf8File $resultJsonPath ($summary | ConvertTo-Json -Depth 10)
+
+    if ($finalExit -eq 13 -and -not [string]::IsNullOrWhiteSpace($finalError)) {
+        [Console]::Error.WriteLine("agent-relay 오류(exit 13): $finalError")
+    }
 
     Write-Output "agent-relay 완료: target=$Target role=$Role exit=$finalExit verdict=$($summary.verdict) session=$($summary.sessionId) duration=$($summary.durationSec)s"
     Write-Output "결과 파일: $resultJsonPath"
