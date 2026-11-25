@@ -202,7 +202,7 @@ function Get-Snapshot([string[]]$watchDirs) {
 
     $guarded = New-Object System.Collections.Generic.List[string]
     foreach ($rel in @('.git/config', '.git/info/exclude', 'CLAUDE.md', 'AGENTS.md', 'GEMINI.md')) { $guarded.Add((Join-Path $repoRoot $rel)) }
-    foreach ($dir in @('.git/hooks', '.claude', '.codex', '.agents', 'tools/hooks')) {
+    foreach ($dir in @('.git/hooks', '.claude', '.codex', '.agents', 'tools/hooks', 'docs/RULES')) {
         $full = Join-Path $repoRoot $dir
         if (Test-Path -LiteralPath $full) {
             foreach ($f in (Get-ChildItem -LiteralPath $full -Recurse -File -Force)) { $guarded.Add($f.FullName) }
@@ -262,7 +262,7 @@ if ($Role -eq 'fix') {
         if (-not $full.StartsWith($repoRoot + [char]92, [System.StringComparison]::OrdinalIgnoreCase)) { Exit-Guard "-Allow 가 저장소 밖이다: $raw" }
         $rel = $full.Substring($repoRoot.Length + 1).Replace([char]92, [char]47)
         if ($rel -match '\.(meta|unity|prefab|asset|inputactions)$' -or $rel -match '^(Library|Temp|obj|Build|UserSettings|Logs|ProjectSettings|Packages)/') { Exit-Guard "agy 에 맡기지 않는 파일이다 (CLAUDE.md §0): $rel" }
-        if ($rel -match '^((CLAUDE|AGENTS|GEMINI)\.md$|\.git|\.claude/|\.codex/|\.agents/|tools/hooks/)') { Exit-Guard "하네스·git 파일은 agy 에 맡기지 않는다 (SUBAGENTS.md §7-6): $rel" }
+        if ($rel -match '^((CLAUDE|AGENTS|GEMINI)\.md$|\.git|\.claude/|\.codex/|\.agents/|tools/hooks/|docs/RULES/)') { Exit-Guard "하네스·git 파일은 agy 에 맡기지 않는다 (SUBAGENTS.md §7-6): $rel" }
         if (Test-Path -LiteralPath $full -PathType Container) { Exit-Guard "-Allow 는 파일만 받는다: $rel" }
         if (-not (Test-Path -LiteralPath (Split-Path -Parent $full) -PathType Container)) { Exit-Guard "-Allow 파일의 폴더가 없다: $rel" }
         # 링크를 따라가면 다른 파일에 쓴다. 저장소 루트에서 대상까지 정션·심볼릭 링크·하드 링크를 받지 않는다.
