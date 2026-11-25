@@ -15,9 +15,11 @@
     fix   : -Allow 밖에 지금 있는 파일·폴더의 쓰기
     (2026-11-25 실측: auto 모드에서는 unsandboxed(*)·command(claude) 거부가 듣지 않아 git tag 와 claude 가 돌았다.
      그래서 일부만 막지 않고 command(*) 로 닫고 accept-edits 모드로 돈다.)
-  실행 뒤 대조하는 것: 모든 ref·HEAD·브랜치·색인, .git/config·훅, 하네스 파일, agy 사용자 설정,
-    추적 파일과 무시하지 않는 미추적 파일의 내용. fix 의 -Allow 파일 말고 하나라도 다르면 실패다. 되돌리지 않고 알린다.
-  보지 못하는 것: .gitignore 가 무시하는 파일(Library 등), 저장소 밖의 다른 파일, 원격 저장소의 상태.
+  실행 뒤 대조하는 것: 모든 ref·HEAD·브랜치·색인(플래그 포함), .git/config·훅, 하네스 파일, agy 사용자 설정,
+    추적 파일의 크기·수정 시각, 바뀐 파일과 미추적 파일의 내용, 저장소 루트와 -Allow 파일이 있는 폴더의 항목(무시 대상 포함).
+    fix 의 -Allow 파일 말고 하나라도 다르면 실패다. 되돌리지 않고 알린다.
+  agy 와 그 자식은 Windows Job 하나에 넣고, 끝나면 남은 것까지 끝낸 뒤에 대조한다.
+  보지 못하는 것: 그 밖의 폴더에 있는 무시 대상 파일(Library 등. fix 에서는 거부 규칙이 막는다), 저장소 밖의 파일, 원격 저장소.
 
   산출물은 %TEMP%\protoharness-agy-run\<RunId>\ 에만 쓴다: sent.md, settings.json, raw.json, out.md, stderr.log, result.json
   종료 코드:
@@ -62,11 +64,66 @@ function Quote-Arg([string]$arg) {
     return '"' + $escaped + '"'
 }
 
-# 프로세스를 돌리고 stdout·stderr 를 UTF-8 로 받는다. 시간 안에 끝나지 않으면 트리를 끝내고 던진다.
+# 이 스크립트가 Job 에 들어가면 여기서 띄우는 프로세스와 그 자식이 모두 같은 Job 에 들어간다.
+# 부모가 먼저 끝난 자식도 이 목록에 남는다 (taskkill /T 는 부모가 없으면 찾지 못한다).
+Add-Type -TypeDefinition @'
+using System;
+using System.Collections.Generic;
+using System.ComponentModel;
+using System.Diagnostics;
+using System.Runtime.InteropServices;
+public static class AgyRunJob
+{
+    [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)] static extern IntPtr CreateJobObject(IntPtr a, string n);
+    [DllImport("kernel32.dll", SetLastError = true)] static extern bool AssignProcessToJobObject(IntPtr j, IntPtr p);
+    [DllImport("kernel32.dll", SetLastError = true)] static extern bool QueryInformationJobObject(IntPtr j, int c, IntPtr i, int l, IntPtr r);
+    static IntPtr job;
+    public static void Join()
+    {
+        job = CreateJobObject(IntPtr.Zero, null);
+        if (job == IntPtr.Zero) throw new Win32Exception();
+        if (!AssignProcessToJobObject(job, Process.GetCurrentProcess().Handle)) throw new Win32Exception();
+    }
+    // Process ids in the job other than this script.
+    public static int[] Others()
+    {
+        int size = 8 + 4096 * IntPtr.Size;
+        IntPtr buffer = Marshal.AllocHGlobal(size);
+        try
+        {
+            if (!QueryInformationJobObject(job, 3, buffer, size, IntPtr.Zero)) throw new Win32Exception();
+            int count = Marshal.ReadInt32(buffer, 4), self = Process.GetCurrentProcess().Id;
+            var ids = new List<int>();
+            for (int k = 0; k < count; k++)
+            {
+                int id = (int)Marshal.ReadIntPtr(buffer, 8 + k * IntPtr.Size);
+                if (id != self) ids.Add(id);
+            }
+            return ids.ToArray();
+        }
+        finally { Marshal.FreeHGlobal(buffer); }
+    }
+}
+'@
+
+# Job 에 남은 프로세스를 끝낸다. 끝나지 않은 것의 PID 를 돌려준다.
+function Stop-JobProcesses() {
+    $until = (Get-Date).AddSeconds(10)
+    while ($true) {
+        $ids = @([AgyRunJob]::Others())
+        if ($ids.Count -eq 0 -or (Get-Date) -gt $until) { return $ids }
+        foreach ($id in $ids) { Stop-Process -Id $id -Force -ErrorAction SilentlyContinue }   # 그 사이 끝난 것은 다음 목록에서 빠진다
+        Start-Sleep -Milliseconds 50
+    }
+}
+
+# 프로세스를 돌리고 stdout·stderr 를 UTF-8 로 받는다. 돌아오거나 던질 때 Job 에는 살아 있는 프로세스가 없다.
 function Invoke-Captured([string]$file, [string[]]$argList, [int]$timeoutMs) {
     $psi = New-Object System.Diagnostics.ProcessStartInfo
     $psi.FileName = $file
     $psi.Arguments = (($argList | ForEach-Object { Quote-Arg $_ }) -join ' ')
+    if ($psi.Arguments.IndexOf([char]0) -ge 0) { throw '인자에 NUL 문자가 있다. 그 뒤의 인자가 사라진다.' }
+    if ($file.Length + $psi.Arguments.Length -gt 32000) { throw "명령줄이 $($psi.Arguments.Length)자다 (Windows 한도 32767자)." }
     $psi.WorkingDirectory = $repoRoot
     $psi.UseShellExecute = $false
     $psi.RedirectStandardInput = $true
@@ -83,13 +140,13 @@ function Invoke-Captured([string]$file, [string[]]$argList, [int]$timeoutMs) {
         $proc.StandardInput.Close()
         $outTask = $proc.StandardOutput.ReadToEndAsync()
         $errTask = $proc.StandardError.ReadToEndAsync()
-        if (-not $proc.WaitForExit($timeoutMs)) {
-            $kill = Invoke-TaskKill $proc
-            throw "$file 이 $([int]($timeoutMs / 1000))초 안에 끝나지 않았다. $kill"
-        }
-        if (-not $outTask.Wait(5000) -or -not $errTask.Wait(5000)) {
-            throw "$file 은 끝났지만 출력이 5초 안에 닫히지 않았다 (남은 자식 프로세스가 있을 수 있다)."
-        }
+        $inTime = $proc.WaitForExit($timeoutMs)
+
+        # 본체가 끝났어도 남은 자식을 끝낸다. 그래야 출력이 닫히고, 대조 뒤에 늦은 변경이 생기지 않는다.
+        $stuck = @(Stop-JobProcesses)
+        if ($stuck.Count -gt 0) { throw "$file 의 프로세스가 끝나지 않는다 (PID $($stuck -join ', ')). 직접 확인하고 끝낸 뒤에 다시 부른다." }
+        if (-not $inTime) { throw "$file 이 $([int]($timeoutMs / 1000))초 안에 끝나지 않아 끝냈다." }
+        if (-not $outTask.Wait(5000) -or -not $errTask.Wait(5000)) { throw "$file 은 끝났지만 출력이 5초 안에 닫히지 않았다." }
         return [pscustomobject]@{ Code = $proc.ExitCode; Out = $outTask.Result; Err = $errTask.Result }
     }
     finally {
@@ -97,15 +154,8 @@ function Invoke-Captured([string]$file, [string[]]$argList, [int]$timeoutMs) {
     }
 }
 
-function Invoke-TaskKill([System.Diagnostics.Process]$proc) {
-    $id = $proc.Id
-    $tk = Start-Process -FilePath 'taskkill.exe' -ArgumentList "/PID $id /T /F" -NoNewWindow -Wait -PassThru
-    if (-not $proc.WaitForExit(5000)) { return "프로세스 트리를 끝내지 못했다 (PID $id, taskkill 종료 코드 $($tk.ExitCode)). 직접 확인한다." }
-    return "프로세스 트리를 끝냈다 (PID $id, taskkill 종료 코드 $($tk.ExitCode))."
-}
-
 function Invoke-Git([string[]]$gitArgs) {
-    $r = Invoke-Captured $gitExe (@('-C', $repoRoot, '-c', 'core.quotepath=false', '-c', 'core.safecrlf=false') + $gitArgs) 60000
+    $r = Invoke-Captured $gitExe (@('--no-optional-locks', '-C', $repoRoot, '-c', 'core.quotepath=false', '-c', 'core.safecrlf=false') + $gitArgs) 60000
     if ($r.Code -ne 0) { throw "git $($gitArgs -join ' ') 실패 (exit $($r.Code)): $($r.Err.Trim())" }
     return $r.Out
 }
@@ -121,11 +171,24 @@ function Get-PathHash([string]$full) {
 }
 
 # 앞뒤로 견줄 상태. 키가 "file <경로>" 인 것만 -Allow 로 바뀔 수 있다.
-function Get-Snapshot() {
+function Get-Snapshot([string[]]$watchDirs) {
     $s = @{}
     $s['HEAD'] = (Invoke-Git @('rev-parse', 'HEAD')).Trim()
     $s['branch'] = (Invoke-Git @('branch', '--show-current')).Trim()
-    $s['index'] = Get-TextHash (Invoke-Git @('diff', '--cached', '--raw', '--no-renames', 'HEAD'))
+    $s['index'] = Get-TextHash ((Invoke-Git @('ls-files', '-s', '-z')) + (Invoke-Git @('ls-files', '-v', '-z')))
+    # git status 는 줄바꿈만 다른 변경과 assume-unchanged 파일을 보이지 않는다. 크기와 수정 시각을 따로 본다.
+    foreach ($path in ((Invoke-Git @('ls-files', '-z')) -split "`0")) {
+        if ($path -eq '') { continue }
+        $fi = New-Object System.IO.FileInfo((Join-Path $repoRoot $path))
+        $s['stat ' + $path] = if ($fi.Exists) { "$($fi.Length) $($fi.LastWriteTimeUtc.Ticks)" } else { 'missing' }
+    }
+    # 이 폴더들에는 거부 규칙이 닿지 않는 새 파일이 생길 수 있다. 무시 대상까지 항목을 모두 본다.
+    foreach ($dir in $watchDirs) {
+        foreach ($child in (Get-ChildItem -LiteralPath $dir -Force)) {
+            $rel = $child.FullName.Substring($repoRoot.Length + 1).Replace([char]92, [char]47)
+            $s['entry ' + $rel] = if ($child.PSIsContainer) { 'dir' } else { "$($child.Length) $($child.LastWriteTimeUtc.Ticks)" }
+        }
+    }
     foreach ($line in ((Invoke-Git @('for-each-ref', '--format=%(refname) %(objectname)')) -split "\r?\n")) {
         if ($line -ne '') { $s['ref ' + ($line -split ' ')[0]] = ($line -split ' ')[1] }
     }
@@ -172,13 +235,17 @@ if ([string]::IsNullOrWhiteSpace($PromptFile) -or -not (Test-Path -LiteralPath $
 $prompt = [System.IO.File]::ReadAllText((Resolve-Path -LiteralPath $PromptFile).Path, $utf8)
 if ($prompt.Length -gt $maxPromptChars) { Exit-Guard "지시서가 $($prompt.Length)자다. $maxPromptChars 자까지 넣는다 (긴 자료는 저장소 파일로 가리킨다)." }
 
+if ($prompt.IndexOf([char]0) -ge 0) { Exit-Guard '지시서에 NUL 문자가 있다.' }
+
+[AgyRunJob]::Join()
 $gitExe = (Get-Command git -ErrorAction Stop).Source
 $agyCmd = Get-Command agy -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
 if ($null -eq $agyCmd) { Exit-Guard 'agy 실행 파일을 PATH 에서 찾지 못했다.' }
 
 $branch = (Invoke-Git @('branch', '--show-current')).Trim()
 if ($branch -eq '' -or $branch -eq 'main' -or $branch -eq 'dev') { Exit-Guard "현재 브랜치가 '$branch' 다. main·dev·detached HEAD 에서는 부르지 않는다 (CLAUDE.md §9-2)." }
-if ($prompt -notmatch '(?m)^승인:[ \t]*\S') { Exit-Guard "지시서에 '승인: <언제, 무엇이>' 줄이 없다 (CLAUDE.md §3-4)." }
+$approvalLine = [regex]::Match($prompt, '(?m)^승인:[ \t]*(?<a>\S[^\r\n]*)')
+if (-not $approvalLine.Success) { Exit-Guard "지시서에 '승인: <언제, 무엇이>' 줄이 없다 (CLAUDE.md §3-4)." }
 $branchLine = [regex]::Match($prompt, '(?m)^브랜치:[ \t]*(?<b>[^\s(]+)')
 if (-not $branchLine.Success) { Exit-Guard "지시서에 '브랜치: <이름>' 줄이 없다 (CLAUDE.md §9-2)." }
 if ($branchLine.Groups['b'].Value -ne $branch) { Exit-Guard "지시서의 브랜치($($branchLine.Groups['b'].Value))가 현재 브랜치($branch)와 다르다." }
@@ -198,6 +265,13 @@ if ($Role -eq 'fix') {
         if ($rel -match '^((CLAUDE|AGENTS|GEMINI)\.md$|\.git|\.claude/|\.codex/|\.agents/|tools/hooks/)') { Exit-Guard "하네스·git 파일은 agy 에 맡기지 않는다 (SUBAGENTS.md §7-6): $rel" }
         if (Test-Path -LiteralPath $full -PathType Container) { Exit-Guard "-Allow 는 파일만 받는다: $rel" }
         if (-not (Test-Path -LiteralPath (Split-Path -Parent $full) -PathType Container)) { Exit-Guard "-Allow 파일의 폴더가 없다: $rel" }
+        # 링크를 따라가면 다른 파일에 쓴다. 저장소 루트에서 대상까지 정션·심볼릭 링크·하드 링크를 받지 않는다.
+        $probe = $full
+        while ($probe.Length -gt $repoRoot.Length) {
+            $item = Get-Item -LiteralPath $probe -Force -ErrorAction SilentlyContinue
+            if ($null -ne $item -and (($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -or -not [string]::IsNullOrEmpty($item.LinkType))) { Exit-Guard "-Allow 경로에 링크가 있다: $probe" }
+            $probe = Split-Path -Parent $probe
+        }
         $allowFull += $full
         $allowRel += $rel
     }
@@ -209,18 +283,7 @@ $runsRoot = Join-Path ([System.IO.Path]::GetTempPath()) 'protoharness-agy-run'
 $runDir = Join-Path $runsRoot $RunId
 $round = 1
 $conversation = ''
-if (-not [string]::IsNullOrWhiteSpace($Resume)) {
-    if ($Resume -notmatch '^[A-Za-z0-9][A-Za-z0-9._-]*$') { Exit-Guard "-Resume 는 앞 실행의 RunId 다. 입력값: '$Resume'" }
-    $prevPath = Join-Path (Join-Path $runsRoot $Resume) 'result.json'
-    if (-not (Test-Path -LiteralPath $prevPath)) { Exit-Guard "앞 실행의 결과가 없다: $prevPath" }
-    $prev = [System.IO.File]::ReadAllText($prevPath, $utf8) | ConvertFrom-Json
-    if ($prev.exitCode -ne 0 -and $prev.exitCode -ne 10) { Exit-Guard "앞 실행이 exit $($prev.exitCode) 로 끝났다. 잇지 않고 사용자에게 보고한다." }
-    if ($prev.role -ne $Role -or $prev.branch -ne $branch) { Exit-Guard "앞 실행(role=$($prev.role), branch=$($prev.branch))과 역할이나 브랜치가 다르다." }
-    if ($prev.round -ge $maxRounds) { Exit-Guard "왕복은 최대 $maxRounds 번이다 (앞 실행이 $($prev.round)번째)." }
-    if ([string]::IsNullOrWhiteSpace($prev.conversationId)) { Exit-Guard '앞 실행에 대화 ID 가 없다.' }
-    $round = [int]$prev.round + 1
-    $conversation = [string]$prev.conversationId
-}
+$approval = $approvalLine.Groups['a'].Value.Trim()
 
 # --- 2. 잠금. agent-relay 와도 동시에 돌지 않는다 ---
 $locks = @()
@@ -232,6 +295,30 @@ try {
         catch [System.Threading.AbandonedMutexException] { $held = $true }   # 앞 주인이 죽었다. 잠금은 넘어왔다
         if (-not $held) { $m.Dispose(); Exit-Guard "다른 에이전트 실행이 돌고 있다 ($name)." }
         $locks += $m
+    }
+    if (-not [string]::IsNullOrWhiteSpace($Resume)) {
+        if ($Resume -notmatch '^[A-Za-z0-9][A-Za-z0-9._-]*$') { Exit-Guard "-Resume 는 앞 실행의 RunId 다. 입력값: '$Resume'" }
+        $prevDir = Join-Path $runsRoot $Resume
+        $prevPath = Join-Path $prevDir 'result.json'
+        if (-not (Test-Path -LiteralPath $prevPath)) { Exit-Guard "앞 실행의 결과가 없다: $prevPath" }
+        $prev = $null
+        try { $prev = [System.IO.File]::ReadAllText($prevPath, $utf8) | ConvertFrom-Json }
+        catch { Exit-Guard "앞 실행의 결과를 읽지 못했다: $($_.Exception.Message)" }
+        if ($null -eq $prev -or ($prev.exitCode -ne 0 -and $prev.exitCode -ne 10)) { Exit-Guard "앞 실행이 exit $($prev.exitCode) 로 끝났다. 잇지 않고 사용자에게 보고한다." }
+        if ($prev.repo -ne $repoRoot -or $prev.role -ne $Role -or $prev.branch -ne $branch) { Exit-Guard "앞 실행(repo=$($prev.repo), role=$($prev.role), branch=$($prev.branch))과 저장소·역할·브랜치가 다르다." }
+        if ((@($prev.allow | Sort-Object) -join ',') -ne (@($allowRel | Sort-Object) -join ',')) { Exit-Guard "앞 실행의 -Allow($(@($prev.allow) -join ','))와 다르다. 이어 가기는 범위를 바꾸지 않는다." }
+        if ($prev.approval -ne $approval) { Exit-Guard "앞 실행의 승인 줄과 다르다: $($prev.approval)" }
+        if ($prev.round -ge $maxRounds) { Exit-Guard "왕복은 최대 $maxRounds 번이다 (앞 실행이 $($prev.round)번째)." }
+        if ([string]::IsNullOrWhiteSpace($prev.conversationId)) { Exit-Guard '앞 실행에 대화 ID 가 없다.' }
+        if (Test-Path -LiteralPath $runDir) { Exit-Guard "같은 RunId 의 폴더가 있다: $runDir (새 -RunId 를 쓴다)" }
+        # 한 실행은 한 번만 잇는다. CreateNew 라서 두 번째는 실패한다.
+        try {
+            $mark = New-Object System.IO.FileStream((Join-Path $prevDir 'resumed.txt'), [System.IO.FileMode]::CreateNew)
+            $mark.Dispose()
+        }
+        catch [System.IO.IOException] { Exit-Guard "앞 실행은 이미 이어 갔다: $Resume" }
+        $round = [int]$prev.round + 1
+        $conversation = [string]$prev.conversationId
     }
     if (Test-Path -LiteralPath $runDir) { Exit-Guard "같은 RunId 의 폴더가 있다: $runDir (새 -RunId 를 쓴다)" }
     $null = New-Item -ItemType Directory -Path $runDir
@@ -268,10 +355,18 @@ $prompt
     $parsed = $null
     $before = $null
     $started = Get-Date
+    $watchDirs = @($repoRoot)
+    foreach ($full in $allowFull) {
+        $dir = Split-Path -Parent $full
+        while ($dir.Length -gt $repoRoot.Length) { $watchDirs += $dir; $dir = Split-Path -Parent $dir }
+    }
+    $watchDirs = @($watchDirs | Sort-Object -Unique)
     try {
-        $before = Get-Snapshot
-        $agyArgs = @('-p', $sent, '--output-format', 'json', '--model', $Model, '--mode', 'accept-edits', '--sandbox', '--settings', $settingsPath, '--print-timeout', "${TimeoutSec}s")
+        $before = Get-Snapshot $watchDirs
+        # 거부 규칙이 긴 지시문보다 앞에 온다.
+        $agyArgs = @('--settings', $settingsPath, '--sandbox', '--mode', 'accept-edits', '--model', $Model, '--output-format', 'json', '--print-timeout', "${TimeoutSec}s")
         if ($conversation -ne '') { $agyArgs += @('--conversation', $conversation) }
+        $agyArgs += @('-p', $sent)
         $run = Invoke-Captured $agyCmd.Source $agyArgs (($TimeoutSec + 30) * 1000)
         [System.IO.File]::WriteAllText((Join-Path $runDir 'raw.json'), $run.Out, $utf8)
         [System.IO.File]::WriteAllText((Join-Path $runDir 'stderr.log'), $run.Err, $utf8)
@@ -301,14 +396,15 @@ $prompt
     # 실행이 어떻게 끝났든 대조한다.
     try {
         if ($null -eq $before) { throw '실행 전 상태를 읽지 못해 agy 를 부르지 않았다.' }
-        $after = Get-Snapshot
+        $after = Get-Snapshot $watchDirs
         $keys = @($before.Keys) + @($after.Keys) | Sort-Object -Unique
         foreach ($k in $keys) {
             if ($before[$k] -eq $after[$k]) { continue }
-            $rel = if ($k.StartsWith('file ')) { $k.Substring(5) } else { '' }
+            $rel = if ($k -match '^(file|stat|entry) ') { $k.Substring($k.IndexOf(' ') + 1) } else { '' }
             if ($rel -ne '' -and $allowRel -contains $rel) { $changedAllowed += $rel }
             else { $violations += $k }
         }
+        $changedAllowed = @($changedAllowed | Sort-Object -Unique)
         if ($violations.Count -gt 0) {
             $exitCode = 12
             $errors.Add("허용하지 않은 것이 바뀌었다 (되돌리지 않았다): $($violations -join ' | ')")
@@ -322,7 +418,9 @@ $prompt
         role           = $Role
         runId          = $RunId
         round          = $round
+        repo           = $repoRoot
         branch         = $branch
+        approval       = $approval
         model          = $Model
         allow          = $allowRel
         changed        = $changedAllowed
@@ -333,7 +431,10 @@ $prompt
         error          = ($errors -join ' / ')
         dir            = $runDir
     }
-    [System.IO.File]::WriteAllText((Join-Path $runDir 'result.json'), ($result | ConvertTo-Json -Depth 6), $utf8)
+    # 반쯤 쓰인 결과를 읽지 않게 다 쓴 뒤에 이름을 바꾼다.
+    $resultTemp = Join-Path $runDir 'result.json.tmp'
+    [System.IO.File]::WriteAllText($resultTemp, ($result | ConvertTo-Json -Depth 6), $utf8)
+    [System.IO.File]::Move($resultTemp, (Join-Path $runDir 'result.json'))
     Write-Output "agy-run: exit=$exitCode status=$($result.status) role=$Role round=$round/$maxRounds changed=$($changedAllowed -join ',') dir=$runDir"
     foreach ($e in $errors) { [Console]::Error.WriteLine("agy-run: $e") }
     exit $exitCode
