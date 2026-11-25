@@ -2,16 +2,21 @@
   PreToolUse 훅 — CLAUDE.md §0 금지선 중 기계로 판정되는 것을 도구 호출 직전에 막는다.
 
   판정만 한다. 파일·git 상태를 바꾸지 않는다.
-    deny : 되돌릴 수 없는 git 명령(reset --hard, checkout -- ., restore ., clean, 강제 푸시),
-           main/dev 에서의 git commit                                 (§0 Git, §9-2)
-    ask  : 승인 후에만 건드릴 수 있는 파일에 Edit/Write/NotebookEdit  (§0 파일·에셋, 설정)
-    deny : 같은 파일에 Codex apply_patch. Codex 는 ask 를 지원하지 않는다(오류를 내고 호출을 계속한다)
-  해당 없으면 아무것도 출력하지 않고 exit 0 (= 판정 없음, 평소 권한 흐름).
+    deny      : 되돌릴 수 없는 git 명령(reset --hard, checkout -- ., restore ., clean, 강제 푸시),
+                main/dev 에서의 git commit                                 (§0 Git, §9-2)
+    ask  : 승인 후에만 건드릴 수 있는 파일에 Claude Edit/Write/NotebookEdit (§0 파일·에셋, 설정)
+    deny : 같은 파일에 Codex apply_patch 및 Antigravity edit_file/write_file
+           (Codex 는 ask 미지원; Antigravity 는 2026-11-25 실측에서 edit_file 의 force_ask 가 프롬프트 없이 통과됨)
+  해당 없으면 Claude/Codex 는 아무것도 출력하지 않고 exit 0 (= 판정 없음, 평소 권한 흐름),
+  Antigravity 는 {"decision":"allow"} 를 출력하고 exit 0.
 
-  Claude Code(.claude/settings.json)와 Codex(.codex/hooks.json)가 같이 부른다.
-  스키마: 두 쪽 공식 문서 hooks (stdin: tool_name, tool_input.command|file_path, cwd /
-          stdout: hookSpecificOutput.permissionDecision). Codex 셸은 tool_name Bash,
-          파일 편집은 apply_patch 이고 경로는 tool_input.command 의 패치 머리줄에 있다.
+  Claude Code(.claude/settings.json), Codex(.codex/hooks.json), Antigravity(.agents/hooks.json)가 같이 부른다.
+  스키마:
+    - Claude/Codex: stdin(tool_name, tool_input.command|file_path, cwd) /
+      stdout(hookSpecificOutput.permissionDecision). Codex 셸은 tool_name Bash,
+      파일 편집은 apply_patch 이고 경로는 tool_input.command 의 패치 머리줄에 있다.
+    - Antigravity: stdin(toolCall.name, toolCall.args.CommandLine|Path, cwd, workspacePaths) /
+      stdout(decision, reason). 셸은 run_command, 파일 편집은 edit_file / write_file.
   한계 (확인 못 한 것): 셸 명령(sed -i, 리다이렉트, rm 등)으로 보호 파일을 바꾸는 것은 판정하지 않는다.
 
   주의: 이 파일은 UTF-8 with BOM 으로 저장한다. Windows PowerShell 5.1 은 BOM 이 없으면
@@ -20,17 +25,33 @@
 
 $ErrorActionPreference = 'Stop'
 
+$script:IsAntigravity = $false
+
 function Write-Decision([string]$decision, [string]$reason) {
-    $obj = @{ hookSpecificOutput = @{
-        hookEventName            = 'PreToolUse'
-        permissionDecision       = $decision
-        permissionDecisionReason = $reason
-    } }
+    if ($script:IsAntigravity) {
+        $obj = @{ decision = $decision }
+        if (-not [string]::IsNullOrEmpty($reason)) {
+            $obj.reason = $reason
+        }
+    }
+    else {
+        $obj = @{ hookSpecificOutput = @{
+            hookEventName            = 'PreToolUse'
+            permissionDecision       = $decision
+            permissionDecisionReason = $reason
+        } }
+    }
     $json  = $obj | ConvertTo-Json -Compress -Depth 5
     $bytes = (New-Object System.Text.UTF8Encoding($false)).GetBytes($json)
     $out   = [Console]::OpenStandardOutput()
     $out.Write($bytes, 0, $bytes.Length)
     $out.Flush()
+}
+
+function Write-PassThrough() {
+    if ($script:IsAntigravity) {
+        Write-Decision 'allow' ''
+    }
 }
 
 # 보호 파일이면 사유를, 아니면 $null 을 돌려준다. 경로는 저장소 기준 상대 경로로 바꿔 본다.
@@ -66,12 +87,16 @@ try {
     if ([string]::IsNullOrWhiteSpace($raw)) { throw '표준입력이 비었다.' }
     $in = $raw | ConvertFrom-Json
 
-    $tool = [string]$in.tool_name
+    $script:IsAntigravity = ($null -ne $in.PSObject.Properties['toolCall'])
+    $tool = if ($script:IsAntigravity) { [string]$in.toolCall.name } else { [string]$in.tool_name }
     $cwd  = [string]$in.cwd
+    if ([string]::IsNullOrWhiteSpace($cwd) -and $script:IsAntigravity -and $in.workspacePaths -and $in.workspacePaths.Count -gt 0) {
+        $cwd = [string]$in.workspacePaths[0]
+    }
     if ([string]::IsNullOrWhiteSpace($cwd)) { $cwd = (Get-Location).Path }
 
-    if ($tool -eq 'Bash' -or $tool -eq 'PowerShell') {
-        $cmd = [string]$in.tool_input.command
+    if ($tool -eq 'Bash' -or $tool -eq 'PowerShell' -or ($script:IsAntigravity -and $tool -eq 'run_command')) {
+        $cmd = if ($script:IsAntigravity) { [string]$in.toolCall.args.CommandLine } else { [string]$in.tool_input.command }
 
         # 명령 시작 위치에 있는 git 만 본다. 따옴표 안 문장이 우연히 걸리는 것을 줄인다.
         $g = '(?im)(^|[;&|(]\s*)git\s+(-[cC]\s+\S+\s+)*'
@@ -107,6 +132,20 @@ try {
                 Write-Decision 'deny' "현재 브랜치가 $branch 이다. main/dev 에 직접 커밋하지 않는다. 브랜치부터 만든다 (CLAUDE.md §0 Git, §9-2)."; exit 0
             }
         }
+        Write-PassThrough
+        exit 0
+    }
+
+    if ($script:IsAntigravity -and ($tool -eq 'edit_file' -or $tool -eq 'write_file')) {
+        $path = [string]$in.toolCall.args.Path
+        if ([string]::IsNullOrWhiteSpace($path)) { Write-PassThrough; exit 0 }
+
+        $reason = Get-ProtectedReason $path $cwd
+        if ($reason) {
+            Write-Decision 'deny' "$reason (CLAUDE.md §0). 승인이 있으면 사용자에게 에디터에서 하거나 직접 고치도록 청한다."
+            exit 0
+        }
+        Write-PassThrough
         exit 0
     }
 
@@ -146,6 +185,7 @@ try {
         exit 0
     }
 
+    Write-PassThrough
     exit 0
 }
 catch {
