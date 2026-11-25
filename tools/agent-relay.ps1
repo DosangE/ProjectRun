@@ -3,26 +3,32 @@
 
   단발/이어가기 호출:
     powershell -NoProfile -ExecutionPolicy Bypass -File tools/agent-relay.ps1 -Target claude -Role review -Base dev -RunId r1 [-PromptFile <파일>] [-Resume <세션ID>] [-Model <모델>] [-Effort medium]
-    powershell -NoProfile -ExecutionPolicy Bypass -File tools/agent-relay.ps1 -Target agy -Role fix -Approve -PromptFile <파일> -RunId f1
+    powershell -NoProfile -ExecutionPolicy Bypass -File tools/agent-relay.ps1 -Target agy -Role fix -Approval "2026-11-25, 사용자 ㄱㄱ" -PromptFile <파일> -RunId f1
 
-  제한된 교차 검토 왕복 루프 (최대 MaxRounds 회, 자동 커밋·병합 금지):
-    powershell -NoProfile -ExecutionPolicy Bypass -File tools/agent-relay.ps1 -RoundTrip -Impl agy -Reviewer claude -Base dev -RunId rt1 -MaxRounds 2 -Approve
+  제한된 교차 검토 왕복 루프 (최대 2회, 사용자 승인 필수, 자동 커밋·병합 금지):
+    powershell -NoProfile -ExecutionPolicy Bypass -File tools/agent-relay.ps1 -RoundTrip -Impl agy -Reviewer claude -Base dev -RunId rt1 -MaxRounds 2 -Approval "2026-11-25, 사용자 A 해봐"
 
-  안전 제약 (CLAUDE.md §0, §3-4, §5 / docs/RULES/SUBAGENTS.md §7-6):
+  안전 제약 (CLAUDE.md §0, §3-4, §5, §9-2 / docs/RULES/SUBAGENTS.md §7-6):
+    - 동시 실행 잠금(Local\protoharness-agent-relay 뮤텍스): 동시에 2개 이상 실행하면 즉시 거부(exit 2).
+    - 시작 시 현재 브랜치가 main 또는 dev 이면 즉시 거부(exit 2).
     - --dangerously-skip-permissions / bypassPermissions 는 절대 쓰지 않는다.
-    - -Role review/ask 는 읽기 전용(claude: --permission-mode plan + Edit/Write/NotebookEdit 차단, agy: --mode plan).
-    - -Role fix 와 -RoundTrip 은 -Approve 스위치 필수. 자동 커밋·병합·푸시는 계약으로 금지한다.
-    - -Target agy 에 Claude 계열 모델 금지(Gemini 모델만). -RoundTrip 에서 -Impl 과 -Reviewer 는 달라야 한다.
+    - -Role review/ask: claude 는 --tools "Read,Grep,Glob" + --permission-mode dontAsk (Bash·Edit·Write 없음).
+      agy 는 --mode plan (단, agy --mode plan 의 실제 쓰기 차단은 실측 전 확인 못 함).
+    - -Role fix 와 -RoundTrip 은 -Approval "<날짜, 사용자 말>" 필수, -MaxRounds 상한 2.
+    - fix 턴 전후 HEAD·브랜치를 비교해 달라지면 계약 위반(exit 12)으로 중단한다.
+      claude fix 턴은 --disallowedTools 로 git commit/merge/push/reset/clean 을 차단한다.
+    - agy 는 Gemini 모델(^gemini-)만 허용하며 -Model 생략 시 기본 gemini-4-neon-* 를 명시 전달한다.
+    - -RoundTrip 에서 -Impl 과 -Reviewer 는 달라야 하며, 쓰이지 않는 -Target/-Model/-Resume 은 거부(exit 2).
 
   출력 파일 (-PromptFile 옆, 없으면 %TEMP%\protoharness-agent-relay\):
-    <prefix>.<RunId>.sent.md / .out.md / .stderr.log / .diff.patch(리뷰 시) / .result.json
+    <prefix>.<RunId>.sent.md / .out.md / .stderr.log / .raw.json / .diff.patch(리뷰 시) / .result.json
 
   종료 코드:
     0  성공 (RoundTrip 은 PASS)
-    2  인자·가드 거부 (CLI 미호출)
+    2  인자·가드·잠금·브랜치 거부 (CLI 미호출)
     10 RoundTrip 이 MaxRounds 뒤에도 NEEDS_FIX 잔존
-    12 JSON 파싱 실패 또는 RoundTrip 판정 줄(RELAY-VERDICT:) 누락
-    13 CLI 실행 실패 또는 타임아웃
+    12 계약 위반 (fix 턴 중 HEAD·브랜치 변경, JSON 파싱 실패, RoundTrip 판정 줄 누락)
+    13 CLI 실행 실패, git 오류, 또는 타임아웃
 
   주의: 이 파일은 UTF-8 with BOM 으로 저장한다 (Windows PowerShell 5.1 한글 깨짐 방지).
 #>
@@ -56,7 +62,7 @@ param(
 
     [int]$MaxRounds = 2,
     [int]$TimeoutSec = 600,
-    [switch]$Approve
+    [string]$Approval = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -68,14 +74,22 @@ function Exit-Guard([string]$msg) {
     exit 2
 }
 
-function Assert-ModelFamily([string]$agent, [string]$modelName) {
-    if ([string]::IsNullOrWhiteSpace($modelName)) { return }
-    if ($agent -eq 'agy' -and $modelName -match '(?i)(claude|opus|sonnet|haiku)') {
-        Exit-Guard "agy 에는 Gemini 모델만 지정할 수 있다 (SUBAGENTS.md §7-6). 지정값: $modelName"
+function Resolve-AgentModel([string]$agent, [string]$modelName, [string]$effortLevel) {
+    if ($agent -eq 'agy') {
+        $resolved = $modelName
+        if ([string]::IsNullOrWhiteSpace($resolved)) {
+            $tier = if ($effortLevel -eq 'max') { 'xhigh' } else { $effortLevel }
+            $resolved = "gemini-4-neon-$tier"
+        }
+        if ($resolved -notmatch '(?i)^gemini-') {
+            Exit-Guard "agy 에는 Gemini 모델(^gemini-)만 지정할 수 있다 (SUBAGENTS.md §7-6). 지정값: $resolved"
+        }
+        return $resolved
     }
-    if ($agent -eq 'claude' -and $modelName -match '(?i)gemini') {
+    if (-not [string]::IsNullOrWhiteSpace($modelName) -and $modelName -match '(?i)(gemini|gpt)') {
         Exit-Guard "claude 에는 Claude 모델만 지정할 수 있다. 지정값: $modelName"
     }
+    return $modelName
 }
 
 function Invoke-GitRead([string[]]$gitArgs) {
@@ -84,6 +98,15 @@ function Invoke-GitRead([string[]]$gitArgs) {
         throw "git $($gitArgs -join ' ') 실패 (exit $LASTEXITCODE)"
     }
     return @($out)
+}
+
+function Get-GitState {
+    $branch = [string](@(Invoke-GitRead @('branch', '--show-current'))[0])
+    $head   = [string](@(Invoke-GitRead @('rev-parse', '--verify', 'HEAD^{commit}'))[0])
+    return [pscustomobject]@{
+        Branch = $branch.Trim()
+        Head   = $head.Trim()
+    }
 }
 
 function Write-Utf8File([string]$path, [string]$text) {
@@ -95,8 +118,7 @@ function Write-Utf8File([string]$path, [string]$text) {
 }
 
 function Quote-Arg([string]$arg) {
-    if ($null -eq $arg) { return '""' }
-    if ($arg -eq '') { return '""' }
+    if ($null -eq $arg -or $arg -eq '') { return '""' }
     if ($arg -notmatch '[\s"]') { return $arg }
     $escaped = [regex]::Replace($arg, '(\\*)"', '$1$1\"')
     $escaped = [regex]::Replace($escaped, '(\\+)$', '$1$1')
@@ -104,14 +126,10 @@ function Quote-Arg([string]$arg) {
 }
 
 function Build-DiffArtifact([string]$baseRef, [string]$diffPath) {
-    $baseHash  = [string](@(Invoke-GitRead @('rev-parse', '--verify', "$baseRef^{commit}"))[0])
-    $headHash  = [string](@(Invoke-GitRead @('rev-parse', '--verify', 'HEAD^{commit}'))[0])
-    $branch    = [string](@(Invoke-GitRead @('branch', '--show-current'))[0])
-    $mergeBase = [string](@(Invoke-GitRead @('merge-base', $baseHash.Trim(), $headHash.Trim()))[0])
-    $baseHash  = $baseHash.Trim()
-    $headHash  = $headHash.Trim()
-    $branch    = $branch.Trim()
-    $mergeBase = $mergeBase.Trim()
+    $baseHash  = ([string](@(Invoke-GitRead @('rev-parse', '--verify', "$baseRef^{commit}"))[0])).Trim()
+    $headHash  = ([string](@(Invoke-GitRead @('rev-parse', '--verify', 'HEAD^{commit}'))[0])).Trim()
+    $branch    = ([string](@(Invoke-GitRead @('branch', '--show-current'))[0])).Trim()
+    $mergeBase = ([string](@(Invoke-GitRead @('merge-base', $baseHash, $headHash))[0])).Trim()
 
     $dirtyFiles = @(Invoke-GitRead @('diff', '--name-only', 'HEAD') | Where-Object { $_ -ne '' })
     $untracked  = @(Invoke-GitRead @('ls-files', '--others', '--exclude-standard') | Where-Object { $_ -ne '' })
@@ -128,18 +146,46 @@ function Build-DiffArtifact([string]$baseRef, [string]$diffPath) {
         $diffLines = @(Invoke-GitRead @('diff', "$baseRef...HEAD"))
     }
 
-    $header = @(
-        "# Diff scope: $scopeDesc"
-        "# Branch: $branch"
-        ""
-        "## git diff --stat"
-    ) + $statLines
-    if ($untracked.Count -gt 0) {
-        $header += @("", "## Untracked files") + $untracked
-    }
-    $header += @("", "## git diff") + $diffLines
+    $chunks = New-Object System.Collections.Generic.List[string]
+    $chunks.Add("# Diff scope: $scopeDesc")
+    $chunks.Add("# Branch: $branch")
+    $chunks.Add('')
+    $chunks.Add('## git diff --stat')
+    foreach ($l in $statLines) { $chunks.Add([string]$l) }
 
-    Write-Utf8File $diffPath ($header -join "`n")
+    if ($untracked.Count -gt 0) {
+        $chunks.Add('')
+        $chunks.Add('## Untracked files')
+        foreach ($u in $untracked) { $chunks.Add([string]$u) }
+
+        $maxBytes = 102400
+        foreach ($u in $untracked) {
+            $fullPath = Join-Path $repoRoot $u
+            $chunks.Add('')
+            $chunks.Add("### Untracked file content: $u")
+            if (-not (Test-Path -LiteralPath $fullPath -PathType Leaf)) {
+                $chunks.Add('(파일이 존재하지 않거나 디렉터리다)')
+                continue
+            }
+            $fi = Get-Item -LiteralPath $fullPath
+            if ($fi.Length -gt $maxBytes) {
+                $chunks.Add("(크기 $($fi.Length) 바이트 > $maxBytes 바이트 상한 — 본문 생략, 필요 시 직접 읽어라)")
+                continue
+            }
+            $rawBytes = [System.IO.File]::ReadAllBytes($fullPath)
+            if ([Array]::IndexOf($rawBytes, [byte]0) -ge 0) {
+                $chunks.Add('(바이너리 파일 — 본문 생략)')
+                continue
+            }
+            $chunks.Add([System.IO.File]::ReadAllText($fullPath, $utf8NoBom))
+        }
+    }
+
+    $chunks.Add('')
+    $chunks.Add('## git diff')
+    foreach ($l in $diffLines) { $chunks.Add([string]$l) }
+
+    Write-Utf8File $diffPath ($chunks -join "`n")
 
     return [pscustomobject]@{
         BaseRef   = $baseRef
@@ -150,19 +196,40 @@ function Build-DiffArtifact([string]$baseRef, [string]$diffPath) {
         IsDirty   = $isDirty
         ScopeDesc = $scopeDesc
         DiffPath  = $diffPath
-        StatText  = ($statLines -join "`n")
     }
 }
 
+# 응답의 맨 마지막 비어 있지 않은 줄만 검사한다 (본문 인용 오판 방지).
 function Parse-Verdict([string]$text) {
     if ([string]::IsNullOrWhiteSpace($text)) { return $null }
     $lines = @($text -split "\r?\n" | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne '' })
-    for ($i = $lines.Count - 1; $i -ge 0; $i--) {
-        if ($lines[$i] -match '^RELAY-VERDICT:\s*(PASS|NEEDS_FIX)\s*$') {
-            return $Matches[1]
-        }
+    if ($lines.Count -eq 0) { return $null }
+    if ($lines[$lines.Count - 1] -match '^RELAY-VERDICT:\s*(PASS|NEEDS_FIX)\s*$') {
+        return $Matches[1]
     }
     return $null
+}
+
+function Stop-ProcessTree([System.Diagnostics.Process]$proc) {
+    $notes = New-Object System.Collections.Generic.List[string]
+    try {
+        $tkOut = & taskkill /PID $proc.Id /T /F 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            $notes.Add("taskkill 종료 코드 ${LASTEXITCODE}: $($tkOut -join ' ')")
+        }
+    }
+    catch {
+        $notes.Add("taskkill 예외: $($_.Exception.Message)")
+    }
+    try {
+        if (-not $proc.HasExited) {
+            $proc.Kill()
+        }
+    }
+    catch {
+        $notes.Add("Process.Kill 예외: $($_.Exception.Message)")
+    }
+    return ($notes -join '; ')
 }
 
 function Invoke-CliTurn(
@@ -188,6 +255,7 @@ function Invoke-CliTurn(
             ExitCode    = 13
             Agent       = $agent
             Role        = $turnRole
+            Model       = $modelName
             SessionId   = $null
             Verdict     = $null
             Response    = ''
@@ -216,12 +284,14 @@ function Invoke-CliTurn(
         if ($turnRole -eq 'fix') {
             $argsList.Add('--permission-mode')
             $argsList.Add('auto')
+            $argsList.Add('--disallowedTools')
+            $argsList.Add('Bash(git commit*),Bash(git merge*),Bash(git push*),Bash(git reset*),Bash(git clean*)')
         }
         else {
             $argsList.Add('--permission-mode')
-            $argsList.Add('plan')
-            $argsList.Add('--disallowedTools')
-            $argsList.Add('Edit,Write,NotebookEdit')
+            $argsList.Add('dontAsk')
+            $argsList.Add('--tools')
+            $argsList.Add('Read,Grep,Glob')
         }
 
         if (-not [string]::IsNullOrWhiteSpace($modelName)) {
@@ -257,6 +327,7 @@ function Invoke-CliTurn(
             $argsList.Add('auto')
         }
         else {
+            # agy --mode plan 의 실제 쓰기 차단은 실측 전 확인 못 함.
             $argsList.Add('--mode')
             $argsList.Add('plan')
         }
@@ -302,20 +373,25 @@ function Invoke-CliTurn(
 
     $exited = $proc.WaitForExit($timeoutSeconds * 1000)
     if (-not $exited) {
-        try { $proc.Kill() } catch {}
+        $killNote = Stop-ProcessTree $proc
         $sw.Stop()
-        Write-Utf8File $errPath ("Timeout after ${timeoutSeconds}s`n" + $stderrTask.Result)
+        $partialErr = if ($stderrTask.Wait(3000)) { $stderrTask.Result } else { '(stderr 파이프 3초 내 닫히지 않음)' }
+        $errDetail = "Timeout after ${timeoutSeconds}s"
+        if (-not [string]::IsNullOrWhiteSpace($killNote)) { $errDetail += " | kill: $killNote" }
+        Write-Utf8File $errPath ($errDetail + "`n" + $partialErr)
+        $proc.Dispose()
         return [pscustomobject]@{
             ExitCode    = 13
             Agent       = $agent
             Role        = $turnRole
+            Model       = $modelName
             SessionId   = $null
             Verdict     = $null
             Response    = ''
             Usage       = $null
             CostUsd     = $null
             DurationSec = [Math]::Round($sw.Elapsed.TotalSeconds, 2)
-            Error       = "$agent 실행이 ${timeoutSeconds}초 타임아웃을 초과했다."
+            Error       = "$agent 실행이 ${timeoutSeconds}초 타임아웃을 초과했다 ($errDetail)."
             SentPath    = $sentPath
             OutPath     = $outPath
             ErrPath     = $errPath
@@ -323,41 +399,54 @@ function Invoke-CliTurn(
     }
 
     $sw.Stop()
-    $stdout = $stdoutTask.Result
-    $stderr = $stderrTask.Result
+    $stdout = if ($stdoutTask.Wait(5000)) { $stdoutTask.Result } else { '' }
+    $stderr = if ($stderrTask.Wait(5000)) { $stderrTask.Result } else { '(stderr 읽기 5초 초과)' }
     $code   = $proc.ExitCode
+    $proc.Dispose()
 
     Write-Utf8File $errPath $stderr
     Write-Utf8File $rawPath $stdout
 
     $parsed = $null
+    $parseErrors = New-Object System.Collections.Generic.List[string]
     $jsonLine = $stdout.Trim()
     if (-not [string]::IsNullOrWhiteSpace($jsonLine)) {
         try {
             $parsed = $jsonLine | ConvertFrom-Json
         }
         catch {
-            # 앞뒤 비JSON 로그 줄이 섞인 경우 마지막 '{...}' 줄을 시도한다.
+            $parseErrors.Add("전체 JSON 파싱 실패: $($_.Exception.Message)")
             $candidate = @($jsonLine -split "\r?\n" | Where-Object { $_.Trim().StartsWith('{') -and $_.Trim().EndsWith('}') }) | Select-Object -Last 1
             if ($candidate) {
-                try { $parsed = $candidate | ConvertFrom-Json } catch { $parsed = $null }
+                try {
+                    $parsed = $candidate | ConvertFrom-Json
+                }
+                catch {
+                    $parseErrors.Add("마지막 줄 JSON 파싱 실패: $($_.Exception.Message)")
+                    $parsed = $null
+                }
             }
         }
     }
 
     if ($null -eq $parsed) {
+        $parseNote = if ($parseErrors.Count -gt 0) { ' | ' + ($parseErrors -join '; ') } else { '' }
+        if ($parseErrors.Count -gt 0) {
+            Write-Utf8File $errPath ($stderr + "`n[agent-relay JSON parse]$parseNote")
+        }
         Write-Utf8File $outPath $stdout
         return [pscustomobject]@{
             ExitCode    = if ($code -ne 0) { 13 } else { 12 }
             Agent       = $agent
             Role        = $turnRole
+            Model       = $modelName
             SessionId   = $null
             Verdict     = $null
             Response    = $stdout
             Usage       = $null
             CostUsd     = $null
             DurationSec = [Math]::Round($sw.Elapsed.TotalSeconds, 2)
-            Error       = if ($code -ne 0) { "$agent 종료 코드 $code (stderr 참고: $errPath)" } else { "$agent JSON 출력을 해석하지 못했다 (원문: $rawPath)" }
+            Error       = if ($code -ne 0) { "$agent 종료 코드 $code (stderr 참고: $errPath)$parseNote" } else { "$agent JSON 출력을 해석하지 못했다 (원문: $rawPath)$parseNote" }
             SentPath    = $sentPath
             OutPath     = $outPath
             ErrPath     = $errPath
@@ -404,6 +493,7 @@ function Invoke-CliTurn(
         ExitCode    = $finalCode
         Agent       = $agent
         Role        = $turnRole
+        Model       = $modelName
         SessionId   = $sessionId
         Verdict     = Parse-Verdict $response
         Response    = $response
@@ -415,68 +505,6 @@ function Invoke-CliTurn(
         OutPath     = $outPath
         ErrPath     = $errPath
     }
-}
-
-# --- 1. 인자 및 안전 가드 검사 ---
-if ([string]::IsNullOrWhiteSpace($RunId)) {
-    Exit-Guard '-RunId <이름> 은 필수다 (실행별 결과 파일 충돌 방지).'
-}
-if ($RunId -notmatch '^[A-Za-z0-9._-]+$') {
-    Exit-Guard "-RunId 는 영문·숫자·._- 만 허용한다. 입력값: $RunId"
-}
-if ($MaxRounds -lt 1 -or $MaxRounds -gt 5) {
-    Exit-Guard "-MaxRounds 는 1~5 사이여야 한다. 입력값: $MaxRounds"
-}
-if ($TimeoutSec -lt 30) {
-    Exit-Guard "-TimeoutSec 는 30 이상이어야 한다. 입력값: $TimeoutSec"
-}
-
-$basePrompt = ''
-if (-not [string]::IsNullOrWhiteSpace($PromptFile)) {
-    if (-not (Test-Path -LiteralPath $PromptFile)) {
-        Exit-Guard "PromptFile 이 없다: $PromptFile"
-    }
-    $PromptFile = (Resolve-Path -LiteralPath $PromptFile).Path
-    $basePrompt = [System.IO.File]::ReadAllText($PromptFile, $utf8NoBom)
-    $dir  = Split-Path -Parent $PromptFile
-    $stem = [System.IO.Path]::GetFileNameWithoutExtension($PromptFile)
-    $runPrefix = Join-Path $dir "$stem.$RunId"
-}
-else {
-    $basePrompt = $Prompt
-    $relayDir = Join-Path ([System.IO.Path]::GetTempPath()) 'protoharness-agent-relay'
-    $runPrefix = Join-Path $relayDir "relay.$RunId"
-}
-
-$resultJsonPath = "$runPrefix.result.json"
-if (Test-Path -LiteralPath $resultJsonPath) {
-    Exit-Guard "이미 같은 RunId 의 결과 파일이 있다: $resultJsonPath (새 -RunId 를 쓴다)"
-}
-
-if ($RoundTrip) {
-    if ([string]::IsNullOrWhiteSpace($Impl) -or [string]::IsNullOrWhiteSpace($Reviewer)) {
-        Exit-Guard '-RoundTrip 에는 -Impl (agy|claude) 과 -Reviewer (agy|claude) 가 모두 필요하다.'
-    }
-    if ($Impl -eq $Reviewer) {
-        Exit-Guard "교차 검토 위반: -Impl($Impl) 과 -Reviewer($Reviewer) 는 달라야 한다 (SUBAGENTS.md §7-6)."
-    }
-    if (-not $Approve) {
-        Exit-Guard '-RoundTrip 은 구현자 수정(-Role fix)을 포함하므로 사용자 승인(-Approve)이 필요하다 (CLAUDE.md §3-4).'
-    }
-    Assert-ModelFamily $Impl $ImplModel
-    Assert-ModelFamily $Reviewer $ReviewerModel
-}
-else {
-    if ([string]::IsNullOrWhiteSpace($Target)) {
-        Exit-Guard '단발 호출에는 -Target (agy|claude) 이 필요하다.'
-    }
-    if ([string]::IsNullOrWhiteSpace($basePrompt) -and $Role -ne 'review') {
-        Exit-Guard 'PromptFile 또는 Prompt 가 비어 있다.'
-    }
-    if ($Role -eq 'fix' -and -not $Approve) {
-        Exit-Guard '-Role fix 는 사용자 승인(-Approve)이 필요하다 (CLAUDE.md §3-4).'
-    }
-    Assert-ModelFamily $Target $Model
 }
 
 function Build-ReviewPrompt([string]$userPrompt, $diffInfo) {
@@ -507,173 +535,326 @@ function Build-ReviewPrompt([string]$userPrompt, $diffInfo) {
     return $sb.ToString()
 }
 
-function Build-FixPrompt([string]$userPrompt, [string]$reviewText, [int]$roundNum) {
+function Build-FixPrompt([string]$approvalText, [string]$branchName, [string]$userPrompt, [string]$reviewText, [int]$roundNum) {
     $sb = New-Object System.Text.StringBuilder
-    [void]$sb.AppendLine("[agent-relay: 검토 지적 수정 — Round $roundNum]")
-    [void]$sb.AppendLine('- 승인 범위 안에서 아래 검토 지적만 고쳐라. 범위를 넓히지 마라 (CLAUDE.md §3-3).')
-    [void]$sb.AppendLine('- 금지: git commit, git merge, git push, git reset --hard, git clean 실행 금지 (커밋·병합은 사용자 승인 후 메인에서).')
-    [void]$sb.AppendLine('- 금지: 하네스 파일(CLAUDE.md, AGENTS.md, .claude/, .codex/, .agents/, tools/hooks/) 수정 금지.')
+    if ($roundNum -gt 0) {
+        [void]$sb.AppendLine("[agent-relay: 검토 지적 수정 — Round $roundNum]")
+    }
+    else {
+        [void]$sb.AppendLine('[agent-relay: 승인된 수정 실행]')
+    }
+    [void]$sb.AppendLine("승인: $approvalText")
+    [void]$sb.AppendLine("브랜치: $branchName")
+    [void]$sb.AppendLine('- 승인 범위 안에서만 고쳐라. 범위를 넓히지 마라 (CLAUDE.md §3-3).')
+    [void]$sb.AppendLine('- 금지: git commit, git merge, git push, git switch, git checkout, git reset --hard, git clean 실행 금지 (HEAD·브랜치가 바뀌면 계약 위반으로 중단된다).')
+    [void]$sb.AppendLine('- 금지: 하네스 파일(CLAUDE.md, AGENTS.md, .claude/, .codex/, .agents/, tools/hooks/) 수정 금지 (SUBAGENTS.md §7-6).')
     if (-not [string]::IsNullOrWhiteSpace($userPrompt)) {
         [void]$sb.AppendLine('')
-        [void]$sb.AppendLine('## 원래 작업 맥락')
+        [void]$sb.AppendLine('## 작업 지시 / 맥락')
         [void]$sb.AppendLine($userPrompt)
     }
-    [void]$sb.AppendLine('')
-    [void]$sb.AppendLine('## 검토자 지적 원문')
-    [void]$sb.AppendLine($reviewText)
+    if (-not [string]::IsNullOrWhiteSpace($reviewText)) {
+        [void]$sb.AppendLine('')
+        [void]$sb.AppendLine('## 검토자 지적 원문')
+        [void]$sb.AppendLine($reviewText)
+    }
     [void]$sb.AppendLine('')
     [void]$sb.AppendLine('## 보고')
     [void]$sb.AppendLine('수정한 파일:줄과 검증 결과를 간결히 보고하라.')
     return $sb.ToString()
 }
 
-# --- 2. 실행 ---
-if (-not $RoundTrip) {
-    $diffInfo = $null
-    $finalPrompt = $basePrompt
-    if ($Role -eq 'review') {
-        if (-not [string]::IsNullOrWhiteSpace($Base)) {
-            $diffInfo = Build-DiffArtifact $Base "$runPrefix.diff.patch"
+# --- 1. 인자 및 안전 가드 검사 ---
+if ([string]::IsNullOrWhiteSpace($RunId)) {
+    Exit-Guard '-RunId <이름> 은 필수다 (실행별 결과 파일 충돌 방지).'
+}
+if ($RunId -notmatch '^[A-Za-z0-9._-]+$') {
+    Exit-Guard "-RunId 는 영문·숫자·._- 만 허용한다. 입력값: $RunId"
+}
+if ($MaxRounds -lt 1 -or $MaxRounds -gt 2) {
+    Exit-Guard "-MaxRounds 는 1~2 사이여야 한다 (상한 2). 입력값: $MaxRounds"
+}
+if ($TimeoutSec -lt 30) {
+    Exit-Guard "-TimeoutSec 는 30 이상이어야 한다. 입력값: $TimeoutSec"
+}
+
+$basePrompt = ''
+if (-not [string]::IsNullOrWhiteSpace($PromptFile)) {
+    if (-not (Test-Path -LiteralPath $PromptFile)) {
+        Exit-Guard "PromptFile 이 없다: $PromptFile"
+    }
+    $PromptFile = (Resolve-Path -LiteralPath $PromptFile).Path
+    $basePrompt = [System.IO.File]::ReadAllText($PromptFile, $utf8NoBom)
+    $dir  = Split-Path -Parent $PromptFile
+    $stem = [System.IO.Path]::GetFileNameWithoutExtension($PromptFile)
+    $runPrefix = Join-Path $dir "$stem.$RunId"
+}
+else {
+    $basePrompt = $Prompt
+    $relayDir = Join-Path ([System.IO.Path]::GetTempPath()) 'protoharness-agent-relay'
+    $runPrefix = Join-Path $relayDir "relay.$RunId"
+}
+
+$resultJsonPath = "$runPrefix.result.json"
+if (Test-Path -LiteralPath $resultJsonPath) {
+    Exit-Guard "이미 같은 RunId 의 결과 파일이 있다: $resultJsonPath (새 -RunId 를 쓴다)"
+}
+
+$resolvedModel         = $Model
+$resolvedImplModel     = $ImplModel
+$resolvedReviewerModel = $ReviewerModel
+
+if ($RoundTrip) {
+    if (-not [string]::IsNullOrWhiteSpace($Target) -or -not [string]::IsNullOrWhiteSpace($Model) -or -not [string]::IsNullOrWhiteSpace($Resume)) {
+        Exit-Guard '-RoundTrip 에서는 -Target, -Model, -Resume 을 함께 쓰지 않는다 (-Impl/-Reviewer/-ImplModel/-ReviewerModel 을 쓴다).'
+    }
+    if ([string]::IsNullOrWhiteSpace($Impl) -or [string]::IsNullOrWhiteSpace($Reviewer)) {
+        Exit-Guard '-RoundTrip 에는 -Impl (agy|claude) 과 -Reviewer (agy|claude) 가 모두 필요하다.'
+    }
+    if ($Impl -eq $Reviewer) {
+        Exit-Guard "교차 검토 위반: -Impl($Impl) 과 -Reviewer($Reviewer) 는 달라야 한다 (SUBAGENTS.md §7-6)."
+    }
+    if ([string]::IsNullOrWhiteSpace($Approval)) {
+        Exit-Guard '-RoundTrip 은 구현자 수정을 포함하므로 -Approval "<날짜, 사용자 말>" 이 필수다 (CLAUDE.md §3-4).'
+    }
+    $resolvedImplModel     = Resolve-AgentModel $Impl $ImplModel $Effort
+    $resolvedReviewerModel = Resolve-AgentModel $Reviewer $ReviewerModel $Effort
+}
+else {
+    if ([string]::IsNullOrWhiteSpace($Target)) {
+        Exit-Guard '단발 호출에는 -Target (agy|claude) 이 필요하다.'
+    }
+    if ([string]::IsNullOrWhiteSpace($basePrompt) -and $Role -ne 'review') {
+        Exit-Guard 'PromptFile 또는 Prompt 가 비어 있다.'
+    }
+    if ($Role -eq 'fix' -and [string]::IsNullOrWhiteSpace($Approval)) {
+        Exit-Guard '-Role fix 는 -Approval "<날짜, 사용자 말>" 이 필수다 (CLAUDE.md §3-4).'
+    }
+    $resolvedModel = Resolve-AgentModel $Target $Model $Effort
+}
+
+# 시작 브랜치 검사: main/dev 이면 즉시 거부 (CLAUDE.md §9-2).
+try {
+    $startState = Get-GitState
+}
+catch {
+    [Console]::Error.WriteLine("agent-relay 오류(exit 13): 시작 git 상태 읽기 실패 — $($_.Exception.Message)")
+    exit 13
+}
+if ([string]::IsNullOrWhiteSpace($startState.Branch) -or $startState.Branch -eq 'main' -or $startState.Branch -eq 'dev') {
+    Exit-Guard "현재 브랜치가 '$($startState.Branch)' 이다. main/dev 또는 detached HEAD 에서는 실행하지 않는다 (CLAUDE.md §9-2)."
+}
+
+# --- 2. 동시 실행 잠금 (병렬 쓰기 금지, SUBAGENTS.md §7-6) ---
+$mutex = New-Object System.Threading.Mutex($false, 'Local\protoharness-agent-relay')
+$lockHeld = $false
+try {
+    try {
+        $lockHeld = $mutex.WaitOne(0)
+    }
+    catch [System.Threading.AbandonedMutexException] {
+        $lockHeld = $true
+    }
+    if (-not $lockHeld) {
+        Exit-Guard '다른 agent-relay 실행이 이미 진행 중이다. 동시 실행은 금지한다 (SUBAGENTS.md §7-6).'
+    }
+
+    # --- 3. 단발 실행 ---
+    if (-not $RoundTrip) {
+        $diffInfo = $null
+        $turn = $null
+        $finalExit = 13
+        $finalError = $null
+        try {
+            $finalPrompt = $basePrompt
+            if ($Role -eq 'review') {
+                if (-not [string]::IsNullOrWhiteSpace($Base)) {
+                    $diffInfo = Build-DiffArtifact $Base "$runPrefix.diff.patch"
+                }
+                $finalPrompt = Build-ReviewPrompt $basePrompt $diffInfo
+            }
+            elseif ($Role -eq 'fix') {
+                $finalPrompt = Build-FixPrompt $Approval $startState.Branch $basePrompt '' 0
+            }
+
+            $preFixState = if ($Role -eq 'fix') { Get-GitState } else { $null }
+            $turn = Invoke-CliTurn $Target $Role $finalPrompt $runPrefix $Resume $resolvedModel $Effort $TimeoutSec
+            $finalExit  = $turn.ExitCode
+            $finalError = $turn.Error
+
+            if ($Role -eq 'fix') {
+                $postFixState = Get-GitState
+                if ($postFixState.Head -ne $preFixState.Head -or $postFixState.Branch -ne $preFixState.Branch) {
+                    $finalExit  = 12
+                    $finalError = "계약 위반: fix 턴 중 HEAD 또는 브랜치가 변경됐다 (전: $($preFixState.Branch)@$($preFixState.Head.Substring(0,7)), 후: $($postFixState.Branch)@$($postFixState.Head.Substring(0,7)))."
+                }
+            }
         }
-        $finalPrompt = Build-ReviewPrompt $basePrompt $diffInfo
-    }
-    elseif ($Role -eq 'fix') {
-        $finalPrompt = "[agent-relay: 승인된 수정 실행]`n- 금지: git commit, git merge, git push, git reset --hard, git clean 실행 금지.`n`n$basePrompt"
+        catch {
+            $finalExit  = 13
+            $finalError = "실행 중 예외: $($_.Exception.Message)"
+        }
+
+        $summary = [ordered]@{
+            mode        = 'single'
+            runId       = $RunId
+            branch      = $startState.Branch
+            approval    = if ([string]::IsNullOrWhiteSpace($Approval)) { $null } else { $Approval }
+            target      = $Target
+            role        = $Role
+            model       = if ([string]::IsNullOrWhiteSpace($resolvedModel)) { 'default' } else { $resolvedModel }
+            exitCode    = $finalExit
+            verdict     = if ($turn) { $turn.Verdict } else { $null }
+            sessionId   = if ($turn) { $turn.SessionId } else { $null }
+            durationSec = if ($turn) { $turn.DurationSec } else { 0 }
+            costUsd     = if ($turn) { $turn.CostUsd } else { $null }
+            usage       = if ($turn) { $turn.Usage } else { $null }
+            error       = $finalError
+            files       = [ordered]@{
+                sent   = if ($turn) { $turn.SentPath } else { $null }
+                out    = if ($turn) { $turn.OutPath } else { $null }
+                stderr = if ($turn) { $turn.ErrPath } else { $null }
+                diff   = if ($diffInfo) { $diffInfo.DiffPath } else { $null }
+                result = $resultJsonPath
+            }
+        }
+        Write-Utf8File $resultJsonPath ($summary | ConvertTo-Json -Depth 10)
+
+        Write-Output "agent-relay 완료: target=$Target role=$Role exit=$finalExit verdict=$($summary.verdict) session=$($summary.sessionId) duration=$($summary.durationSec)s"
+        Write-Output "결과 파일: $resultJsonPath"
+        if ($finalError) { Write-Output "오류: $finalError" }
+        exit $finalExit
     }
 
-    $turn = Invoke-CliTurn $Target $Role $finalPrompt $runPrefix $Resume $Model $Effort $TimeoutSec
+    # --- 4. RoundTrip 교차 검토 루프 ---
+    $rounds = New-Object System.Collections.Generic.List[object]
+    $reviewerSession = $null
+    $implSession     = $null
+    $finalExit       = 10
+    $finalVerdict    = $null
+    $finalError      = $null
 
-    $summary = [ordered]@{
-        mode        = 'single'
-        runId       = $RunId
-        target      = $Target
-        role        = $Role
-        exitCode    = $turn.ExitCode
-        verdict     = $turn.Verdict
-        sessionId   = $turn.SessionId
-        durationSec = $turn.DurationSec
-        costUsd     = $turn.CostUsd
-        usage       = $turn.Usage
-        error       = $turn.Error
-        files       = [ordered]@{
-            sent   = $turn.SentPath
-            out    = $turn.OutPath
-            stderr = $turn.ErrPath
-            diff   = if ($diffInfo) { $diffInfo.DiffPath } else { $null }
-            result = $resultJsonPath
+    try {
+        for ($r = 1; $r -le $MaxRounds; $r++) {
+            $revPrefix = "$runPrefix.r$r.review"
+            $diffInfo  = Build-DiffArtifact $Base "$revPrefix.diff.patch"
+            $revPrompt = if ($r -eq 1) {
+                Build-ReviewPrompt $basePrompt $diffInfo
+            }
+            else {
+                Build-ReviewPrompt "이전 지적에 대한 수정이 반영됐다. 새 Diff($($diffInfo.DiffPath))를 다시 검토하고 미해결 지적이 있는지 판정하라." $diffInfo
+            }
+
+            $revTurn = Invoke-CliTurn $Reviewer 'review' $revPrompt $revPrefix $reviewerSession $resolvedReviewerModel $Effort $TimeoutSec
+            if (-not [string]::IsNullOrWhiteSpace($revTurn.SessionId)) { $reviewerSession = $revTurn.SessionId }
+
+            $roundRec = [ordered]@{
+                round  = $r
+                review = [ordered]@{
+                    agent       = $Reviewer
+                    model       = if ([string]::IsNullOrWhiteSpace($resolvedReviewerModel)) { 'default' } else { $resolvedReviewerModel }
+                    exitCode    = $revTurn.ExitCode
+                    verdict     = $revTurn.Verdict
+                    sessionId   = $revTurn.SessionId
+                    durationSec = $revTurn.DurationSec
+                    costUsd     = $revTurn.CostUsd
+                    usage       = $revTurn.Usage
+                    error       = $revTurn.Error
+                    outPath     = $revTurn.OutPath
+                    diffPath    = $diffInfo.DiffPath
+                }
+                fix = $null
+            }
+            $rounds.Add($roundRec)
+
+            if ($revTurn.ExitCode -ne 0) {
+                $finalExit  = $revTurn.ExitCode
+                $finalError = "Round $r 검토자($Reviewer) 실패: $($revTurn.Error)"
+                break
+            }
+            if ([string]::IsNullOrWhiteSpace($revTurn.Verdict)) {
+                $finalExit  = 12
+                $finalError = "Round $r 검토자($Reviewer) 응답의 마지막 줄에 'RELAY-VERDICT: PASS|NEEDS_FIX' 가 없다 ($($revTurn.OutPath))."
+                break
+            }
+
+            $finalVerdict = $revTurn.Verdict
+            if ($revTurn.Verdict -eq 'PASS') {
+                $finalExit = 0
+                break
+            }
+
+            if ($r -ge $MaxRounds) {
+                $finalExit  = 10
+                $finalError = "MaxRounds($MaxRounds) 후에도 NEEDS_FIX 가 남아 중단했다 ($($revTurn.OutPath))."
+                break
+            }
+
+            $preFixState = Get-GitState
+            $fixPrefix   = "$runPrefix.r$r.fix"
+            $fixPrompt   = Build-FixPrompt $Approval $preFixState.Branch $basePrompt $revTurn.Response $r
+            $fixTurn     = Invoke-CliTurn $Impl 'fix' $fixPrompt $fixPrefix $implSession $resolvedImplModel $Effort $TimeoutSec
+            if (-not [string]::IsNullOrWhiteSpace($fixTurn.SessionId)) { $implSession = $fixTurn.SessionId }
+            $postFixState = Get-GitState
+
+            $fixExit  = $fixTurn.ExitCode
+            $fixError = $fixTurn.Error
+            if ($postFixState.Head -ne $preFixState.Head -or $postFixState.Branch -ne $preFixState.Branch) {
+                $fixExit  = 12
+                $fixError = "계약 위반: Round $r fix 턴 중 HEAD 또는 브랜치가 변경됐다 (전: $($preFixState.Branch)@$($preFixState.Head.Substring(0,7)), 후: $($postFixState.Branch)@$($postFixState.Head.Substring(0,7)))."
+            }
+
+            $roundRec.fix = [ordered]@{
+                agent       = $Impl
+                model       = if ([string]::IsNullOrWhiteSpace($resolvedImplModel)) { 'default' } else { $resolvedImplModel }
+                exitCode    = $fixExit
+                sessionId   = $fixTurn.SessionId
+                durationSec = $fixTurn.DurationSec
+                costUsd     = $fixTurn.CostUsd
+                usage       = $fixTurn.Usage
+                error       = $fixError
+                outPath     = $fixTurn.OutPath
+            }
+
+            if ($fixExit -ne 0) {
+                $finalExit  = $fixExit
+                $finalError = "Round $r 구현자($Impl) 수정 실패: $fixError"
+                break
+            }
         }
     }
-    Write-Utf8File $resultJsonPath ($summary | ConvertTo-Json -Depth 10)
+    catch {
+        $finalExit  = 13
+        $finalError = "RoundTrip 중 예외: $($_.Exception.Message)"
+    }
 
-    Write-Output "agent-relay 완료: target=$Target role=$Role exit=$($turn.ExitCode) verdict=$($turn.Verdict) session=$($turn.SessionId) duration=$($turn.DurationSec)s"
+    $rtSummary = [ordered]@{
+        mode            = 'roundtrip'
+        runId           = $RunId
+        branch          = $startState.Branch
+        approval        = $Approval
+        impl            = $Impl
+        reviewer        = $Reviewer
+        implModel       = if ([string]::IsNullOrWhiteSpace($resolvedImplModel)) { 'default' } else { $resolvedImplModel }
+        reviewerModel   = if ([string]::IsNullOrWhiteSpace($resolvedReviewerModel)) { 'default' } else { $resolvedReviewerModel }
+        base            = $Base
+        maxRounds       = $MaxRounds
+        exitCode        = $finalExit
+        verdict         = $finalVerdict
+        reviewerSession = $reviewerSession
+        implSession     = $implSession
+        error           = $finalError
+        rounds          = $rounds
+        resultPath      = $resultJsonPath
+    }
+    Write-Utf8File $resultJsonPath ($rtSummary | ConvertTo-Json -Depth 12)
+
+    Write-Output "agent-relay RoundTrip 종료: impl=$Impl reviewer=$Reviewer rounds=$($rounds.Count)/$MaxRounds exit=$finalExit verdict=$finalVerdict"
     Write-Output "결과 파일: $resultJsonPath"
-    if ($turn.Error) { Write-Output "오류: $($turn.Error)" }
-    exit $turn.ExitCode
+    if ($finalError) { Write-Output "사유: $finalError" }
+    exit $finalExit
 }
-
-# --- 3. RoundTrip 교차 검토 루프 ---
-$rounds = New-Object System.Collections.Generic.List[object]
-$reviewerSession = $null
-$implSession     = $null
-$finalExit       = 10
-$finalVerdict    = $null
-$finalError      = $null
-
-for ($r = 1; $r -le $MaxRounds; $r++) {
-    $revPrefix = "$runPrefix.r$r.review"
-    $diffInfo  = Build-DiffArtifact $Base "$revPrefix.diff.patch"
-    $revPrompt = if ($r -eq 1) {
-        Build-ReviewPrompt $basePrompt $diffInfo
-    }
-    else {
-        Build-ReviewPrompt "이전 지적에 대한 수정이 반영됐다. 새 Diff($($diffInfo.DiffPath))를 다시 검토하고 미해결 지적이 있는지 판정하라." $diffInfo
-    }
-
-    $revTurn = Invoke-CliTurn $Reviewer 'review' $revPrompt $revPrefix $reviewerSession $ReviewerModel $Effort $TimeoutSec
-    if (-not [string]::IsNullOrWhiteSpace($revTurn.SessionId)) { $reviewerSession = $revTurn.SessionId }
-
-    $roundRec = [ordered]@{
-        round  = $r
-        review = [ordered]@{
-            agent       = $Reviewer
-            exitCode    = $revTurn.ExitCode
-            verdict     = $revTurn.Verdict
-            sessionId   = $revTurn.SessionId
-            durationSec = $revTurn.DurationSec
-            costUsd     = $revTurn.CostUsd
-            usage       = $revTurn.Usage
-            error       = $revTurn.Error
-            outPath     = $revTurn.OutPath
-            diffPath    = $diffInfo.DiffPath
-        }
-        fix = $null
-    }
-    $rounds.Add($roundRec)
-
-    if ($revTurn.ExitCode -ne 0) {
-        $finalExit  = $revTurn.ExitCode
-        $finalError = "Round $r 검토자($Reviewer) 실패: $($revTurn.Error)"
-        break
-    }
-    if ([string]::IsNullOrWhiteSpace($revTurn.Verdict)) {
-        $finalExit  = 12
-        $finalError = "Round $r 검토자($Reviewer) 응답에 'RELAY-VERDICT: PASS|NEEDS_FIX' 줄이 없다 ($($revTurn.OutPath))."
-        break
-    }
-
-    $finalVerdict = $revTurn.Verdict
-    if ($revTurn.Verdict -eq 'PASS') {
-        $finalExit = 0
-        break
-    }
-
-    if ($r -ge $MaxRounds) {
-        $finalExit  = 10
-        $finalError = "MaxRounds($MaxRounds) 후에도 NEEDS_FIX 가 남아 중단했다 ($($revTurn.OutPath))."
-        break
-    }
-
-    $fixPrefix = "$runPrefix.r$r.fix"
-    $fixPrompt = Build-FixPrompt $basePrompt $revTurn.Response $r
-    $fixTurn   = Invoke-CliTurn $Impl 'fix' $fixPrompt $fixPrefix $implSession $ImplModel $Effort $TimeoutSec
-    if (-not [string]::IsNullOrWhiteSpace($fixTurn.SessionId)) { $implSession = $fixTurn.SessionId }
-
-    $roundRec.fix = [ordered]@{
-        agent       = $Impl
-        exitCode    = $fixTurn.ExitCode
-        sessionId   = $fixTurn.SessionId
-        durationSec = $fixTurn.DurationSec
-        costUsd     = $fixTurn.CostUsd
-        usage       = $fixTurn.Usage
-        error       = $fixTurn.Error
-        outPath     = $fixTurn.OutPath
-    }
-
-    if ($fixTurn.ExitCode -ne 0) {
-        $finalExit  = $fixTurn.ExitCode
-        $finalError = "Round $r 구현자($Impl) 수정 실패: $($fixTurn.Error)"
-        break
-    }
+finally {
+    if ($lockHeld) { $mutex.ReleaseMutex() }
+    $mutex.Dispose()
 }
-
-$rtSummary = [ordered]@{
-    mode            = 'roundtrip'
-    runId           = $RunId
-    impl            = $Impl
-    reviewer        = $Reviewer
-    base            = $Base
-    maxRounds       = $MaxRounds
-    exitCode        = $finalExit
-    verdict         = $finalVerdict
-    reviewerSession = $reviewerSession
-    implSession     = $implSession
-    error           = $finalError
-    rounds          = $rounds
-    resultPath      = $resultJsonPath
-}
-Write-Utf8File $resultJsonPath ($rtSummary | ConvertTo-Json -Depth 12)
-
-Write-Output "agent-relay RoundTrip 종료: impl=$Impl reviewer=$Reviewer rounds=$($rounds.Count)/$MaxRounds exit=$finalExit verdict=$finalVerdict"
-Write-Output "결과 파일: $resultJsonPath"
-if ($finalError) { Write-Output "사유: $finalError" }
-exit $finalExit

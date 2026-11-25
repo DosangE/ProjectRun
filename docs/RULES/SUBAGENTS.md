@@ -130,5 +130,11 @@ Antigravity(`agy`)는 세 번째 모델 계열(Gemini)이다 (`docs/DECISIONS.md
 
 **자동 중계 (`tools/agent-relay.ps1`)** — Claude Code 와 Antigravity(`agy`) 사이에서 복사·붙여넣기 없이 비대화형으로 검토 지시·수정 요청·결과를 주고받는다 (`docs/DECISIONS.md` 2026-11-25 "Claude ↔ Antigravity 자동 중계 스크립트").
 - 단발/이어가기: `powershell -NoProfile -ExecutionPolicy Bypass -File tools/agent-relay.ps1 -Target claude|agy -Role review|fix|ask -Base dev -RunId <이름> [-PromptFile <파일>] [-Resume <세션ID>]`
-- 제한된 교차 검토 왕복(`-RoundTrip`, 최대 `-MaxRounds` 회): `powershell -NoProfile -ExecutionPolicy Bypass -File tools/agent-relay.ps1 -RoundTrip -Impl agy|claude -Reviewer claude|agy -Base dev -RunId <이름> -MaxRounds 2 -Approve`
-- 가드: `--dangerously-skip-permissions`·`bypassPermissions` 는 쓰지 않는다. `-Role review`/`ask` 는 읽기 전용(`claude` 는 `--permission-mode plan` + `Edit,Write,NotebookEdit` 차단, `agy` 는 `--mode plan`). `-Role fix` 와 `-RoundTrip` 은 `-Approve` 필수이며 자동 커밋·병합·푸시는 계약으로 막는다. `-Target agy` 에 Claude 모델 지정 금지, `-RoundTrip` 에서 `-Impl` 과 `-Reviewer` 가 같으면 거부(exit 2). 결과·세션ID·토큰은 `<prefix>.<RunId>.result.json` 에 남긴다. `agy` 세션 안에서 부를 때는 샌드박스 밖 실행이 필요하다.
+- 제한된 교차 검토 왕복(`-RoundTrip`, **위 "무인 실행 금지" 의 예외**: 사용자 승인 `-Approval "<날짜, 사용자 말>"` 필수, 최대 2회(`-MaxRounds` 상한 2), 자동 커밋·병합·푸시 금지): `powershell -NoProfile -ExecutionPolicy Bypass -File tools/agent-relay.ps1 -RoundTrip -Impl agy|claude -Reviewer claude|agy -Base dev -RunId <이름> -MaxRounds 2 -Approval "<날짜, 사용자 말>"`
+- 가드:
+  - 동시 실행 잠금(`Local\protoharness-agent-relay` 뮤텍스) 및 시작 시 `main`/`dev`·detached HEAD 거부(exit 2).
+  - `--dangerously-skip-permissions`·`bypassPermissions` 는 쓰지 않는다.
+  - `-Role review`/`ask`: `claude` 는 `--tools "Read,Grep,Glob"` + `--permission-mode dontAsk`(Bash·Edit·Write 없음). `agy` 는 `--mode plan` 을 넘기나 실제 쓰기 차단은 실측 전 **확인 못 함**.
+  - `-Role fix` 와 `-RoundTrip`: `-Approval "<날짜, 사용자 말>"` 필수(프롬프트의 `승인:`·`브랜치:` 줄과 `.result.json` 에 기록), 하네스 파일 수정 금지, `fix` 턴 전후 `HEAD`·브랜치 비교(달라지면 exit 12), `claude` fix 는 `--disallowedTools` 로 `git commit`/`merge`/`push`/`reset`/`clean` 차단.
+  - `agy` 는 Gemini 모델(`^gemini-`)만 허용하며 생략 시 `gemini-4-neon-*` 를 명시 전달한다. `-RoundTrip` 에서 `-Impl`=`-Reviewer` 이거나 `-Target`·`-Model`·`-Resume` 을 함께 주면 거부(exit 2).
+  - 결과·세션ID·토큰·비용은 `<prefix>.<RunId>.result.json` 에 남긴다. `agy` 세션 안에서 부를 때는 샌드박스 밖 실행이 필요하다.
