@@ -9,13 +9,17 @@
 
   인덱스(index/symbols.tsv) 신선도 알림은 2026-11-13 에 뺐다. 인덱스가 라우터의 첫 조회에서
   내려가 선택 도구가 됐다 (DECISIONS 2026-11-13 "하네스 비용 기준선", LOOKUP.md §6-2).
-  출력은 평문 stdout (exit 0). 알릴 것이 없으면 아무것도 출력하지 않는다.
+  출력:
+    -Format plain (기본, Claude Code): 평문 stdout (exit 0). 알릴 것이 없으면 아무것도 출력하지 않는다.
+    -Format antigravity (Antigravity): JSON stdout (exit 0). 알릴 것이 있으면 injectSteps, 없으면 {}.
 
   주의: 이 파일은 UTF-8 with BOM 으로 저장한다 (Windows PowerShell 5.1).
 #>
 
 param(
-    [string]$Ref = 'dev'
+    [string]$Ref = 'dev',
+    [ValidateSet('plain', 'antigravity')]
+    [string]$Format = 'plain'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -74,7 +78,28 @@ try {
         }
     }
 
-    if ($lines.Count -gt 0) {
+    if ($Format -eq 'antigravity') {
+        if ($lines.Count -gt 0) {
+            $obj = @{
+                injectSteps = @(
+                    @{
+                        systemMessage = @{
+                            systemMessage = ($lines -join "`n")
+                        }
+                    }
+                )
+            }
+            $json = $obj | ConvertTo-Json -Compress -Depth 6
+        }
+        else {
+            $json = '{}'
+        }
+        $bytes = (New-Object System.Text.UTF8Encoding($false)).GetBytes($json)
+        $out = [Console]::OpenStandardOutput()
+        $out.Write($bytes, 0, $bytes.Length)
+        $out.Flush()
+    }
+    elseif ($lines.Count -gt 0) {
         $bytes = (New-Object System.Text.UTF8Encoding($false)).GetBytes(($lines -join "`n") + "`n")
         $out = [Console]::OpenStandardOutput()
         $out.Write($bytes, 0, $bytes.Length)

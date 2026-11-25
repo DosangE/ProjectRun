@@ -1,0 +1,23 @@
+{
+  "protoharness-hooks": {
+    "SessionStart": [
+      {
+        "type": "command",
+        "command": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File ..\\tools\\hooks\\session-start.ps1 -Format antigravity",
+        "timeout": 15
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "run_command|edit_file|write_file",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File ..\\tools\\hooks\\guard.ps1",
+            "timeout": 15
+          }
+        ]
+      }
+    ]
+  }
+}
