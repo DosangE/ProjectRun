@@ -109,7 +109,7 @@ Antigravity(`agy`)는 세 번째 모델 계열(Gemini)이다 (`docs/DECISIONS.md
 | 막혔을 때 진단 (§4-5 에서 3번 실패한 뒤) | ❌ | 가설과 확인 방법을 나눠 적는다 |
 | 작은 구현 (UI·`tools/`·`fix/`) | ✅ | §3 합의와 §9 브랜치. 시뮬·씬·프리팹·에셋은 맡기지 않는다 |
 
-- 무인 실행(`/goal`·`/schedule`)과 병렬 쓰기는 하지 않는다. `--dangerously-skip-permissions`·Turbo·`always-proceed` 로 돌리지 않는다.
+- 무인 실행(`/goal`·`/schedule`)과 병렬 쓰기는 하지 않는다. 예외는 아래 "Claude 가 agy 를 부를 때" 하나다. `--dangerously-skip-permissions`·Turbo·`always-proceed` 로 돌리지 않는다.
 - 검토·검수는 **Gemini 모델로** 한다. Antigravity 안에서 Claude 모델을 고르면 다른 계열이 아니다.
 - Antigravity 가 만든 커밋에는 `Assisted-by: Antigravity (<모델 이름>)` 줄을 붙인다. git 작성자가 사용자와 같아 이 줄이 없으면 누가 썼는지 남지 않는다.
 - Unity·Blender MCP 는 사용자가 그 작업에서 허락할 때만 쓴다. 에디터와 Blender 는 한 번에 한쪽만 쓴다 (CLAUDE.md §7 병렬 절대 금지).
@@ -127,6 +127,16 @@ Antigravity(`agy`)는 세 번째 모델 계열(Gemini)이다 (`docs/DECISIONS.md
 - 하네스 파일: `CLAUDE.md`, `AGENTS.md`, `.claude/settings*.json`, `.claude/agents/`, `.codex/`, `.agents/`, `tools/hooks/`. `tools/hooks/guard.ps1` 이 파일 편집 도구로 고치는 것을 Claude 는 ask, Codex·Antigravity 는 deny 로 잡는다. 셸로 쓰는 것은 잡지 못한다 — 셸로 돌아가지 않는다 (CLAUDE.md §3-4).
 - codex 가 구현한 브랜치에서는 §7-5 의 병합 전 Codex 리뷰가 같은 계열이라 `검토:` 로 세지 않는다. Claude 검토는 메인이 체크리스트로 직접 한다(파견은 §7-3 대로 사용자가 지시할 때).
 - 검토자는 지적만 하고 고치지 않는다. 고치는 것은 구현한 쪽이거나 사용자가 정한다.
+
+**Claude 가 agy 를 부를 때 (`tools/agy-run.ps1`)** — 사용자가 agy 에 맡기라고 지시한 작업만 (`docs/DECISIONS.md` 2026-11-25 "Claude 가 agy 를 부르는 실행"). 사용자의 agy 창이 아니라 새 대화에서 돈다.
+- 실행: `powershell -NoProfile -ExecutionPolicy Bypass -File tools/agy-run.ps1 -Role ask|fix -PromptFile <지시서> -RunId <이름> [-Allow "<고쳐도 되는 파일,…>"] [-Resume <앞 RunId>]`. 오래 걸리므로 `run_in_background` 로 띄운다.
+- 지시서: `승인:`·`브랜치:` 줄(§3-4, §9-2)과 무엇을·어디까지·판정 기준(§7-4). agy 는 이 대화를 모른다.
+- `ask` 는 읽기 전용, `fix` 는 `-Allow` 파일만 고친다. 둘 다 셸과 MCP 가 닫힌다. **시험·컴파일·git 은 Claude 가 한다.** 하네스·git·씬·프리팹·설정 파일은 `-Allow` 로 받지 않는다. 시뮬은 위 표대로 맡기지 않는다(스크립트는 판정하지 못한다).
+- 실행하는 동안 Claude 도 작업 트리에 쓰지 않는다. 앞뒤 대조가 누가 바꿨는지 구분하지 못한다.
+- 종료 코드: 0 끝남 / 2 거부 / 10 막힘·질문 / 12 계약 위반 / 13 실행 실패. **12 면 되돌리거나 이어 가지 않고** `result.json` 의 `violations` 를 사용자에게 보고한다. 10 은 승인 범위 안의 세부면 `-Resume` 으로 답하고, 범위 밖이면 사용자에게 묻는다. 13 은 원문을 보고한다.
+- 왕복은 한 작업에 최대 2번이다(`-Resume` 이 막는다). 새 `-RunId` 로 같은 작업을 다시 시작해 늘리지 않는다(§3-4 쪼개기).
+- 결과는 믿지 않고 확인한다(§7-4): diff 를 읽고, 시험을 돌리고, 통과하면 Claude 가 `Assisted-by: Antigravity (<모델 이름>)` 로 커밋한다. 병합은 사용자가 시킬 때만.
+- 보지 못하는 것: `.gitignore` 가 무시하는 파일, 저장소 밖의 파일, 원격 저장소. `-Allow` 에 있는 파일의 폴더에 새로 만든 무시 대상 파일도 잡지 못한다.
 
 **자동 중계 (`tools/agent-relay.ps1`, `review`/`ask` 전용)** — 비대화형 읽기 전용 교차 검토·질의와 결과(세션ID·토큰·비용)를 파일로 주고받는다 (`docs/DECISIONS.md` 2026-11-25 "Claude 비대화형 교차 검토 중계 스크립트"). 쓰기(`fix`)·자동 왕복 루프는 두지 않는다.
 - 실행: `powershell -NoProfile -ExecutionPolicy Bypass -File tools/agent-relay.ps1 -Target claude -Role review|ask -Base dev -RunId <이름> [-PromptFile <파일>] [-IncludeWorktree] [-Resume <세션ID>]`
