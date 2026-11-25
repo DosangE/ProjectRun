@@ -33,7 +33,7 @@
     - 정상 `review`(`ro-ok-163224`): `exit=0`, `verdict=PASS`, 4.74s, `costUsd=0.2282`, `in=4 / cacheCreate=27,775 / cacheRead=10,049 / out=197`, `diff.patch` 한글 정상.
     - 판정 줄 누락 `review`(`ro-nov-163224`): `exit=12`, 2.15s, `"review 응답의 마지막 줄에 'RELAY-VERDICT: PASS|NEEDS_FIX' 가 없다"`.
   - **커밋 기준** `Assets/`·`Packages/`·`ProjectSettings/` 무변경(`git diff --name-only dev...HEAD`). 작업 트리의 `packages-lock.json`·`ProjectVersion.txt`·`ProtoHarness.slnx` 는 기존 에디터 버전 차이다.
-  - **Codex 재검토 4건 반영분 동작 검증 (2026-11-25, Claude 가 임시 저장소와 가짜 `claude.cmd` 로 실행, 26개 모두 통과)**:
+  - **Codex 재검토 4건 반영분 동작 검증 (2026-11-25, Claude 가 임시 저장소와 가짜 `claude.cmd` 로 실행, 24개 모두 통과)**:
     - PowerShell 5.1 구문 검사(`[System.Management.Automation.Language.Parser]::ParseFile`): `ParseErrors: 0`, 빈 `catch` 0건, UTF-8 BOM(`EF BB BF`).
     - exit 0: `PASS`, `NEEDS_FIX`, 대상이 아닌 파일의 미커밋 변경, `-IncludeWorktree`, 대량 stderr.
     - exit 2 (`claude` 호출 0회): 대상 파일의 미커밋 수정(한글 경로 포함)·스테이지·삭제·이름 변경, 같은 `RunId` 다시(기존 산출물 그대로), 같은 `RunId` 동시(하나만 실행).
