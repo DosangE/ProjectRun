@@ -30,7 +30,7 @@
         "hooks": [
           {
             "type": "command",
-            "if": "Bash(git *)",
+            "if": "Bash(*git*)",
             "command": "powershell.exe",
             "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "${CLAUDE_PROJECT_DIR}/tools/hooks/guard.ps1"],
             "timeout": 15

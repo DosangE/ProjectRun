@@ -10,6 +10,19 @@
 
 ---
 
+## 2026-11-25 · `guard.ps1` 이 git 을 명령 단위로 판정, `docs/RULES/` 를 하네스 파일 보호에 (`fix/guard-git-tokens`)
+
+- **결정 (사용자, 2026-11-25)**: 시범 ③(agy 읽기 전용 조사) 결과로 올린 §3-2 요청서에 "ㄱㄱ"(새 세션에서). 고친 것: `tools/hooks/guard.ps1`, `.claude/settings.json` 의 Bash 훅 필터, `tools/agy-run.ps1` 의 하네스 목록 2곳, `docs/RULES/SUBAGENTS.md` §7-6, `CLAUDE.md` §3-1.
+- **이유**: 정규식이 글자 모양을 봐서 전역 옵션(`git --no-pager clean`)·경로(`git.exe`)·묶음 플래그(`push -fu`)·`+refspec`·`checkout .`·`restore -s HEAD .` 를 놓쳤고, 구분자를 넘어 읽어 `git push origin x && rm -f a` 를 막았다.
+- **방법**: 명령을 나누고 낱말로 풀어(따옴표, 구분자, 명령 치환, heredoc, here-string, 리다이렉트, 블록) git 인자를 판정한다. Claude 의 Bash 는 bash 로, PowerShell 은 PowerShell 로 읽고, 어느 셸인지 모르는 Codex·Antigravity 는 둘 다로 읽어 하나라도 걸리면 막는다. heredoc·따옴표 안의 글은 명령으로 보지 않는다(셸에 넘기는 것은 본다). 읽다가 오류가 나거나 8초를 넘으면 막는다 — 훅 제한(15초)을 넘기면 판정 없이 지나간다.
+- **요청서와 다른 점**: ① 요청서의 "안 하는 것" 이던 감싼 git 중 `bash -c`·`powershell -Command`·`cmd /c`·`eval`·`env`·`sudo` 류는 넣었다. 옛 정규식이 `bash -c "cd x && git clean"` 을 잡고 있어 빼면 회귀다. 변수·별칭은 그대로 안 한다 ② 필터는 빼지 않고 `Bash(git *)` → `Bash(*git*)` 로 넓혔다. `git.exe`·경로 git·`env git`·`bash -c` 의 단순한 명령에서 훅이 아예 불리지 않는 것을 실측했고(`clean --dry-run`, 버리는 저장소), 넓힌 뒤 다섯 형태가 모두 막혔다. 필터를 빼면 git 이 없는 Bash 호출마다 0.34~0.45초(5회)가 든다 ③ `checkout -f`·`switch --discard-changes` 는 요청서대로 막는다(§0 에 글자로는 없다).
+- **검증**: 모의 입력 947건 통과(재리뷰를 고친 뒤의 최종 코드)(Claude Bash·PowerShell, Codex, Antigravity × git 명령, 임시 저장소의 feature·dev 작업 트리 커밋, 보호 파일). 같은 시험을 옛 `guard.ps1` 로 돌리면 462건 실패. 지난 세션 기록의 실제 git 명령 2,798건: 옛 판정과 다른 것 3건, 모두 옛 오탐, 오류 0, 가장 느린 것 170 ms. 긴 입력·깊은 중첩·반복 18종 × 2: 모두 제한 안에 끝남(가장 느린 것 8.3초 = 시간 상한에 막힘). 실제 Claude 세션에서 deny 확인(`8e23f5f` 에서 `bash -c --`, dev 작업 트리 커밋, PowerShell 배열 인자. `ecc8cef` 에서 `bash -c` 의 clean, dev 작업 트리 커밋). `agy-run.ps1 -Allow docs/RULES/SUBAGENTS.md` 는 exit 2. Codex·Antigravity 는 모의 입력으로만 봤다. 시험 스크립트는 scratchpad 에 두고 커밋하지 않았다.
+- **Codex 리뷰** (`08098c5` 에 `adversarial-review --base dev` 1회, `needs-attention` 높음 7·중간 1, 오탐 0. 사용자 2026-11-26 "재리뷰" 로 한 번 더 봤다 — 다음 줄): 여덟 다 고쳤다 — ① `Test-WholeTree` 정규식 폭발로 시간 초과(claude 도 같은 때 찾음) ② `bash -c -- '…'` 회귀 ③ 명시한 `-C` 를 못 읽으면 cwd 로 판정 → deny(빈 `-C` 는 git 처럼 무시) ④ `git @('commit')` ⑤ `g"it"` ⑥ `:(top,glob)**` ⑦ `-c remote.*.mirror=true` ⑧ `--force-if-includes` 오탐. 권고 중 `settings.json` 의 `onFailure: block` 은 요청서 밖이고 이 설정이 있는지 확인하지 않아 넣지 않았다.
+- **Codex 재리뷰** (`8e23f5f` 에 1회, 2026-11-26, `needs-attention` 높음 4·중간 2. 모두 재현했고 오탐 0): 8건의 대표 입력은 고쳐졌다고 했다. 새 6건을 고쳤다 — ① 커밋 반복의 브랜치 조회가 15초에 닿음(14.0~15.2초) → 조회를 기억하고 명령마다 시간을 보며 조회는 3초에 끊는다 ② `git -C ('.') reset --hard` 회귀(①차 리뷰 ④ 를 고치며 생김) → 글자 그대로인 목록만 인자로 편다 ③ `./Assets/..` 회귀 → `.`·`..` 를 풀고 판정 ④ `remote.*.mirror=01` ⑤ `bash -c` 의 위치 인자 오탐 → 첫 낱말만 명령 ⑥ Codex·agy 의 `.\Assets` 오탐 → 커밋할 곳을 못 읽은 것은 두 읽기 모두 그럴 때만 막는다. **이 6건은 고친 뒤 다시 리뷰하지 않았다.**
+- **남는 한계** (`guard.ps1` 머리말): 변수·별칭·스크립트 파일 안의 git, 절대 경로로 적은 저장소 루트, 같은 명령의 `cd`·`git switch dev && git commit`, 변수가 든 `-C "$DIR" commit`(cwd 로 판정), 셸로 보호 파일 쓰기, 필터를 지나지 않는 Claude Bash 의 `g"it"`.
+- **`docs/RULES/` 보호의 대가**: Codex·agy 는 승인이 있어도 규칙 문서를 편집 도구로 고치지 못하고, Claude 는 고칠 때마다 확인 창이 뜬다. `unity-architect` 정의(쓰기 `docs/`)는 고치지 않았다 — 맡기면 ask 에 걸린다.
+- **버린 대안**: agy 가 낸 정규식 교체(조각이 더 커지고 Git Bash 경로의 정상 커밋을 막는다) · PowerShell AST(PowerShell 5.1 의 파서는 bash 를 읽지 못해 둘을 따로 둬야 한다) · 대상 저장소가 이 프로젝트일 때만 커밋을 막기(판정이 더 복잡하다. 다른 저장소의 `main`/`dev` 커밋도 막힌다).
+
 ## 2026-11-25 · Claude 가 agy 를 부르는 실행: `tools/agy-run.ps1` — 셸·MCP 를 닫고 허용 파일만, 앞뒤 상태 대조, 왕복 2번 (`feature/agy-run`)
 
 - **결정 (사용자, 2026-11-25)**: "내가 원하는게 뭔지는 알지? 주로 메인으로 사용할 claude code 너와 antigravity가 서로 소통하는 것" → "ㅇㅇ 서로 호출하고 소통하는거" → §3-2 요청서 "ㄱㄱ". 규칙은 `docs/RULES/SUBAGENTS.md` §7-6 "Claude 가 agy 를 부를 때".
@@ -23,6 +36,7 @@
   - 가짜 시험이 잡은 초판 결함: 타임아웃 때 프로세스를 끝내지 못함(`Start-Process` 인자), 빈 응답 예외. 실제 `ask` 에서 agy 가 찾은 결함 2건(빈 출력이 오류 없이 13, `-Allow` 를 정규화하기 전에 검사해 `tools//hooks/…` 가 통과)도 고쳤다. 시험 스크립트는 scratchpad 에 두고 커밋하지 않았다.
 - **Codex 리뷰** (`2535e96` 1회, `needs-attention` 높음 5·중간 3. 고친 뒤 다시 리뷰하지 않았다): ① 새 파일이 범위를 벗어남 → 루트와 `-Allow` 폴더의 항목을 무시 대상까지 대조(미리 막지는 못한다) ② 링크 → 정션·심볼릭·하드 링크 거부 ③ NUL 뒤 인자 유실 → NUL 거부, 거부 설정을 지시문 앞에, 명령줄 길이 검사 ④ 이어 가기가 범위·횟수를 넓힘 → 저장소·브랜치·역할·`-Allow`·승인 줄이 같아야 하고 한 실행은 한 번만 ⑤ 남은 자식 → 스크립트를 Job 에 넣고 남은 프로세스를 끝낸 뒤 대조 ⑥ 대조가 놓치는 추적 파일 변경 → 크기·수정 시각·색인 플래그, `--no-optional-locks` ⑦ 실패 산출물 → 결과를 다 쓴 뒤 이름 바꾸기, 깨진 앞 결과는 exit 2 ⑧ §7-6 의 커밋 문구 → 커밋도 사용자가 시킬 때만.
 - **버린 대안**: 격리된 복사본에서 실행(Codex 권고. 저장소가 LFS 를 쓰고 `Library/` 가 따로 필요해 비용이 크다 — 새 파일을 미리 막아야 할 일이 생기면 다시 본다) · `agent-relay.ps1` 에 `-Target agy` 를 여는 것(범위 대조가 없고 이미 검토가 끝난 스크립트를 다시 연다) · `fix` 에 샌드박스 셸 허용(위 실측) · 바뀐 것을 자동으로 되돌리기(사용자의 변경과 구분하지 못한다) · 공용 함수 파일로 빼기(`agent-relay.ps1` 을 바꿔야 한다. 두 스크립트의 프로세스 실행·인자 인용 코드가 비슷하다).
+- **첫 실제 작업 (2026-11-25, 시범 ③)**: `ask` 왕복 1번, exit 0, 위반 0, 400초, 총 123,567 토큰. 조사 중 사용자 개입 0회, 붙여 넣기 없음. 결과는 아래 "시범 ③ 결과".
 - **확인 못 한 것**: 사용자가 같은 때 다른 창에서 파일을 고치는 경우(위반으로 보고된다), `.gitignore` 대상 파일의 변경, 실제 agy 의 타임아웃 뒤 프로세스 정리(가짜로만 확인).
 
 ## 2026-11-25 · Claude 비대화형 교차 검토 중계 스크립트 `tools/agent-relay.ps1` (`feature/agent-relay`)
@@ -89,6 +103,7 @@
 - **검증**: 훅 모의 입력 150건 통과(세 도구의 보호 파일·git 명령, 임시 저장소의 실제 병합으로 알림·사후 검토·컷오프). 같은 테스트의 첫 판(130건)을 바꾸기 전 `guard.ps1` 로 돌리면 46건 실패. 스크립트는 scratchpad 에 두고 커밋하지 않았다. 더한 줄의 `§` 참조 모두 해석됨.
 - **확인 못 한 것**: ~~agy 실제 세션에서 `tools/hooks/` 편집이 막히는지~~ (2026-11-25 agy 새 세션에서 `tools/hooks/guard.ps1` `edit_file` `deny` 실측 확인). 셸로 쓰는 것은 여전히 판정하지 않는다. 같은 Windows 계정이라 실수를 막는 장치이지 보안 경계는 아니다.
 - **시범 ① 결과 (`fix/select-tests-crlf`, 2026-11-25)**: `select-tests.ps1` CRLF 중단 수정(`구현: antigravity`, `검토: codex, claude`). 실제 결함: 코드 0건 / 문서 2건(codex 1·claude 1, 위 "select-tests.ps1 CRLF" 항목). 오탐 0건. 되돌린 줄 0줄(세 값은 이 세션에서 센 것이며 git 으로는 확인되지 않는다). 사용자 개입: agy 세션 5회(합의 요청·승인·커밋 지시·검토 전달 2회). Claude 토큰: 재지 않음. 겪은 것: 검토 지적을 사용자가 붙여 옮기는 과정에서 codex 지적과 지시문이 빠져 한 번에 반영되지 않았다(사용자 "근데 너희 둘이 소통하며 할순없나?"). agy 의 git 쓰기는 샌드박스 안에서 실패하고 밖에서 다시 실행됐다.
+- **시범 ③ 결과 (`guard.ps1` 구멍 조사, 읽기 전용, 2026-11-25)**: `tools/agy-run.ps1 -Role ask`. 실제 결함: 새로 찾은 5건 모두 맞음(claude 가 `guard.ps1` 에 넣어 확인). 오탐 0건. 되돌린 줄 0줄. 왕복 1번, 조사 중 사용자 개입 0회. Claude 토큰: 재지 않음. agy 가 낸 정규식은 쓰지 않았다(위 "`guard.ps1` 이 git 을 명령 단위로 판정"). 남은 시범은 ②.
 
 ## 2026-11-23 · main v0.7.1: M5 뒤 싱글 다듬기 — `dev` 를 `main` 에 병합하고 태그 `v0.7.1` (`feature/v071-release-prep`)
 

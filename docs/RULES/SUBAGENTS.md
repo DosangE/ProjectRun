@@ -124,7 +124,7 @@ Antigravity(`agy`)는 세 번째 모델 계열(Gemini)이다 (`docs/DECISIONS.md
 | codex | claude |
 | 하네스 파일 | 구현하지 않은 모델 **+ 사용자 승인** |
 
-- 하네스 파일: `CLAUDE.md`, `AGENTS.md`, `.claude/settings*.json`, `.claude/agents/`, `.codex/`, `.agents/`, `tools/hooks/`. `tools/hooks/guard.ps1` 이 파일 편집 도구로 고치는 것을 Claude 는 ask, Codex·Antigravity 는 deny 로 잡는다. 셸로 쓰는 것은 잡지 못한다 — 셸로 돌아가지 않는다 (CLAUDE.md §3-4).
+- 하네스 파일: `CLAUDE.md`, `AGENTS.md`, `.claude/settings*.json`, `.claude/agents/`, `.codex/`, `.agents/`, `tools/hooks/`, `docs/RULES/`. `tools/hooks/guard.ps1` 이 파일 편집 도구로 고치는 것을 Claude 는 ask, Codex·Antigravity 는 deny 로 잡는다. 셸로 쓰는 것은 잡지 못한다 — 셸로 돌아가지 않는다 (CLAUDE.md §3-4).
 - codex 가 구현한 브랜치에서는 §7-5 의 병합 전 Codex 리뷰가 같은 계열이라 `검토:` 로 세지 않는다. Claude 검토는 메인이 체크리스트로 직접 한다(파견은 §7-3 대로 사용자가 지시할 때).
 - 검토자는 지적만 하고 고치지 않는다. 고치는 것은 구현한 쪽이거나 사용자가 정한다.
 
