@@ -61,13 +61,15 @@
 | 규칙 읽기 | 새 세션 둘 다 첫 단계들에서 `CLAUDE.md` 를 읽었다(`transcript.jsonl`) |
 | 권한 | Auto 모드(`permissionPreset: AGENT_PERMISSION_PRESET_AUTO`). 작업 폴더 편집은 자동, 명령은 샌드박스 안에서 자동이다. 샌드박스 안의 git 쓰기는 `.git/index.lock: Permission denied` 로 실패해 샌드박스 밖(`BypassSandbox`)으로 다시 실행했다 |
 | 훅 | `.agents/hooks.json` 이 `PreToolUse`(`run_command`·`edit_file`·`write_file`)에 `tools/hooks/guard.ps1`, `SessionStart` 에 `session-start.ps1 -Format antigravity` 를 건다. 훅의 작업 폴더는 `hooks.json` 이 있는 폴더다. `deny` 는 실제 세션에서 막혔고(`git clean --dry-run`, `.meta` 편집), `SessionStart` 알림은 새 세션에 주입됐다 |
+| `agy -p` 의 세션 거부 규칙 | `--settings` 의 `permissions.deny` 로 `write_file(...)`·`command(*)`·`mcp(*)` 를 주면 편집 도구, 셸(`BypassSandbox` 포함), 하위 에이전트가 막힌다. 훅이 `allow` 를 돌려줘도 거부가 앞선다. `auto` 모드에서 `unsandboxed(*)`·`command(claude)` 만 준 것은 막지 못했다. 그래서 `tools/agy-run.ps1` 은 `command(*)` 를 쓴다 |
+| `--sandbox`, `--mode plan` | 샌드박스 안의 셸은 작업 폴더에 쓰지 못한다. `--mode plan` 은 `write_file` 을 막지 못했다 |
 
 ### 확인 못 한 것 — 단정하지 마라 (§4-1)
 
 | 항목 | 상태 |
 |---|---|
-| 훅의 `allow` 가 권한 확인을 건너뛰는지 | **확인 못 함.** 내장 문서(`agy-customizations/docs/hooks.md`)는 "Automatically allow the tool execution", 웹 문서(`antigravity.google/docs/hooks.md`)는 "delegating to the next hook or default policy" 로 서로 다르다 |
+| 훅의 `allow` 가 권한 확인을 건너뛰는지 | **확인 못 함.** 명시한 거부 규칙을 이기지 못하는 것만 확인했다. 내장 문서(`agy-customizations/docs/hooks.md`)는 "Automatically allow the tool execution", 웹 문서(`antigravity.google/docs/hooks.md`)는 "delegating to the next hook or default policy" 로 서로 다르다 |
 | `ask`·`force_ask` 가 `edit_file` 에서 확인 창을 띄우는지 | **확인 못 함.** 2026-11-24 시험은 없는 파일이 대상이라 "파일 없음" 오류가 먼저 났을 수 있다. 그래서 보호 파일은 `deny` 로 둔다 |
 | 훅이 0 이 아닌 코드로 끝나거나 빈 출력을 낼 때 | **확인 못 함.** 두 문서 모두 적지 않았다 |
 | `run_command`·`edit_file`·`write_file` 이 아닌 쓰기 도구 | **확인 못 함.** 매처에 없는 도구에는 훅이 돌지 않는다 |
-| 이미지 생성, `--mode plan` 의 쓰기 차단, 영상 입력 | **확인 못 함.** |
+| 이미지 생성, 영상 입력 | **확인 못 함.** |
