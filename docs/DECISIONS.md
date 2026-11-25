@@ -10,6 +10,19 @@
 
 ---
 
+## 2026-11-25 · `select-tests.ps1` CRLF 경고 중단 수정: `Invoke-GitLines` 에 `-c core.safecrlf=false` 추가 (`fix/select-tests-crlf`)
+
+- **결정 (사용자, 2026-11-25)**: Antigravity 시범 ① (`docs/HANDOFF.md` 2절 6·7번). §3-2 요청서 승인("ㄱㄱ"). `tools/select-tests.ps1:107-112` 의 `Invoke-GitLines` 에서 `& git -C $root -c core.safecrlf=false @gitArgs` 로 호출한다(UTF-8 with BOM 유지).
+- **이유**: `tools/select-tests.ps1` 는 `$ErrorActionPreference = 'Stop'`(`:28`)인데, 기본 범위 실행 시 `Packages/packages-lock.json`·`ProjectSettings/ProjectVersion.txt` 의 CRLF 경고(stderr)가 PowerShell 5.1 stderr 캡처 환경(`2>&1` 등)에서 `NativeCommandError` 로 중단됐다. 읽기 전용 git 호출에 `-c core.safecrlf=false` 만 넘겨 경고를 원천 제거하되, 실제 git 오류(`$LASTEXITCODE -ne 0`)는 그대로 예외를 던진다(`CLAUDE.md` §5).
+- **버린 대안**: `2>$null` 또는 `$ErrorActionPreference` 완화(실제 git 오류·다른 경고를 삼킨다, §5 위반) · 사용자 git 설정(`core.autocrlf`/`core.safecrlf`) 변경(환경 의존).
+- **검증 (문서·도구 검증, `CLAUDE.md` §9-2)**:
+  - 기본 범위(`$ErrorActionPreference = 'Stop'` + `2>&1`): `exit=0`, CRLF 경고 없음, 변경 파일 4개 출력.
+  - `-Range dev...HEAD`(`exit=0`, 0개) · `-Range HEAD~1..HEAD`(`exit=0`, 7개) 정상 출력.
+  - 잘못된 `-Range nonexistent-ref-xyz..HEAD`: `exit=1`, `git diff --name-only nonexistent-ref-xyz..HEAD 실패 (exit 128)` 예외 확인.
+  - UTF-8 BOM(`EF BB BF`) 및 한글 출력 유지. `Assets/`·`Packages/`·`ProjectSettings/` 무변경.
+- **함께 확인한 것**: 이 agy 새 세션에서 `tools/hooks/guard.ps1` `edit_file` 호출이 PreToolUse 훅에서 `deny` 로 막히는 것을 실측했다(`docs/HANDOFF.md` 2절 7번 대기 확인 해소).
+- **구현·검토**: `구현: antigravity` (Gemini 4 Neon). 교차 검토(`codex`, `claude`) 대기 중. 시범 ① 지표는 검토·병합 뒤 아래 "Antigravity 편입과 교차 검토" 항목에 덧붙인다.
+
 ## 2026-11-25 · Antigravity 편입과 교차 검토: 세 번째 모델 계열, 구현한 쪽은 검토자가 못 된다, 하네스 파일 보호, 병합 메시지 `구현:`·`검토:` 줄 (`feature/cross-agent-checks`)
 
 - **결정 (사용자, 2026-11-25)**: "현재 claude 말고도 codex antigravity를 구독중이다. 이 셋을 모두 활용하는 방안 추천해줘봐" → "agy도 너와 같은 권한높은 거로 설정해두고싶은데 서로 견제하는 느낌으로" → "이런식으로 진행할까 결과적으로 하네싱에 안티그래피티도 넣어야하니까" → §3-2 요청서에 대해 Antigravity 의 답(질문 1 "ㄱㄱ", 질문 2 "agy·Codex deny, Claude ask 유지", 컷오프 주문)을 붙여 보냄.
