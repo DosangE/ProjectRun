@@ -241,14 +241,14 @@ function Read-Commands([string]$t, [int]$i, [string]$close, [bool]$ps, $out) {
         }
         if ($c -eq '(') {
             if ($ps) {
-                # git @('commit', '-m') 처럼 괄호 안의 낱말이 그대로 인자가 되기도 한다. 명령으로도, 인자로도 본다.
-                $group = New-Object System.Collections.Generic.List[object]
-                $i = Read-Commands $t ($i + 1) ')' $ps $group
-                $out.AddRange($group)
-                if ($words.Count -gt 0) {
-                    foreach ($item in $group) { foreach ($w in $item) { foreach ($part in $w.Split(',')) { if ($part -ne '') { $words.Add($part) } } } }
+                # git @('commit', '-m') 처럼 글자 그대로인 목록은 그 낱말이 인자가 된다. 그 밖의 괄호는 값을 모르는 낱말 하나다.
+                $m = [regex]::new('\G\((?>\s*)(?>(?<v>''[^'']*''|"[^"$`]*")(?>\s*,?\s*))+\)').Match($t, $i)
+                if ($m.Success -and $words.Count -gt 0 -and ($sb.ToString() -eq '' -or $sb.ToString() -eq '@')) {
+                    [void]$sb.Clear(); $has = $false
+                    foreach ($v in $m.Groups['v'].Captures) { $words.Add($v.Value.Substring(1, $v.Length - 2)) }
+                    $i += $m.Length; continue
                 }
-                [void]$sb.Append('$()'); $has = $true; continue
+                $i = Read-Commands $t ($i + 1) ')' $ps $out; [void]$sb.Append('$()'); $has = $true; continue
             }
             $m =[regex]::new('\G\(\((?:[^()]|\([^()]*\))*\)\)').Match($t, $i)
             . $endCmd
@@ -319,11 +319,44 @@ function Test-ShortFlag([string]$arg, [char]$flag, [string]$valued) {
 
 # 작업 트리 전체(또는 위 폴더 전체)를 가리키는 pathspec 인가: . ./ .. * **/* :/ :(top,glob)**
 function Test-WholeTree([string]$arg) {
+    Assert-Time
     $p = $arg.Replace('\', '/')
     $path = $p -replace '^:(\([^)]*\)|/)', ''   # 매직 접두사
     if ($path -eq '') { return $p -ne '' }
-    foreach ($part in $path.Split('/')) { if ($part -notmatch '^(\.{0,2}|\*+)$') { return $false } }
-    return -not $path.StartsWith('/')
+    if ($path.StartsWith('/')) { return $false }
+    # . 과 .. 를 git 처럼 먼저 푼다: ./Assets/.. 는 . 이다.
+    $parts = New-Object System.Collections.Generic.List[string]
+    foreach ($part in $path.Split('/')) {
+        if ($part -eq '..' -and $parts.Count -gt 0 -and $parts[$parts.Count - 1] -ne '..') { $parts.RemoveAt($parts.Count - 1) }
+        elseif ($part -ne '' -and $part -ne '.') { $parts.Add($part) }
+    }
+    foreach ($part in $parts) { if ($part -notmatch '^(\.\.|\*+)$') { return $false } }
+    return $true
+}
+
+# git 이 보는 현재 브랜치. 못 읽으면 $script:lookupError 에 원문을 남기고 $null 을 돌려준다. 3초를 넘기면 던진다.
+$script:branches = @{}
+$script:lookupError = $null
+function Get-Branch([string[]]$gitArgs) {
+    $key = $gitArgs -join "`n"
+    if ($key.Contains('"')) { throw "경로에 따옴표가 있어 브랜치를 읽을 수 없다: $key" }
+    if (-not $script:branches.ContainsKey($key)) {
+        $info = New-Object System.Diagnostics.ProcessStartInfo
+        $info.FileName = 'git'
+        $info.Arguments = (@($gitArgs) + @('branch', '--show-current') | ForEach-Object { '"' + $_ + '"' }) -join ' '
+        $info.UseShellExecute = $false; $info.CreateNoWindow = $true
+        $info.RedirectStandardOutput = $true; $info.RedirectStandardError = $true
+        $info.StandardOutputEncoding = [System.Text.Encoding]::UTF8; $info.StandardErrorEncoding = [System.Text.Encoding]::UTF8
+        $proc = [System.Diagnostics.Process]::Start($info)
+        if (-not $proc.WaitForExit(3000)) {
+            Start-Process -FilePath 'taskkill.exe' -ArgumentList "/PID $($proc.Id) /T /F" -WindowStyle Hidden -Wait
+            throw "브랜치를 3초 안에 읽지 못했다: $key"
+        }
+        $script:branches[$key] = @{ Code = $proc.ExitCode; Out = $proc.StandardOutput.ReadToEnd().Trim(); Err = $proc.StandardError.ReadToEnd().Trim() }
+    }
+    $r = $script:branches[$key]
+    if ($r.Code -ne 0) { $script:lookupError = "커밋할 곳의 브랜치를 읽지 못했다: $($r.Err)"; return $null }
+    return $r.Out
 }
 
 # Git Bash 경로를 Windows 경로로: /c/x → c:/x, /tmp → TEMP, ~ → 홈.
@@ -346,7 +379,7 @@ function Get-GitReason([string[]]$a, [string]$cwd, [string]$gitDir) {
         $opt = $a[$k]; $k++
         if ($opt -cmatch '^(-C|-c|--git-dir|--work-tree|--namespace|--super-prefix|--config-env|--attr-source)$' -and $k -lt $a.Count) {
             if ($opt -ceq '-C') { if ($a[$k] -ne '') { $where.Add('-C'); $where.Add((ConvertTo-WinPath $a[$k])) } }   # 빈 -C 는 git 도 무시한다
-            elseif ($opt -ceq '-c') { if ($a[$k] -match '^remote\..+\.(mirror($|=(?!false|no|off|0|$))|push=\+)') { $forceConfig = $true } }
+            elseif ($opt -ceq '-c') { if ($a[$k] -match '^remote\..+\.(mirror($|=(?!(false|no|off|0+|0x0+|)$))|push=\+)') { $forceConfig = $true } }
             elseif ($opt -eq '--git-dir') { $where.Add("--git-dir=$(ConvertTo-WinPath $a[$k])") }
             $k++
         }
@@ -399,10 +432,7 @@ function Get-GitReason([string[]]$a, [string]$cwd, [string]$gitDir) {
     elseif ($sub -eq 'commit') {
         # -C 나 --git-dir 이 가리키는 곳의 브랜치를 본다. 변수가 들어 있으면 훅이 풀 수 없어 cwd 로 판정한다.
         if (($where -join ' ') -match '[$%]') { $where.Clear() }
-        $gitArgs = @('-C', $cwd) + $where.ToArray() + @('branch', '--show-current')
-        $branch = & { $ErrorActionPreference = 'Continue'; & git @gitArgs 2>&1 }
-        if ($LASTEXITCODE -ne 0) { throw "현재 브랜치를 읽지 못했다: $branch" }
-        $branch = ([string]$branch).Trim()
+        $branch = Get-Branch (@('-C', $cwd.Replace('\', '/')) + $where.ToArray())
         if ($branch -eq 'main' -or $branch -eq 'dev') {
             return "커밋할 브랜치가 $branch 이다. main/dev 에 직접 커밋하지 않는다. 브랜치부터 만든다 (CLAUDE.md §0 Git, §9-2)."
         }
@@ -416,7 +446,8 @@ function Get-ShellReason([string]$cmd, [bool]$ps, [string]$cwd, [int]$depth) {
     $cmds = New-Object System.Collections.Generic.List[object]
     [void](Read-Commands ($cmd -replace "`r`n?", "`n") 0 '' $ps $cmds)
     foreach ($words in $cmds) {
-        $w = New-Object System.Collections.Generic.List[string]
+        Assert-Time
+        $w =New-Object System.Collections.Generic.List[string]
         $w.AddRange([string[]]$words)
         $gitDir = ''
         # 명령 앞의 예약어, A=b 대입, PowerShell 의 $x = 을 건너뛴다.
@@ -453,8 +484,14 @@ function Get-ShellReason([string]$cmd, [bool]$ps, [string]$cwd, [int]$depth) {
             $inner = ''; $innerPs = $ps
             for ($k = 1; $k -lt $w.Count; $k++) {
                 if ($name -match '^(bash|sh|dash|zsh|ksh)$' -and $w[$k] -cmatch '^-[A-Za-z]*c[A-Za-z]*$') {
-                    # -c 뒤에도 옵션(-e, --, -o 이름)이 올 수 있다. 옵션이 아닌 낱말을 모두 명령으로 본다.
-                    $inner = @($w | Select-Object -Skip ($k + 1) | Where-Object { $_ -notmatch '^[-+]' }) -join "`n"; $innerPs = $false
+                    # -c 뒤에도 옵션(-e, --, -o 이름)이 올 수 있다. 옵션을 지나 처음 나오는 낱말이 명령이고, 그 뒤는 $0 $1 이다.
+                    $j = if ($w[$k] -cmatch '[oO]') { $k + 2 } else { $k + 1 }
+                    while ($j -lt $w.Count -and $w[$j] -match '^[-+]') {
+                        if ($w[$j] -eq '--' -or $w[$j] -eq '-') { $j++; break }
+                        if ($w[$j] -cmatch '^([-+][A-Za-z]*[oO]|--rcfile|--init-file)$') { $j++ }
+                        $j++
+                    }
+                    if ($j -lt $w.Count) { $inner = $w[$j]; $innerPs = $false }
                     break
                 }
                 if (($name -match '^(pwsh|powershell)$' -and $w[$k] -match '^[-/]c(o[a-z]*)?$') -or ($name -eq 'cmd' -and $w[$k] -match '^/{1,2}[ck]$')) {
@@ -498,10 +535,17 @@ try {
         if (($cmd -replace '["''`\\^]', '') -match 'git') {
             $isClaude = -not [string]::IsNullOrEmpty($env:CLAUDE_PROJECT_DIR) -and $null -eq $in.PSObject.Properties['turn_id']
             $modes = if ($tool -eq 'PowerShell') { @($true) } elseif ($tool -eq 'Bash' -and $isClaude) { @($false) } else { @($false, $true) }
+            # 커밋할 곳을 못 읽은 것은 모든 읽기에서 그럴 때만 막는다. 다른 셸로 읽어서 생긴 잘못된 경로(.\Assets → .Assets)일 수 있다.
+            $failed = @()
             foreach ($ps in $modes) {
+                $script:lookupError = $null
                 try { $reason = Get-ShellReason $cmd $ps $cwd 0 }
                 catch { $reason = "git 명령을 판정하지 못해 막는다: $($_.Exception.Message) (tools/hooks/guard.ps1)." }
                 if ($reason) { Write-Decision 'deny' $reason; exit 0 }
+                if ($script:lookupError) { $failed += $script:lookupError }
+            }
+            if ($failed.Count -eq $modes.Count) {
+                Write-Decision 'deny' "git 명령을 판정하지 못해 막는다: $($failed[0]) (tools/hooks/guard.ps1)."; exit 0
             }
         }
         Write-PassThrough
