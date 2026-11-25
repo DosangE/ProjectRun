@@ -127,3 +127,8 @@ Antigravity(`agy`)는 세 번째 모델 계열(Gemini)이다 (`docs/DECISIONS.md
 - 하네스 파일: `CLAUDE.md`, `AGENTS.md`, `.claude/settings*.json`, `.claude/agents/`, `.codex/`, `.agents/`, `tools/hooks/`. `tools/hooks/guard.ps1` 이 파일 편집 도구로 고치는 것을 Claude 는 ask, Codex·Antigravity 는 deny 로 잡는다. 셸로 쓰는 것은 잡지 못한다 — 셸로 돌아가지 않는다 (CLAUDE.md §3-4).
 - codex 가 구현한 브랜치에서는 §7-5 의 병합 전 Codex 리뷰가 같은 계열이라 `검토:` 로 세지 않는다. Claude 검토는 메인이 체크리스트로 직접 한다(파견은 §7-3 대로 사용자가 지시할 때).
 - 검토자는 지적만 하고 고치지 않는다. 고치는 것은 구현한 쪽이거나 사용자가 정한다.
+
+**자동 중계 (`tools/agent-relay.ps1`)** — Claude Code 와 Antigravity(`agy`) 사이에서 복사·붙여넣기 없이 비대화형으로 검토 지시·수정 요청·결과를 주고받는다 (`docs/DECISIONS.md` 2026-11-25 "Claude ↔ Antigravity 자동 중계 스크립트").
+- 단발/이어가기: `powershell -NoProfile -ExecutionPolicy Bypass -File tools/agent-relay.ps1 -Target claude|agy -Role review|fix|ask -Base dev -RunId <이름> [-PromptFile <파일>] [-Resume <세션ID>]`
+- 제한된 교차 검토 왕복(`-RoundTrip`, 최대 `-MaxRounds` 회): `powershell -NoProfile -ExecutionPolicy Bypass -File tools/agent-relay.ps1 -RoundTrip -Impl agy|claude -Reviewer claude|agy -Base dev -RunId <이름> -MaxRounds 2 -Approve`
+- 가드: `--dangerously-skip-permissions`·`bypassPermissions` 는 쓰지 않는다. `-Role review`/`ask` 는 읽기 전용(`claude` 는 `--permission-mode plan` + `Edit,Write,NotebookEdit` 차단, `agy` 는 `--mode plan`). `-Role fix` 와 `-RoundTrip` 은 `-Approve` 필수이며 자동 커밋·병합·푸시는 계약으로 막는다. `-Target agy` 에 Claude 모델 지정 금지, `-RoundTrip` 에서 `-Impl` 과 `-Reviewer` 가 같으면 거부(exit 2). 결과·세션ID·토큰은 `<prefix>.<RunId>.result.json` 에 남긴다. `agy` 세션 안에서 부를 때는 샌드박스 밖 실행이 필요하다.

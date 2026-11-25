@@ -10,6 +10,22 @@
 
 ---
 
+## 2026-11-25 · Claude ↔ Antigravity 자동 중계 스크립트 `tools/agent-relay.ps1` (`feature/agent-relay`)
+
+- **결정 (사용자, 2026-11-25)**: 시범 ① 뒤 "중계 스크립트를 두면 복사·붙여넣기 없이 검토 지시·결과를 주고받는 자동화 이거 해봐 난 자동화를 원한다" → §3-2 요청서에서 **A(단발 중계 + 제한된 `-RoundTrip` 왕복 루프)** 승인("A 해봐").
+  - `tools/agent-relay.ps1` (UTF-8 with BOM, `tools/codex-unity.ps1` 출력 규약 계승): `claude -p --output-format json` 및 `agy -p --output-format json` 을 비대화형으로 호출하고 `.sent.md`·`.out.md`·`.stderr.log`·`.diff.patch`·`.result.json`(세션ID·판정·토큰·비용 포함)을 남긴다.
+  - 안전 가드: `--dangerously-skip-permissions`·`bypassPermissions` 금지, `-Role review`/`ask` 읽기 전용, `-Role fix`·`-RoundTrip` 은 `-Approve` 필수(자동 커밋·병합·푸시 금지), `agy` 에 Claude 모델 거부, `-RoundTrip` 에서 `-Impl`=`-Reviewer` 거부(exit 2). `docs/RULES/SUBAGENTS.md` §7-6 에 사용법과 제약을 적었다.
+- **이유**: 시범 ①에서 검토 지시문을 사람이 복사·붙여넣기하다 전달이 누락됐고, Claude 토큰 수치도 agy 쪽에서 확인하지 못했다.
+- **버린 대안**: 단발 전용(B안 — 왕복 지적이 나오면 다시 수동 전달 필요) · 무제한/무인 루프 및 자동 커밋·병합(`CLAUDE.md` §0 Git·`SUBAGENTS.md` §7-6 위반) · `Temp/` 아래 결과 저장(`CLAUDE.md` §0 Unity 폴더 보호 → `%TEMP%\protoharness-agent-relay` 사용).
+- **검증 (문서·도구 검증, `CLAUDE.md` §9-2)**:
+  - UTF-8 BOM(`EF BB BF`) 확인. 가드 5종(`agy`+Claude 모델, `-Approve` 없는 `fix`/`RoundTrip`, 동일 `Impl`/`Reviewer`, `RunId` 누락) 모두 `exit=2` 거부 확인.
+  - 실측 호출(샌드박스 밖, `-Effort low`):
+    - `claude` 리뷰: `exit=0`, `verdict=PASS`, `10.97s`, `costUsd=0.4765484`, `inTok=4`, `outTok=588`.
+    - `agy` 리뷰: `exit=0`, `verdict=PASS`, `19.01s`, `totalTok=27087`.
+    - `claude -Resume`: `exit=0`, `6.11s`, 같은 세션 ID 로 직전 diff 의 untracked 파일명(`tools/agent-relay.ps1`) 정확히 응답.
+  - `Assets/`·`Packages/`·`ProjectSettings/` 무변경.
+- **확인 못 한 것**: `-RoundTrip` 의 실제 `NEEDS_FIX → fix → 재검토` 다회전 루프, `agy --mode plan` 이 실제 쓰기 도구를 막는지(이번 실측은 읽기 전용 리뷰만 실행), `agy` 샌드박스 안에서의 직접 실행(`~/.gemini/antigravity-cli/installation_id: Access is denied` 로 샌드박스 밖 실행 필요).
+
 ## 2026-11-25 · `select-tests.ps1` CRLF 경고 중단 수정: `Invoke-GitLines` 에 `-c core.safecrlf=false` 추가 (`fix/select-tests-crlf`)
 
 - **결정 (사용자, 2026-11-25)**: Antigravity 시범 ① (`docs/HANDOFF.md` 2절 6·7번). §3-2 요청서 승인("ㄱㄱ"). `tools/select-tests.ps1:107-112` 의 `Invoke-GitLines` 에서 `& git -C $root -c core.safecrlf=false @gitArgs` 로 호출한다(UTF-8 with BOM 유지).
