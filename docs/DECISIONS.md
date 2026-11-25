@@ -10,6 +10,19 @@
 
 ---
 
+## 2026-11-25 · `select-tests.ps1` CRLF 경고 중단 수정: `Invoke-GitLines` 에 `-c core.safecrlf=false` 추가 (`fix/select-tests-crlf`)
+
+- **결정 (사용자, 2026-11-25)**: Antigravity 시범 ① (`docs/HANDOFF.md` 2절 6·7번). §3-2 요청서 승인("ㄱㄱ"). `tools/select-tests.ps1:107-112` 의 `Invoke-GitLines` 에서 `& git -C $root -c core.safecrlf=false @gitArgs` 로 호출한다(UTF-8 with BOM 유지).
+- **이유**: `tools/select-tests.ps1` 는 `$ErrorActionPreference = 'Stop'`(`:28`)인데, 기본 범위 실행 시 `Packages/packages-lock.json`·`ProjectSettings/ProjectVersion.txt` 의 CRLF 경고(stderr)가 PowerShell 5.1 stderr 캡처 환경(`2>&1` 등)에서 `NativeCommandError` 로 중단됐다. 읽기 전용 git 호출에 `-c core.safecrlf=false` 만 넘겨 경고를 원천 제거하되, 실제 git 오류(`$LASTEXITCODE -ne 0`)는 그대로 예외를 던진다(`CLAUDE.md` §5).
+- **버린 대안**: `2>$null` 또는 `$ErrorActionPreference` 완화(실제 git 오류·다른 경고를 삼킨다, §5 위반) · 사용자 git 설정(`core.autocrlf`/`core.safecrlf`) 변경(환경 의존).
+- **검증 (문서·도구 검증, `CLAUDE.md` §9-2)**:
+  - 기본 범위(`$ErrorActionPreference = 'Stop'` + `2>&1`): `exit=0`, CRLF 경고 없음.
+  - `-Range dev...HEAD`(`exit=0`, 3개: `docs/DECISIONS.md`·`docs/HANDOFF.md`·`tools/select-tests.ps1`) · `-Range HEAD~1..HEAD`(`exit=0`, 7개) 정상 출력.
+  - 잘못된 `-Range nonexistent-ref-xyz..HEAD`: `exit=1`, `git diff --name-only nonexistent-ref-xyz..HEAD 실패 (exit 128)` 예외 확인.
+  - UTF-8 BOM(`EF BB BF`) 및 한글 출력 유지. `Assets/`·`Packages/`·`ProjectSettings/` 무변경.
+- **함께 확인한 것**: 이 agy 새 세션에서 `tools/hooks/guard.ps1` `edit_file` 호출이 PreToolUse 훅에서 `deny` 로 막히는 것을 실측했다(`docs/HANDOFF.md` 2절 7번 대기 확인 해소).
+- **구현·검토**: `구현: antigravity` (Gemini 4 Neon), `검토: codex, claude`. 코드 지적 0건, Claude 문서 지적 1건(커밋 전 검증 수치·"교차 검토 대기" 문구·시범 ① 지표 기록) 반영. 시범 ① 요약은 아래 "Antigravity 편입과 교차 검토" 항목에 기록했다.
+
 ## 2026-11-25 · Antigravity 편입과 교차 검토: 세 번째 모델 계열, 구현한 쪽은 검토자가 못 된다, 하네스 파일 보호, 병합 메시지 `구현:`·`검토:` 줄 (`feature/cross-agent-checks`)
 
 - **결정 (사용자, 2026-11-25)**: "현재 claude 말고도 codex antigravity를 구독중이다. 이 셋을 모두 활용하는 방안 추천해줘봐" → "agy도 너와 같은 권한높은 거로 설정해두고싶은데 서로 견제하는 느낌으로" → "이런식으로 진행할까 결과적으로 하네싱에 안티그래피티도 넣어야하니까" → §3-2 요청서에 대해 Antigravity 의 답(질문 1 "ㄱㄱ", 질문 2 "agy·Codex deny, Claude ask 유지", 컷오프 주문)을 붙여 보냄.
@@ -25,7 +38,8 @@
   - 고침: ① 확장·장치·UNC 경로(`\\?\` 등)가 보호 판정을 비켜 감 → 보호 파일로 본다(수정 전 코드에서 12건 재현) ② 모르는 이름·중복 줄이 버려져 구현한 쪽이 검토자로 통과, 구현 줄 없는 병합을 사후 검토가 지움 → 기록 오류로 알리고 `사후 검토:` 에 구현자를 함께 적는다 ③ `-Ref` 가 없으면 조용함 → 알린다 ④ 훅이 §7-6 표의 필수 검토자를 보지 않음 → 형식과 독립성만 본다고 적었다 ⑤ Codex 구현 브랜치의 §7-5 자동 리뷰 → 같은 계열이라 `검토:` 로 세지 않는다.
   - 두는 것 (이번에 생기지 않은 것, HANDOFF 2절 7번): `git.exe` 와 경로로 부른 git, `git -C <다른 작업 트리> commit` 의 브랜치, `git checkout -- .gitattributes` 오탐. 따옴표 안의 `{ git clean` 오탐은 이번에 넓어졌지만 막는 쪽이라 둔다.
 - **검증**: 훅 모의 입력 150건 통과(세 도구의 보호 파일·git 명령, 임시 저장소의 실제 병합으로 알림·사후 검토·컷오프). 같은 테스트의 첫 판(130건)을 바꾸기 전 `guard.ps1` 로 돌리면 46건 실패. 스크립트는 scratchpad 에 두고 커밋하지 않았다. 더한 줄의 `§` 참조 모두 해석됨.
-- **확인 못 한 것**: agy 실제 세션에서 `tools/hooks/` 편집이 막히는지. 셸로 쓰는 것은 여전히 판정하지 않는다. 같은 Windows 계정이라 실수를 막는 장치이지 보안 경계는 아니다.
+- **확인 못 한 것**: ~~agy 실제 세션에서 `tools/hooks/` 편집이 막히는지~~ (2026-11-25 agy 새 세션에서 `tools/hooks/guard.ps1` `edit_file` `deny` 실측 확인). 셸로 쓰는 것은 여전히 판정하지 않는다. 같은 Windows 계정이라 실수를 막는 장치이지 보안 경계는 아니다.
+- **시범 ① 결과 (`fix/select-tests-crlf`, 2026-11-25)**: `select-tests.ps1` CRLF 중단 수정(`구현: antigravity`, `검토: codex, claude`). 실제 결함: 코드 0건 / 문서 1건(커밋 전 검증 수치·교차 검토 완료 문구·시범 기록 반영). 오탐 0건(전달된 지적 기준). 되돌린 줄 0줄. 사용자 개입: agy 세션 5회(합의 요청·승인·커밋 지시·검토 전달 2회). Claude 토큰: agy 세션에서 확인 못 함(검토 측 기록 필요).
 
 ## 2026-11-23 · main v0.7.1: M5 뒤 싱글 다듬기 — `dev` 를 `main` 에 병합하고 태그 `v0.7.1` (`feature/v071-release-prep`)
 

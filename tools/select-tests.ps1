@@ -104,8 +104,9 @@ $rules = @(
     @{ Pattern = '^Assets/';                                        All = $true;  Why = '표에 없는 경로' }
 )
 
+# 읽기 전용 git 호출. core.safecrlf=false 로 CRLF 경고(stderr)가 $ErrorActionPreference='Stop' 에 걸려 중단되는 것을 막는다.
 function Invoke-GitLines([string[]]$gitArgs) {
-    $out = & git -C $root @gitArgs
+    $out = & git -C $root -c core.safecrlf=false @gitArgs
     if ($LASTEXITCODE -ne 0) { throw "git $($gitArgs -join ' ') 실패 (exit $LASTEXITCODE)" }
     return $out
 }
