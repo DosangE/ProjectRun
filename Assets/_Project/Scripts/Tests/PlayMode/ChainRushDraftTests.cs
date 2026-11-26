@@ -1,6 +1,5 @@
 using System.Collections;
 using System.IO;
-using System.Reflection;
 using NUnit.Framework;
 using ProtoHarness.ChainRush;
 using ProtoHarness.ChainRush.Audio;

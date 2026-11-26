@@ -19,9 +19,11 @@ namespace ProtoHarness.ChainRush.Motion
         // Nearer along the road than this the runners are side by side, not behind. Two bodies touching nose to tail are
         // 0.76 m apart.
         public const float MinRoadGap = 0.5f;
-        // The road's S runs faster than the ground inside a corner and on a shortcut (its S covers the main line's length), so
-        // S only says who is ahead and Range measures the distance. Past this S the other is on another part of the road.
-        public const double MaxRoadGap = 36d;
+        // The road's S runs faster than the ground inside a corner and on a shortcut (its S covers the main line's length:
+        // about 3.2 times on SUMMIT DROP's, 280 m of S over 87 m of road), so S only says who is ahead and Range measures the
+        // distance. Past this S the other is on another part of the road (review 2026-11-26, Codex: 3 x Range lost 11.5 m
+        // on that shortcut).
+        public const double MaxRoadGap = 4d * Range;
         // Both must be going along the road at least this fast, so nobody drafts a runner held against a guard.
         public const float MinRoadSpeed = 8f;
         // The speed added while boosting, as a share of the running speed, and how fast it comes, in run accelerations.

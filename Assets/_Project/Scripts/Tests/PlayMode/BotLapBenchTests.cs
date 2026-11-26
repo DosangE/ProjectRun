@@ -181,7 +181,7 @@ namespace ProtoHarness.Tests.PlayMode
                     double seconds = player.Game.HasFinished ? player.Game.Tick * (double)Ticks.Seconds : double.NaN;
                     times[seed - 1] = seconds;
                     allBreaks += breaks; allFalls += falls; allUnfinished += unfinished;
-                    Append(drafts ? "Race" : "RaceNoDraft", track, difficulty, seed, seconds, breaks, falls, unfinished);
+                    Append(drafts ? "RaceDraft" : "Race", track, difficulty, seed, seconds, breaks, falls, unfinished);
                     Debug.Log($"BotBench Race {track} {difficulty} seed={seed}: ticks={player.Game.Tick}, seconds={Number(seconds)}, breaks={breaks}, falls={falls}, unfinished={unfinished}, wallMinutes={clock.Elapsed.TotalMinutes:F6}.");
                 }
                 // A missing player finish makes the aggregate explicitly NA, rather than dropping the slow run.

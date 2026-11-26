@@ -104,11 +104,13 @@ namespace ProtoHarness.ChainRush.Motion
         }
 
         // Ends the swing: the runner goes straight on along its facing at the speed it swung with, and what that is above
-        // running speed falls off by RunDrive.Settings.SwingCarryFalloff of itself a second.
-        public static void End(RacerState racer, Vector3 velocity, float heading)
+        // running speed falls off by RunDrive.Settings.SwingCarryFalloff of itself a second. draft is what a running draft's
+        // boost adds (Slipstream.SpeedBonus): RunDrive adds it on top of the carry again, so the carry leaves it out (review
+        // 2026-11-26, Codex: a 30 m/s drafted swing let go headed for 36).
+        public static void End(RacerState racer, Vector3 velocity, float heading, float draft = 0f)
         {
             racer.SwingTicks = 0;
-            racer.SwingCarrySpeed = Mathf.Max(0f, Vector3.Dot(velocity, RunDrive.FacingOf(heading)));
+            racer.SwingCarrySpeed = Mathf.Max(0f, Vector3.Dot(velocity, RunDrive.FacingOf(heading)) - draft);
         }
     }
 }

@@ -155,7 +155,7 @@ namespace ProtoHarness.ChainRush
         public Vector3 Facing => RunDrive.FacingOf(game.Racer.Heading);
         public float ForwardSpeed => Vector3.Dot(game.Racer.Velocity, Facing);
         // The ground turn rate full steering reaches at the current speed, in degrees a second (Step's limit, before the
-        // air scale): maxTurnRate, held to speed / minTurnRadius when that is set, a wider radius under a booster.
+        // air scale): maxTurnRate, held to speed / minTurnRadius when that is set, a wider radius under a booster or a draft's boost.
         public float TurnLimit
         {
             get
@@ -314,7 +314,7 @@ namespace ProtoHarness.ChainRush
             // A swing lasts while the swing key is held. A press counts as held for its own tick, so a tap that comes and
             // goes between two ticks still swings for one tick.
             bool swingHeld = input.SwingHeld || input.SwingPressed;
-            if (racer.SwingTicks > 0 && (!swingHeld || grapple.IsAttached)) PoleSwing.End(racer, racer.Velocity, racer.Heading);
+            if (racer.SwingTicks > 0 && (!swingHeld || grapple.IsAttached)) PoleSwing.End(racer, racer.Velocity, racer.Heading, Slipstream.SpeedBonus(racer, RunSpeed));
             bool coasting = input.Coasting;
             // Backing up is coasting with the down arrow, so it cuts a booster too.
             bool reversing = coasting && input.Reversing;
@@ -437,7 +437,8 @@ namespace ProtoHarness.ChainRush
                 float forwardSpeed = Vector3.Dot(velocity, facing);
                 float boosted = Mathf.Max(forwardSpeed, BoostZoneSpeed);
                 velocity += facing * (boosted - forwardSpeed);
-                racer.BoostZoneCarrySpeed = boosted;
+                // A draft's boost goes on top of the carry (RunDrive.Drive), so the carry is the pad's speed without it.
+                racer.BoostZoneCarrySpeed = Mathf.Max(forwardSpeed - Slipstream.SpeedBonus(racer, RunSpeed), BoostZoneSpeed);
                 game.PlayCue(RaceCue.BoostZone);
             }
             if (grounded && !racer.Grounded && velocity.y <= 0f && !grapple.IsAttached) SnapToGround();

@@ -180,8 +180,10 @@ namespace ProtoHarness.ChainRush.Audio
             swing.volume = Muted ? 0f : swingGain * 0.22f * effectsVolume * settings.Master * settings.Effects;
             // The air parting for a draft (Motion.Slipstream): it swells and climbs with the charge, full under the boost.
             if (!game.IsPaused)
-                draftGain = Mathf.MoveTowards(draftGain, game.IsRunning ? FeedbackLook.DraftWindTarget(player.DraftCharge, player.IsDrafting) : 0f,
-                    Time.unscaledDeltaTime * FeedbackLook.DraftWindRise);
+            {
+                float air = game.IsRunning ? FeedbackLook.DraftWindTarget(player.DraftCharge, player.IsDrafting) : 0f;
+                draftGain = Mathf.MoveTowards(draftGain, air, Time.unscaledDeltaTime * (air > draftGain ? FeedbackLook.DraftWindRise : FeedbackLook.DraftWindFall));
+            }
             draft.pitch = Mathf.Lerp(0.7f, 1.5f, draftGain);
             draft.volume = Muted ? 0f : draftGain * draftGain * 0.6f * effectsVolume * settings.Master * settings.Effects;
             if (game.IsPaused)

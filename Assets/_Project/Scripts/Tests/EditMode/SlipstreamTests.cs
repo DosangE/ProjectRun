@@ -99,6 +99,16 @@ namespace ProtoHarness.Tests.EditMode
 
         private static Slipstream.Spot OnRoad(Centerline line, Vector3 at) => new Slipstream.Spot(at, line.Project(at), line.BranchAt(at), 20f);
 
+        // A shortcut's S runs faster than the ground (SUMMIT DROP's about 3.2 times, review 2026-11-26): 11.5 m apart on it is
+        // 37 m of S, still behind.
+        [Test]
+        public void IsBehind_OnAShortcutWhoseSRunsFaster_GoesByTheGround()
+        {
+            var runner = new Slipstream.Spot(new Vector3(0f, 0f, 0f), new TrackCoord(1300d, 0f, 0f), 0, 20f);
+            var ahead = new Slipstream.Spot(new Vector3(0f, 0f, 11.5f), new TrackCoord(1337d, 0f, 0f), 0, 20f);
+            Assert.That(Slipstream.IsBehind(runner, ahead, 0d), Is.True);
+        }
+
         // ---- Charge ----------------------------------------------------------------------------------
 
         [Test]
@@ -197,6 +207,26 @@ namespace ProtoHarness.Tests.EditMode
             var swing = new PoleSwing.Settings { RunSpeed = 20f, RunAcceleration = 8f, ThrottleSpeedScale = 1.2f, CarryDecay = 0.8f };
             for (int i = 0; i < 400; i++) PoleSwing.SpeedUp(racer, true, false, pulling, false, Dt, swing, Sling());
             return racer.SwingHookSpeed;
+        }
+
+        // Review 2026-11-26 (Codex): a drafted swing let go kept the draft's share in its carry and Drive added it again,
+        // heading for 36 m/s from a 30 m/s swing. Let go, it heads for the speed it swung with.
+        [TestCase(30f, 6f)]
+        [TestCase(24f, 0f)]
+        public void End_ADraftedSwingLetGo_HeadsForTheSpeedItSwungWith(float swung, float draft)
+        {
+            racer.DraftBoostTicks = draft > 0f ? 40 : 0;
+            racer.SwingTicks = 10;
+            PoleSwing.End(racer, Vector3.forward * swung, 0f, draft);
+            racer.Velocity = Vector3.forward * swung;
+            var now = new RunDrive.Conditions { Grounded = true, Drafting = draft > 0f };
+            float top = 0f;
+            for (int i = 0; i < 30; i++)
+            {
+                RunDrive.Drive(racer, 0f, now, 60f, Dt, Drive(), Sling());
+                top = Mathf.Max(top, racer.Velocity.z);
+            }
+            Assert.That(top, Is.LessThanOrEqualTo(swung + 0.001f));
         }
 
         [Test]
