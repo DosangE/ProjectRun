@@ -110,7 +110,36 @@ namespace ProtoHarness.ChainRush.Visuals
         public const float CueExitTime = 0.1f;
         public static readonly Color SwingAmber = new Color(1f, 0.62f, 0.18f);
         public static readonly Color SwingBoostGold = new Color(1f, 0.86f, 0.32f);
+        // Drafting (Motion.Slipstream) shows no gauge (user 2026-11-26): air parting over the screen grows out from the middle
+        // as the charge does, stays full while the boost runs and closes after it. Its strength moves by DraftWindRise and
+        // DraftWindFall a second, so a charge lost closes quickly rather than blinking out. Each streak runs from
+        // DraftWindInner of the way to the screen's edge out to DraftWindReachMin (no charge) .. DraftWindReachMax (full) of
+        // it in DraftWindCycle seconds, straight out from the middle (user 2026-11-26: no curves), as thick as DraftWindThickMin .. Max and as
+        // strong as DraftWindAlphaMin .. Max.
+        // The boost starts with a pulse along the screen's top and bottom, the booster's edges being the left and right.
+        public const float DraftWindRise = 4f;
+        public const float DraftWindFall = 5f;
+        public const int DraftWindStreaks = 26;
+        public const int DraftWindSegments = 7;
+        public const float DraftWindCycle = 0.38f;
+        public const float DraftWindInner = 0.2f;
+        public const float DraftWindReachMin = 0.4f;
+        public const float DraftWindReachMax = 1.15f;
+        public const float DraftWindThickMin = 2.5f;
+        public const float DraftWindThickMax = 7f;
+        public const float DraftWindAlphaMin = 0.35f;
+        public const float DraftWindAlphaMax = 0.8f;
+        public const float DraftPulseTime = 0.35f;
+        public const float DraftPulseAlpha = 0.35f;
+        public const int DraftPulseLayers = 3;
+        public const float DraftPulseLayerHeight = 28f / DraftPulseLayers;
+        public static readonly Color DraftBlue = new Color(96f / 255f, 168f / 255f, 1f);
         public static readonly Color BoostZoneGreen = new Color(0.1f, 0.85f, 0.2f);
+
+        // How open the parting air is at this charge (0 to 1) or under the boost, before it is smoothed: faint from the first
+        // tick behind another, so the player knows at once.
+        public static float DraftWindTarget(float charge, bool boosting) =>
+            boosting ? 1f : charge > 0f ? Mathf.Lerp(0.12f, 0.85f, charge) : 0f;
 
         // One at the event, zero once its duration has passed or before it has ever happened.
         public static float Fade(float since, float duration)

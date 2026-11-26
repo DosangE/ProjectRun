@@ -35,6 +35,8 @@ namespace ProtoHarness.ChainRush.Visuals
         private StateEdge hook;
         private StateEdge swing;
         private StateEdge poleReady;
+        private StateEdge draft;
+        private float draftWind;
         // The swing's end has no edge of its own: it snaps the chain unless a respawn cut it.
         private bool wasSwinging;
         private Vector3 swingBite;
@@ -84,6 +86,10 @@ namespace ProtoHarness.ChainRush.Visuals
         public float SinceSwing(float now) => swing.Since(now);
         public float SinceMiss(float now) => missed ? now - missedAt : -1f;
         public float SincePoleReady(float now) => poleReady.Since(now);
+        // Seconds since a draft's boost last started (Motion.Slipstream).
+        public float SinceDraft(float now) => draft.Since(now);
+        // How open the air parting over the screen is, 0 to 1 (FeedbackLook.DraftWindTarget, smoothed).
+        public float DraftWind => draftWind;
         public float SincePad(float now) => padHit ? now - padAt : -1f;
         // The gauge slot the last booster emptied (the whole slots left after spending it), -1 before any.
         public int SpentBoostSlot => spentBoostSlot;
@@ -234,6 +240,9 @@ namespace ProtoHarness.ChainRush.Visuals
                 padAt = now;
             }
             lastPadCarry = padCarry;
+            draft.Update(player.IsDrafting, now);
+            float wind = FeedbackLook.DraftWindTarget(player.DraftCharge, player.IsDrafting);
+            draftWind = Mathf.MoveTowards(draftWind, wind, (wind > draftWind ? FeedbackLook.DraftWindRise : FeedbackLook.DraftWindFall) * Time.deltaTime);
             if (hook.Update(grapple.IsAttached, now))
                 StartRing(AnchorRing, grapple.AnchorPosition, Quaternion.FromToRotation(Vector3.up, -player.Facing), now);
             bool swinging = player.IsSwinging;
@@ -264,7 +273,7 @@ namespace ProtoHarness.ChainRush.Visuals
                 bool swingTail = swinging || (swingEnded && now - swingEndedAt < FeedbackLook.SwingTailAfter);
                 bool booster = boosting;
                 float padShare = FeedbackLook.PadShare(game.Racer.BoostZoneCarrySpeed, player.RunSpeed, player.BoostZoneSpeed);
-                speedTrails.Present(SpeedTrails.StyleOf(swingTail, booster, padShare > 0f), padShare, player.Facing, now);
+                speedTrails.Present(SpeedTrails.StyleOf(swingTail, booster, padShare > 0f), padShare, player.Facing, now, player.IsDrafting);
             }
             bool ready = grapple.HasPoleCandidate && !grapple.IsAttached && !player.IsSwinging;
             poleReady.Update(ready, now);
@@ -290,7 +299,8 @@ namespace ProtoHarness.ChainRush.Visuals
         // from before is not mistaken for a new miss.
         private void ForgetRun()
         {
-            slingPull = empower = hook = swing = poleReady = default;
+            slingPull = empower = hook = swing = poleReady = draft = default;
+            draftWind = 0f;
             boosted = missed = padHit = wasSwinging = swingEnded = false;
             boosting = boostEnded = slotsKnown = slotGained = false;
             spentBoostSlot = gainedSlot = -1;

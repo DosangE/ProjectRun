@@ -282,6 +282,7 @@ namespace ProtoHarness.Tests.PlayMode
             yield return LoadRace(Setup(RaceMode.Bots).WithOpponents(Profile("Beta"), Profile("Theta"), Profile("Delta")));
             RaceField field = assembler.Field;
             field.ContactEnabled = false;
+            field.DraftEnabled = false;
             foreach (RaceWorld world in field.Opponents) world.Game.SetInputSource(Bot(world));
             StateTrace together = Trace(player, new InputReplay(log));
             player.Game.SetInputSource(together);

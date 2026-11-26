@@ -183,9 +183,10 @@ namespace ProtoHarness.Tests.PlayMode
             Assert.That(FieldTrace.DifferentRacers(recorded, diverged, first), Does.Contain(racer), "The changed runner itself must differ first. " + FieldTrace.Compare(recorded, diverged, ticks));
             string withContact = string.Join(",", FieldTrace.DifferentRacers(recorded, diverged, first));
 
-            // The control for the others: with contact off the worlds share nothing, so the change may reach no other runner
-            // on any tick. With contact on, the others above may differ only through the contact solve.
+            // The control for the others: with contact and drafting off the worlds share nothing, so the change may reach no
+            // other runner on any tick. With both on, the others above may differ only through them.
             field.ContactEnabled = false;
+            field.DraftEnabled = false;
             logs = RecordBots(worlds, field);
             var apart = new FieldTrace();
             yield return RunField(worlds, field, apart, ticks, 100);

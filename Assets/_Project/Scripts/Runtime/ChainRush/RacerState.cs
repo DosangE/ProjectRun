@@ -43,6 +43,9 @@ namespace ProtoHarness.ChainRush
         private double lastGroundedS;
         private int respawnHoldTicks;
         private int hookCooldownTicks;
+        private int draftChargeTicks;
+        private int draftBoostTicks;
+        private int draftCooldownTicks;
 
         // Every field of this class except the rules, by value (the guard test in SnapshotTests keeps the two in step).
         // Treat it as read-only. A copy taken between ticks puts the racer back exactly where it was.
@@ -78,6 +81,9 @@ namespace ProtoHarness.ChainRush
             public double LastGroundedS;
             public int RespawnHoldTicks;
             public int HookCooldownTicks;
+            public int DraftChargeTicks;
+            public int DraftBoostTicks;
+            public int DraftCooldownTicks;
         }
 
         public RacerState(RunRules rules)
@@ -114,6 +120,11 @@ namespace ProtoHarness.ChainRush
         public ref int RespawnHoldTicks => ref respawnHoldTicks;
         // Ticks left in which a runner whose swing another runner's contact broke hooks no pole; zero otherwise.
         public ref int HookCooldownTicks => ref hookCooldownTicks;
+        // Ticks on end the runner has been right behind another (Motion.Slipstream), and ticks left in the boost that gave;
+        // a boost running charges nothing, nor do the ticks of the cooldown after it.
+        public ref int DraftChargeTicks => ref draftChargeTicks;
+        public ref int DraftBoostTicks => ref draftBoostTicks;
+        public ref int DraftCooldownTicks => ref draftCooldownTicks;
 
         // Index into the grapple's anchor array rather than a Transform, so the state stays plain data.
         public int AnchorIndex => anchorIndex;
@@ -193,6 +204,9 @@ namespace ProtoHarness.ChainRush
             lastGroundedS = 0d;
             respawnHoldTicks = 0;
             hookCooldownTicks = 0;
+            draftChargeTicks = 0;
+            draftBoostTicks = 0;
+            draftCooldownTicks = 0;
         }
 
         public Snapshot Capture() => new Snapshot
@@ -227,6 +241,9 @@ namespace ProtoHarness.ChainRush
             LastGroundedS = lastGroundedS,
             RespawnHoldTicks = respawnHoldTicks,
             HookCooldownTicks = hookCooldownTicks,
+            DraftChargeTicks = draftChargeTicks,
+            DraftBoostTicks = draftBoostTicks,
+            DraftCooldownTicks = draftCooldownTicks,
         };
 
         public void Restore(in Snapshot snapshot)
@@ -261,6 +278,9 @@ namespace ProtoHarness.ChainRush
             lastGroundedS = snapshot.LastGroundedS;
             respawnHoldTicks = snapshot.RespawnHoldTicks;
             hookCooldownTicks = snapshot.HookCooldownTicks;
+            draftChargeTicks = snapshot.DraftChargeTicks;
+            draftBoostTicks = snapshot.DraftBoostTicks;
+            draftCooldownTicks = snapshot.DraftCooldownTicks;
         }
 
         public void Attach(int index, float length)

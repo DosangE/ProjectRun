@@ -1,5 +1,6 @@
 using System;
 using ProtoHarness.ChainRush.Flow;
+using ProtoHarness.ChainRush.Visuals;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
@@ -28,6 +29,9 @@ namespace ProtoHarness.ChainRush.Audio
         private AudioClip wind;
         private AudioClip swingLoop;
         private AudioSource swing;
+        private AudioClip draftLoop;
+        private AudioSource draft;
+        private float draftGain;
         private AudioSource trackAmbience;
         private AudioClip trackMusicClip;
         private AudioClip trackAmbienceClip;
@@ -52,6 +56,9 @@ namespace ProtoHarness.ChainRush.Audio
         public AudioClip MusicClip => music.clip;
         public AudioClip TrackAmbienceClip => initialized ? trackAmbience.clip : trackAmbienceClip;
         public AudioClip SwingClip => swingLoop;
+        public AudioClip DraftClip => draftLoop;
+        public float DraftVolume => initialized ? draft.volume : 0f;
+        public float DraftPitch => initialized ? draft.pitch : 1f;
         public float SwingVolume => initialized ? swing.volume : 0f;
 
         private void Awake()
@@ -88,6 +95,9 @@ namespace ProtoHarness.ChainRush.Audio
             swingLoop = MakeSwingLoop(swingSource, swingRecording.frequency);
             swing = LoopSource(effects);
             swing.clip = swingLoop;
+            draftLoop = MakeDraftLoop();
+            draft = LoopSource(effects);
+            draft.clip = draftLoop;
             trackAmbience = LoopSource(ambience);
             trackAmbience.clip = trackAmbienceClip;
             music.clip = trackMusicClip != null ? trackMusicClip : score; music.loop = true;
@@ -168,22 +178,28 @@ namespace ProtoHarness.ChainRush.Audio
             if (!game.IsPaused)
                 swingGain = Mathf.MoveTowards(swingGain, game.IsRunning && player.IsSwinging ? 1f : 0f, Time.unscaledDeltaTime * 5f);
             swing.volume = Muted ? 0f : swingGain * 0.22f * effectsVolume * settings.Master * settings.Effects;
+            // The air parting for a draft (Motion.Slipstream): it swells and climbs with the charge, full under the boost.
+            if (!game.IsPaused)
+                draftGain = Mathf.MoveTowards(draftGain, game.IsRunning ? FeedbackLook.DraftWindTarget(player.DraftCharge, player.IsDrafting) : 0f,
+                    Time.unscaledDeltaTime * FeedbackLook.DraftWindRise);
+            draft.pitch = Mathf.Lerp(0.7f, 1.5f, draftGain);
+            draft.volume = Muted ? 0f : draftGain * draftGain * 0.6f * effectsVolume * settings.Master * settings.Effects;
             if (game.IsPaused)
             {
-                if (!paused) { music.Pause(); effects.Pause(); ambience.Pause(); swing.Pause(); trackAmbience.Pause(); paused = true; }
+                if (!paused) { music.Pause(); effects.Pause(); ambience.Pause(); swing.Pause(); draft.Pause(); trackAmbience.Pause(); paused = true; }
                 return;
             }
-            if (paused) { music.UnPause(); effects.UnPause(); ambience.UnPause(); swing.UnPause(); trackAmbience.UnPause(); paused = false; }
+            if (paused) { music.UnPause(); effects.UnPause(); ambience.UnPause(); swing.UnPause(); draft.UnPause(); trackAmbience.UnPause(); paused = false; }
             if (game.IsRunning && !playing)
             {
-                music.Play(); ambience.Play(); swing.Play();
+                music.Play(); ambience.Play(); swing.Play(); draft.Play();
                 if (trackAmbience.clip != null) trackAmbience.Play();
                 playing = true;
             }
             if (!game.IsRunning && playing)
             {
-                music.Stop(); ambience.Stop(); swing.Stop(); trackAmbience.Stop();
-                swingGain = 0f; swing.volume = 0f; playing = false;
+                music.Stop(); ambience.Stop(); swing.Stop(); draft.Stop(); trackAmbience.Stop();
+                swingGain = draftGain = 0f; swing.volume = draft.volume = 0f; playing = false;
             }
         }
 
@@ -191,14 +207,14 @@ namespace ProtoHarness.ChainRush.Audio
         {
             Muted = muted;
             if (IsOff()) return;
-            music.mute = effects.mute = ambience.mute = swing.mute = trackAmbience.mute = muted;
+            music.mute = effects.mute = ambience.mute = swing.mute = draft.mute = trackAmbience.mute = muted;
         }
 
         public void ResetAudio()
         {
             if (IsOff()) return;
-            music.Stop(); effects.Stop(); ambience.Stop(); swing.Stop(); trackAmbience.Stop();
-            swingGain = 0f; swing.volume = 0f;
+            music.Stop(); effects.Stop(); ambience.Stop(); swing.Stop(); draft.Stop(); trackAmbience.Stop();
+            swingGain = draftGain = 0f; swing.volume = draft.volume = 0f;
             playing = false; paused = false;
         }
 
@@ -228,6 +244,7 @@ namespace ProtoHarness.ChainRush.Audio
         {
             if (cue == RaceCue.Boost) return MakeKartBoost();
             if (cue == RaceCue.BoostZone) return MakePassBy();
+            if (cue == RaceCue.Draft) return MakeDraft();
             if (cue == RaceCue.PoleHook || cue == RaceCue.Grapple) throw new ArgumentException("ChainRushAudio: " + cue + " is recorded, not synthesized.", nameof(cue));
             // Keep the accepted wall hit and the unused cues' synthesis unchanged.
             if (cue != RaceCue.GuardHit && cue != RaceCue.Attack && cue != RaceCue.Damage && cue != RaceCue.Beeps && cue != RaceCue.Buzz)
@@ -264,6 +281,7 @@ namespace ProtoHarness.ChainRush.Audio
                 case RaceCue.Footstep: return 0.09f;
                 case RaceCue.Boost: return 2f;
                 case RaceCue.BoostZone: return 1.05f;
+                case RaceCue.Draft: return 0.45f;
                 case RaceCue.Respawn: return 0.8f;
                 case RaceCue.Jump: return 0.38f;
                 case RaceCue.Land: return 0.36f;
@@ -328,6 +346,23 @@ namespace ProtoHarness.ChainRush.Audio
                 samples[i] = Math.Min(1d, t / 0.02d) * Math.Exp(-t * 1.6d) * (body + air * 0.8d);
             }
             return Clip("CR boost zone pass-by", Leveled(samples, SampleRate));
+        }
+
+        // A draft's boost: a rush of air opening up from 600 to 2400 Hz over a soft fifth, with none of the booster's engine.
+        private static AudioClip MakeDraft()
+        {
+            var samples = new double[Mathf.RoundToInt(SampleRate * CueSeconds(RaceCue.Draft))];
+            var random = new System.Random(4702 + (int)RaceCue.Draft);
+            Oscillator root = new Oscillator(0d), fifth = new Oscillator(0d);
+            StateVariableFilter wind = new StateVariableFilter();
+            for (int i = 0; i < samples.Length; i++)
+            {
+                double t = (double)i / SampleRate;
+                double air = wind.BandPass(random.NextDouble() * 2d - 1d, 600d + 1800d * Math.Min(1d, t / 0.22d), 1.2d);
+                double tone = (root.Sine(523.25d) + 0.6d * fifth.Sine(783.99d)) * 0.22d * Math.Exp(-t * 6d);
+                samples[i] = Math.Min(1d, t / 0.015d) * Math.Exp(-t * 3.2d) * (air + tone);
+            }
+            return Clip("CR draft", Leveled(samples, SampleRate));
         }
 
         // Edges, then the level the takes were compared at, so the game plays what was picked.
@@ -540,6 +575,28 @@ namespace ProtoHarness.ChainRush.Audio
             return Clip("Swing chain - recorded loop", AtLevel(samples, rate), rate);
         }
 
+        // Two seconds of rushing air. What follows them fades in over their start, as the swing's loop does.
+        private static AudioClip MakeDraftLoop()
+        {
+            int length = SampleRate * 2, blend = SampleRate / 4;
+            var source = new double[length + blend];
+            var random = new System.Random(4803);
+            StateVariableFilter near = new StateVariableFilter(), far = new StateVariableFilter();
+            for (int i = 0; i < source.Length; i++)
+            {
+                double noise = random.NextDouble() * 2d - 1d;
+                source[i] = near.BandPass(noise, 1100d, 0.9d) + 0.6d * far.BandPass(noise, 420d, 0.8d);
+            }
+            var samples = new double[length];
+            Array.Copy(source, samples, length);
+            for (int i = 0; i < blend; i++)
+            {
+                double mix = (i + 0.5d) / blend * Math.PI / 2d;
+                samples[i] = source[i] * Math.Sin(mix) + source[length + i] * Math.Cos(mix);
+            }
+            return Clip("CR draft air loop", AtLevel(samples, SampleRate));
+        }
+
         private static AudioClip MakeScore()
         {
             // Eight bars at 120 BPM, all oscillators fade at note boundaries.
@@ -584,11 +641,13 @@ namespace ProtoHarness.ChainRush.Audio
         private void OnDestroy()
         {
             if (swing != null) Destroy(swing);
+            if (draft != null) Destroy(draft);
             if (trackAmbience != null) Destroy(trackAmbience);
             if (cues != null) for (int i = 0; i < cues.Length; i++) if (cues[i] != null) Destroy(cues[i]);
             if (score != null) Destroy(score);
             if (wind != null) Destroy(wind);
             if (swingLoop != null) Destroy(swingLoop);
+            if (draftLoop != null) Destroy(draftLoop);
         }
     }
 }

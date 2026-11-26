@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using ProtoHarness.ChainRush.Bots;
 using ProtoHarness.ChainRush.Control;
+using ProtoHarness.ChainRush.Motion;
+using ProtoHarness.ChainRush.Track;
 using UnityEngine;
 
 namespace ProtoHarness.ChainRush.Race
@@ -41,7 +43,12 @@ namespace ProtoHarness.ChainRush.Race
         private uint[] contactSequences;
         private bool[] touchedThisTick, touchedLastTick;
         private bool observationReady;
+        // Who is right behind another runner on this tick (FindDrafts), from the same snapshot the bots read.
+        private Slipstream.Spot[] spots;
+        private bool[] behind;
         public bool ContactEnabled { get; set; } = true;
+        // Off, no runner drafts. With contact off too the worlds share nothing.
+        public bool DraftEnabled { get; set; } = true;
         private bool stopped;
         // Match the existing running-order hysteresis (RaceServer); finishers are ranked separately below.
         private const double OrderMarginMetres = 1d;
@@ -132,6 +139,8 @@ namespace ProtoHarness.ChainRush.Race
             contactWallNormals = new Vector3[RacerCount];
             observedPositions = new Vector3[RacerCount];
             observedVelocities = new Vector3[RacerCount];
+            spots = new Slipstream.Spot[RacerCount];
+            behind = new bool[RacerCount];
             contactSwingBreaks = new int[RacerCount];
             contactRacers = new int[RacerCount];
             contactSequences = new uint[RacerCount];
@@ -190,8 +199,9 @@ namespace ProtoHarness.ChainRush.Race
                     observedVelocities[i] = games[i].Player.Velocity;
                 }
                 observationReady = true;
+                FindDrafts();
                 for (int i = 0; i < RacerCount; i++) stepping[i] = games[i].InputTick();
-                for (int i = 0; i < RacerCount; i++) if (stepping[i]) games[i].MoveTick();
+                for (int i = 0; i < RacerCount; i++) if (stepping[i]) games[i].MoveTick(behind[i]);
                 if (ContactEnabled) ResolveContact();
                 for (int i = 0; i < RacerCount; i++) if (stepping[i]) games[i].JudgeTick();
             }
@@ -222,6 +232,31 @@ namespace ProtoHarness.ChainRush.Race
             stopped = true;
             enabled = false;
         }
+
+        // Who is right behind whom as this tick begins, before anyone's input or movement, so the order the runners are
+        // stepped in does not matter. Each runner is placed on the road by its own world's track (which looks for it near
+        // where it was). A runner that has finished or is blinking out its respawn hold is neither behind nor drafted.
+        private void FindDrafts()
+        {
+            Array.Clear(behind, 0, behind.Length);
+            if (!DraftEnabled) return;
+            for (int i = 0; i < RacerCount; i++)
+            {
+                if (!CanDraft(i)) continue;
+                Centerline track = games[i].Track;
+                Vector3 at = observedPositions[i];
+                spots[i] = new Slipstream.Spot(at, track.Project(at), track.BranchAt(at), Vector3.Dot(observedVelocities[i], track.Frame(at).Forward));
+            }
+            double lap = game.Track.IsLoop ? game.Circuit.Definition.LapLength : 0d;
+            for (int i = 0; i < RacerCount; i++)
+            {
+                if (!CanDraft(i)) continue;
+                for (int ahead = 0; ahead < RacerCount && !behind[i]; ahead++)
+                    behind[i] = ahead != i && CanDraft(ahead) && Slipstream.IsBehind(spots[i], spots[ahead], lap);
+            }
+        }
+
+        private bool CanDraft(int racer) => games[racer].IsRunning && !games[racer].Player.IsRespawning;
 
         private void ResolveContact()
         {

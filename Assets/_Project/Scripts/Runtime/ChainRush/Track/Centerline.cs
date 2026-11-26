@@ -311,6 +311,14 @@ namespace ProtoHarness.ChainRush.Track
 
         public int BranchCount => branches.Count;
 
+        // The branch (AddBranch, in the order they were added) a point is on, as Project and Frame answer for it; -1 on the
+        // main line.
+        public int BranchAt(Vector3 world)
+        {
+            Piece piece = PieceAt(world, out float along, out float right);
+            return TryBranchAt(world, piece, along, right, out Branch branch, out _, out _, out _) ? branches.IndexOf(branch) : -1;
+        }
+
         // A shortcut's road beside the main line, closed or open (user 2026-10-25, Finger Lanes): line is its open centerline
         // from the main line at fromS back onto it at toS (TrackDefinition.ShortcutLine), mainHalfWidth the main road's half
         // width there. A point off the main road (farther to the side than mainHalfWidth) and nearer to the branch than to the

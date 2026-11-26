@@ -96,6 +96,9 @@ namespace ProtoHarness.Net
             w.Write(s.LastGroundedS);
             w.Write(s.RespawnHoldTicks);
             w.Write(s.HookCooldownTicks);
+            w.Write(s.DraftChargeTicks);
+            w.Write(s.DraftBoostTicks);
+            w.Write(s.DraftCooldownTicks);
         }
 
         private static RacerState.Snapshot ReadRacer(BinaryReader r) => new RacerState.Snapshot
@@ -130,6 +133,9 @@ namespace ProtoHarness.Net
             LastGroundedS = r.ReadDouble(),
             RespawnHoldTicks = r.ReadInt32(),
             HookCooldownTicks = r.ReadInt32(),
+            DraftChargeTicks = r.ReadInt32(),
+            DraftBoostTicks = r.ReadInt32(),
+            DraftCooldownTicks = r.ReadInt32(),
         };
 
         private static void WriteLaps(BinaryWriter w, in LapCounter.Snapshot s)
