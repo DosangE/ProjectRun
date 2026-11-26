@@ -36,14 +36,18 @@ namespace ProtoHarness.ChainRush.Bots
         public float CornerReleaseHeading { get; } // Largest heading error from the road that still keeps holding, degrees.
         public int CornerHoldLimitTicks { get; } // Longest corner swing when holding through, fixed ticks.
         public int ContactRehookTicks { get; } // No new hook for this long after a contact breaks a swing, fixed ticks.
+        public bool DraftPass { get; } // Steps out past the runner ahead while drafting instead of running into it, boolean.
+        public float PassLookAhead { get; } // While a draft's boost runs, how far ahead a runner in line is passed, metres.
+        public float PassOffset { get; } // Wanted distance to the side of the runner being passed, metres.
+        public float PassCloseDistance { get; } // While charging, how near a runner being closed on must be to pass it, metres.
 
         // CircuitBot's values with every technique off: RaceBotTests checks RaceBot against CircuitBot with this. Fixed —
         // the tuning loop changes Normal and Hard only, never this or the constructor's defaults.
         public static BotTuning CircuitEquivalent => new BotTuning(4.5d);
         // The tuning loop's current values (docs/BOT_TUNING_LOG.tsv: Normal round 18, Hard round 22). Both started at round zero
-        // equal to CircuitEquivalent.
-        public static BotTuning Normal => new BotTuning(4.5d, shortcutSwing: true, cornerSwing: true, swingHoldTicks: 38, insideLine: true, booster: true);
-        public static BotTuning Hard => new BotTuning(4.5d, shortcutSwing: true, cornerSwing: true, swingHoldTicks: 45, swingCooldownTicks: 75, insideLine: true, booster: true, boosterStraight: 55d, holdThroughCorner: true);
+        // equal to CircuitEquivalent. Both pass while drafting (DECISIONS 2026-11-26 "봇 드래프트 추월").
+        public static BotTuning Normal => new BotTuning(4.5d, shortcutSwing: true, cornerSwing: true, swingHoldTicks: 38, insideLine: true, booster: true, draftPass: true);
+        public static BotTuning Hard => new BotTuning(4.5d, shortcutSwing: true, cornerSwing: true, swingHoldTicks: 45, swingCooldownTicks: 75, insideLine: true, booster: true, boosterStraight: 55d, holdThroughCorner: true, draftPass: true);
 
         public BotTuning(double grappleGapJumpDistance, double jumpGapJumpDistance = 0.8d, float grappleHeight = 2.6f,
             float offsetGain = 4f, float headingClamp = 20f, float headingDivisor = 20f,
@@ -54,7 +58,8 @@ namespace ProtoHarness.ChainRush.Bots
             bool slingshot = false, double slingshotStraight = 50d, float slingshotMaxSpeedRatio = 0.8f,
             bool contactResponse = false, float contactDistance = 2f, float edgeMargin = 1f, float avoidOffset = 1f,
             int contactRetryTicks = 5, bool holdThroughCorner = false, float cornerReleaseHeading = 15f, int cornerHoldLimitTicks = 150,
-            int contactRehookTicks = 25)
+            int contactRehookTicks = 25, bool draftPass = false, float passLookAhead = 8f, float passOffset = 2.5f,
+            float passCloseDistance = 3f)
         {
             GrappleGapJumpDistance = grappleGapJumpDistance;
             JumpGapJumpDistance = jumpGapJumpDistance;
@@ -87,6 +92,10 @@ namespace ProtoHarness.ChainRush.Bots
             CornerReleaseHeading = cornerReleaseHeading;
             CornerHoldLimitTicks = cornerHoldLimitTicks;
             ContactRehookTicks = contactRehookTicks;
+            DraftPass = draftPass;
+            PassLookAhead = passLookAhead;
+            PassOffset = passOffset;
+            PassCloseDistance = passCloseDistance;
             Validate();
         }
 
@@ -116,6 +125,9 @@ namespace ProtoHarness.ChainRush.Bots
             Range(CornerReleaseHeading, 0d, 90d, nameof(CornerReleaseHeading));
             Range(CornerHoldLimitTicks, 1d, 1000d, nameof(CornerHoldLimitTicks));
             Range(ContactRehookTicks, 0d, 500d, nameof(ContactRehookTicks));
+            Range(PassLookAhead, 0.01d, 30d, nameof(PassLookAhead));
+            Range(PassOffset, 0d, 10d, nameof(PassOffset));
+            Range(PassCloseDistance, 0d, 10d, nameof(PassCloseDistance));
         }
 
         private static void Range(double value, double min, double max, string name)

@@ -219,6 +219,90 @@ namespace ProtoHarness.Tests.PlayMode
             }
         }
 
+        // Passing while drafting (BotTuning.DraftPass) on STADIUM's opening straight: runner 0 ahead, nearly in line, runner 1's
+        // bot behind it, the other two out of the way. The steering is compared with an all-off bot's on the same state, which
+        // holds the centreline.
+        [UnityTest, Timeout(120000)]
+        public IEnumerator DraftPass_BoostingBehindARunner_StepsOutToTheSideWithMoreRoad([Values(0.5f, -0.5f)] float aheadSide)
+        {
+            RaceWorld[] worlds = null;
+            RaceField field = null;
+            yield return LoadStraight((w, f) => { worlds = w; field = f; });
+            InLine(worlds, field, aheadSide, 5f, 1f);
+            worlds[1].Game.Racer.DraftBoostTicks = 10;
+            float pass = PassSteer(worlds[1], field, out float plain);
+            Assert.That(Mathf.Abs(plain), Is.LessThan(0.05f), "precondition: an all-off bot holds the centreline here.");
+            Assert.That(pass - plain, Is.EqualTo(-Mathf.Sign(aheadSide)).Within(0.9f), "It steers away from the runner ahead.");
+            worlds[1].Game.Racer.DraftBoostTicks = 0;
+            Assert.That(PassSteer(worlds[1], field, out plain), Is.EqualTo(plain), "Without a draft it keeps its line.");
+        }
+
+        [UnityTest, Timeout(120000)]
+        public IEnumerator DraftPass_ChargingBehindARunner_StaysInLineUnlessClosingOnItRightInFront()
+        {
+            RaceWorld[] worlds = null;
+            RaceField field = null;
+            yield return LoadStraight((w, f) => { worlds = w; field = f; });
+            InLine(worlds, field, 0.5f, 5f, 0.8f);
+            worlds[1].Game.Racer.DraftChargeTicks = 10;
+            Assert.That(PassSteer(worlds[1], field, out float plain), Is.EqualTo(plain), "Closing from 5 m it keeps the charge.");
+            InLine(worlds, field, 0.5f, 2.5f, 1f);
+            worlds[1].Game.Racer.DraftChargeTicks = 10;
+            Assert.That(PassSteer(worlds[1], field, out plain), Is.EqualTo(plain), "2.5 m behind at the same speed it keeps the charge.");
+            InLine(worlds, field, 0.5f, 2.5f, 0.8f);
+            worlds[1].Game.Racer.DraftChargeTicks = 10;
+            Assert.That(PassSteer(worlds[1], field, out plain) - plain, Is.EqualTo(-1f).Within(0.9f), "Closing from 2.5 m it steps out.");
+        }
+
+        private static IEnumerator LoadStraight(Action<RaceWorld[], RaceField> done)
+        {
+            RaceWorld player = null;
+            RaceField field = null;
+            yield return LoadRace("Stadium", BotDifficulty.Normal, true, 7, (w, f) => { player = w; field = f; });
+            var worlds = new[] { player, field.Opponents[0], field.Opponents[1], field.Opponents[2] };
+            foreach (RaceWorld world in worlds) world.Game.SetInputSource(new InputReplay(new InputLog()));
+            player.Game.StartRun();
+            StepField(field);
+            done(worlds, field);
+        }
+
+        // Runner 0 at x = aheadSide, gap metres ahead of runner 1 on the centreline, going aheadScale of runner 1's run speed;
+        // one field tick takes the snapshot the bots read, and both are put back where they were for the bot's own position.
+        private static void InLine(RaceWorld[] worlds, RaceField field, float aheadSide, float gap, float aheadScale)
+        {
+            for (int pass = 0; pass < 2; pass++)
+            {
+                for (int i = 2; i < worlds.Length; i++) Place(worlds[i], new Vector3(i == 2 ? -4.5f : 4.5f, 1.05f, -8f), Vector3.zero);
+                Place(worlds[0], new Vector3(aheadSide, 1.05f, 8f), Vector3.forward * worlds[1].Player.RunSpeed * aheadScale);
+                Place(worlds[1], new Vector3(0f, 1.05f, 8f - gap), Vector3.forward * worlds[1].Player.RunSpeed);
+                worlds[1].Game.Racer.Heading = 0f;
+                worlds[1].Game.Racer.DraftBoostTicks = worlds[1].Game.Racer.DraftChargeTicks = worlds[1].Game.Racer.DraftCooldownTicks = 0;
+                if (pass == 0) StepField(field);
+            }
+        }
+
+        // The steering of a passing bot and, in plain, an all-off bot's, both reading runner 1 and the same snapshot.
+        private static float PassSteer(RaceWorld world, RaceField field, out float plain)
+        {
+            var passer = new RaceBot(world.Game, world.Player, world.Grapple, world.Circuit, new BotTuning(4.5d, draftPass: true));
+            var allOff = new RaceBot(world.Game, world.Player, world.Grapple, world.Circuit, BotTuning.CircuitEquivalent);
+            passer.Observe(field, 1);
+            allOff.Observe(field, 1);
+            plain = allOff.Consume().Steer;
+            return passer.Consume().Steer;
+        }
+
+        // As ChainRushDraftTests.Place: on the road, grounded, at this velocity.
+        private static void Place(RaceWorld world, Vector3 position, Vector3 velocity)
+        {
+            world.Player.SetPosition(position);
+            CharacterController capsule = world.Player.GetComponent<CharacterController>();
+            capsule.Move(Vector3.down * 0.3f);
+            world.Game.Racer.Grounded = capsule.isGrounded;
+            Physics.SyncTransforms();
+            world.Game.Racer.Velocity = velocity;
+        }
+
         internal static void StepField(RaceField field) => FieldTick.Invoke(field, null);
 
         internal static IInputSource InputFor(RaceWorld world, BotDifficulty difficulty) => difficulty == BotDifficulty.Easy

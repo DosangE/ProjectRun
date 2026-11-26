@@ -10,6 +10,31 @@
 
 ---
 
+## 2026-11-26 · 봇 드래프트 추월: 부스트 중 앞 8 m 안에 줄 선 러너를 2.5 m 비켜 지나고 그동안 새 훅을 미룬다 · 견인(러버밴딩) 계획의 결정 5개 (`feature/bot-draft-pass`, 작업 중)
+
+- **결정 (사용자 2026-11-26)**: 견인·드래프트 추돌 방향을 담은 요청서 초안을 붙여 넣은 뒤, Claude 가 짚은 미결 5개에 "agy와 소통해서 결정해라". agy 읽기 전용 `ask` 1회(`tools/agy-run.ps1`, RunId `catchup-ask1`, `gemini-4-neon-high`, exit 0, 바꾼 파일 0)와 Claude 의 코드 확인으로 정했고, 그 결과로 올린 ① 요청서에 사용자 "ㄱㄱ".
+  - Q1 **두 브랜치 직렬**: ① 봇 추월(이 항목) → ② 견인. 한 브랜치면 끊김·SUMMIT 최악의 변화를 어느 쪽 때문인지 가를 수 없다.
+  - Q2 ② 의 `RaceField.CatchupEnabled` 는 기본 true, 월드가 아무것도 나누지 않는다는 전제의 대조군(`ChainRushRaceFieldTests.cs:285`, `ChainRushReplayTests.cs:189`)과 드래프트 속도만 재는 `ChainRushDraftTests.cs:66-77`, 벤치 `_WithoutDrafts` 에 `= false` 한 줄씩 — 기대값은 그대로(드래프트 때 `DraftEnabled = false` 와 같은 판단).
+  - Q3 봇 추월은 아래 규칙. 봇의 `rehookLeft`·`BotTuning.ContactRehookTicks` 정리는 하지 않는다 — `ChainRushContactTests.cs:206` 이 그 값을 직접 읽고 공개 인자를 지우는 일이라 범위 밖(시뮬과 같은 25틱이라 동작 차이는 없다, HANDOFF 2절 "몸싸움 전략" ②).
+  - Q4 ② 견인에는 회전 반경을 넓히지 않는다 — 최대 +15% 는 반경을 고정한 속도 등급 차(VeryFast 1.2배) 안이고, 견인은 `RacerState` 밖 인자라 반경까지 바꾸면 봇이 읽는 `RunnerMotor.TurnLimit` 이 실제 회전과 어긋난다.
+  - Q5 ② 에서 D3a("러버밴딩 없이 시작", 2026-11-12)를 취소선으로 바꾼다. 플레이어·봇이 같은 규칙이라 "같은 시뮬" 원칙과 맞고, 진행 거리는 앞 틱 판정 결과라 틱 시작 계산이 결정적이다. 멀티(`Net/`)에는 걸리지 않는다(M7).
+- **규칙** (`Bots/RaceBot.cs` `PassAhead`, 값은 `BotTuning` 의 `draftPass`·`passLookAhead` 8 m·`passOffset` 2.5 m·`passCloseDistance` 3 m, Normal·Hard 만 켬, `CircuitEquivalent` 는 끔): 관측 스냅샷에서 앞쪽(트랙 앞 방향 내적 > 0)·옆 `Slipstream.HalfWidth` 안에 있는 가장 가까운 러너를 — 부스트 중이면 8 m 안에서, 충전 중이면 3 m 안에서 다가가고 있을 때만 — 그 러너의 D ± 2.5 m 중 도로 여유가 큰 쪽으로 비켜 지난다(`AvoidNearby` 와 같은 도로 끝 클램프). 비키는 동안 코너·지름길 훅을 미룬다. 충전 중에 넓게 비키지 않는 것은 1.5 m 판정을 한 틱 벗어나면 충전이 0 이 되기 때문이다(`Slipstream.cs:81-83`, agy 지적). 분기는 `trackYaw` 계산 앞에서 끝나 `CircuitBot` 과의 비트 동등이 그대로다.
+- **봇 레이스 측정** (`BotLapBenchTests.Race_FourSeedsTwoTracks`, 드래프트 켬, ALPHA 4명, 시드 4개):
+
+  | 중앙값 / 최악 s | 드래프트 끄기 | dev (드래프트 켬, 추월 없음) | **추월** |
+  |---|---|---|---|
+  | STADIUM Hard | 60.32 / 61.08 | 61.36 / 63.32 | 58.92 / 61.22 |
+  | SUMMIT Hard | 69.00 / 69.06 | 71.75 / 83.30 | 69.79 / 74.28 |
+  | STADIUM Normal | 66.72 / 66.72 | 66.96 / 70.26 | 65.22 / 67.54 |
+  | SUMMIT Normal | 81.65 / 81.70 | 80.45 / 90.78 | 79.26 / 79.58 |
+  | 스윙 끊김 (16레이스) | 8 | 233 | **112** (SUMMIT N 30·STADIUM N 16·SUMMIT H 57·STADIUM H 9) |
+
+  낙하·미완주 0, 접촉 직후 25틱 안에 다시 건 봇 0(벤치 단언). 발동은 레이스당 8~25회. 값(8·2.5·3 m)은 첫 판 그대로 두었다 — 모든 칸이 dev 보다 나아졌고, 남은 끊김 112 의 원인(충전 중 추돌·나란히 달리다 스윙 원 궤도·드래프트와 무관한 접촉)은 가르지 않았다.
+- **검증 (에디터 6000.3.19f1, 커밋 전, `test-runs.ps1 -Record`)**: 컴파일 `Tundra build success`, `error CS` 없음. EditMode `!Enemy` `testcasecount="470" result="Passed" passed="470" failed="0"` (06:33:25Z). PlayMode `RaceBotTests`·`ChainRushBotRaceTests`·`ChainRushContactTests`·`ChainRushDraftTests`·`ChainRushRaceFieldTests`·`ChainRushReplayTests.Replay_BotRace` (`!Device !Enemy !NetEndReplay !^Lap$`) `testcasecount="70" result="Passed" passed="68" failed="0" skipped="2"` (06:34:29Z, skipped 는 Explicit 측정, 새 `DraftPass_` 3건 포함). 벤치 `testcasecount="2" result="Passed" passed="2" failed="0"` (06:41:16Z). 시뮬을 바꾸지 않아 서킷 지문·Lap 은 돌리지 않았다.
+- **병합 전 리뷰**: 아직(Codex 설계 리뷰 1회 + `unity-reviewer`, 새 파일은 없지만 추가+삭제 합이 30줄을 넘어 §7-5 "그 밖").
+- **확인 못 한 것·남은 것**: HANDOFF 2절 "드래프트" 의 "봇 추돌".
+- **버린 대안**: 충전 중에도 8 m 비키기(스스로 충전을 끊는다), 자기 목표 오프셋 기준으로 비키기(앞 러너 쪽으로 꺾일 수 있다), 기존 `ContactResponse` 켜기(같은 날 진단에서 SUMMIT 최악이 남았다), 발동 중 뒤에서 받아도 앞 러너 스윙을 끊지 않기(몸싸움 규칙 변경 — 측정 뒤 다시 본다).
+
 ## 2026-11-26 · 드래프트: 앞 러너 바로 뒤 12 m 에 2 s 있으면 1.5 s 동안 +6 m/s, 끝난 뒤 5 s 쿨타임 — 트랙을 따라 꺾인 판정, 봇전 시뮬 규칙 (`feature/race-draft`, 작업 중)
 
 - **결정 (사용자 2026-11-26)**: "카트라이더의 드래프트 처럼 … 앞선 캐릭터의 뒤에서 2초 있으면 1.5초동안 추월할 수 있을 정도의 가속", "발동은 자동", "판정 범위에서 벗어나면 바로 그 시간 스택이 날라간다", "코너라면 코너 각만큼 그 판정 공간이 꺾여있어야", "드래프트는 속도 상한에 안걸리도록". 첫 구현 뒤 "판정 거리 2배", "시간을 3초로", 게이지 대신 "화면상 점차 커지는 바람 갈라지는 이펙트와 사운드 이펙트". 그 뒤 "판정 거리 12, 충전 2.5초, 한번쓰고나면 쿨타임 5초(가속 끝나고 나서 부터 5초)", 바람 선은 "곡선 … 없애고 그냥 직선들로". 마지막으로 "충전 2초로 수정".

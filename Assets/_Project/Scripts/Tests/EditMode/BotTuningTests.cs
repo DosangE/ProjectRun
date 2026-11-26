@@ -52,7 +52,7 @@ namespace ProtoHarness.Tests.EditMode
             Assert.That(tuning.HeadingClamp, Is.EqualTo(20f));
             Assert.That(tuning.HeadingDivisor, Is.EqualTo(20f));
             Assert.That(tuning.ShortcutSwing || tuning.CornerSwing || tuning.InsideLine || tuning.Booster || tuning.Slingshot
-                || tuning.ContactResponse || tuning.HoldThroughCorner, Is.False);
+                || tuning.ContactResponse || tuning.HoldThroughCorner || tuning.DraftPass, Is.False);
         }
 
         [Test]
