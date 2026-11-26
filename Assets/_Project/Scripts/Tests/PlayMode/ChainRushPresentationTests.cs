@@ -7,6 +7,7 @@ using ProtoHarness.ChainRush;
 using ProtoHarness.ChainRush.Audio;
 using ProtoHarness.ChainRush.Control;
 using ProtoHarness.ChainRush.Flow;
+using ProtoHarness.ChainRush.Motion;
 using ProtoHarness.ChainRush.Race;
 using ProtoHarness.ChainRush.Track;
 using ProtoHarness.ChainRush.Visuals;
@@ -132,7 +133,7 @@ namespace ProtoHarness.Tests.PlayMode
         [UnityTest]
         public IEnumerator Audio_GeneratedClips_HaveSignalAndNoClipping()
         {
-            Assert.That(sound.CueCount, Is.EqualTo(14));
+            Assert.That(sound.CueCount, Is.EqualTo(15));
             for (int i = 0; i <= sound.CueCount; i++)
             {
                 AudioClip clip = i == sound.CueCount ? sound.MusicClip : sound.GetCue(i);
@@ -158,12 +159,37 @@ namespace ProtoHarness.Tests.PlayMode
             yield return null;
         }
 
+        // The air parting for a draft (user 2026-11-26): a loop that swells and climbs with the charge, and is silent without one.
+        [UnityTest]
+        public IEnumerator Audio_DraftAir_SwellsAndClimbsWithTheCharge_AndGoesQuietWithoutOne()
+        {
+            float[] air = ReadSamples(sound.DraftClip);
+            Assert.That(Math.Abs(air[air.Length - 1] - air[0]), Is.LessThan(0.5f), "The loop's end runs into its start.");
+            // No ticks of its own: alone, a tick puts the charge back to zero.
+            game.SelfStepping = false;
+            game.StartRun();
+            RacerState racer = game.Racer;
+            Assert.That(sound.DraftVolume, Is.Zero);
+            racer.DraftChargeTicks = Slipstream.ChargeTicks / 3;
+            float until = Time.unscaledTime + 0.4f;
+            while (Time.unscaledTime < until) { racer.DraftChargeTicks = Slipstream.ChargeTicks / 3; yield return null; }
+            float lowVolume = sound.DraftVolume, lowPitch = sound.DraftPitch;
+            until = Time.unscaledTime + 0.4f;
+            while (Time.unscaledTime < until) { racer.DraftChargeTicks = Slipstream.ChargeTicks - 1; yield return null; }
+            Assert.That(lowVolume, Is.GreaterThan(0f));
+            Assert.That(sound.DraftVolume, Is.GreaterThan(lowVolume));
+            Assert.That(sound.DraftPitch, Is.GreaterThan(lowPitch));
+            until = Time.unscaledTime + 0.5f;
+            while (Time.unscaledTime < until) { racer.DraftChargeTicks = 0; yield return null; }
+            Assert.That(sound.DraftVolume, Is.Zero);
+        }
+
         // Moves must be told apart by ear (M6 completion, DECISIONS 2026-11-05 "M6 범위"). This only keeps the waveforms
         // apart: whether they sound different enough is the user's to hear.
         [UnityTest]
         public IEnumerator Audio_MoveCues_HaveUnlikeWaveforms()
         {
-            RaceCue[] moves = { RaceCue.Finish, RaceCue.GuardHit, RaceCue.Boost, RaceCue.Grapple, RaceCue.PoleHook, RaceCue.BoostZone, RaceCue.Respawn };
+            RaceCue[] moves = { RaceCue.Finish, RaceCue.GuardHit, RaceCue.Boost, RaceCue.Grapple, RaceCue.PoleHook, RaceCue.BoostZone, RaceCue.Respawn, RaceCue.Draft };
             for (int a = 0; a < moves.Length; a++)
                 for (int b = a + 1; b < moves.Length; b++)
                     Assert.That(Likeness(sound.GetCue((int)moves[a]), sound.GetCue((int)moves[b])), Is.LessThan(0.5f), $"{moves[a]} and {moves[b]}");

@@ -10,6 +10,41 @@
 
 ---
 
+## 2026-11-26 · 드래프트: 앞 러너 바로 뒤 12 m 에 2 s 있으면 1.5 s 동안 +6 m/s, 끝난 뒤 5 s 쿨타임 — 트랙을 따라 꺾인 판정, 봇전 시뮬 규칙 (`feature/race-draft`, 작업 중)
+
+- **결정 (사용자 2026-11-26)**: "카트라이더의 드래프트 처럼 … 앞선 캐릭터의 뒤에서 2초 있으면 1.5초동안 추월할 수 있을 정도의 가속", "발동은 자동", "판정 범위에서 벗어나면 바로 그 시간 스택이 날라간다", "코너라면 코너 각만큼 그 판정 공간이 꺾여있어야", "드래프트는 속도 상한에 안걸리도록". 첫 구현 뒤 "판정 거리 2배", "시간을 3초로", 게이지 대신 "화면상 점차 커지는 바람 갈라지는 이펙트와 사운드 이펙트". 그 뒤 "판정 거리 12, 충전 2.5초, 한번쓰고나면 쿨타임 5초(가속 끝나고 나서 부터 5초)", 바람 선은 "곡선 … 없애고 그냥 직선들로". 마지막으로 "충전 2초로 수정".
+- **규칙** (`Motion/Slipstream.cs`, 값은 코드 상수라 씬을 고치지 않는다): 같은 길(`Centerline.BranchAt`), 트랙 앞 방향 속도 둘 다 8 m/s 이상, S 가 0.5 m 넘게 앞, 좌우 1.5 m, 높이차 3 m, 직선거리 12 m 이내. 100틱(2 s) 연속이면 자동 발동 75틱, 한 틱이라도 벗어나면 0. 발동이 끝나면(다 쓰든 스로틀을 놓아 끊기든) 250틱(5 s) 쿨타임 동안 충전하지 않는다. 충전은 스로틀을 놓아도 뒤에 있는 동안 남고, 복귀하면 셋 다 0. 완주·복귀 대기 러너는 제외.
+- **속도**: 지금 향하는 속도(달리기·스윙·부스터·부스트존 carry·그래플) **위에** 달리기 속도의 30%(Fast 6 m/s)를 얹고 2 × 달리기 가속으로 붙는다. max 로 겨루지 않는다. 평지에서 버는 거리는 계산상 약 10.1 m 라 12 m 끝에서는 나란히 서는 정도이고 약 9 m 안에서 추월한다. 부스트존 55 도 넘을 수 있다 — 2026-10-30 "55까지만" 과 다르다는 것을 알리고 "부스트존은 ○○, 병합 ㄱㄱ" 로 물었더니 사용자 2026-11-26 "ㅇㅇ 병합 ㄱㄱ": 지금대로 둔다(드래프트 중에는 55 위에 얹힌다). 회전 반경 ×1.3 이라 회전율은 달리기와 같다.
+- **구조**: `RaceField.FindDrafts` 가 입력 전 관측 스냅샷으로 누가 누구 뒤인지 한 번에 정하고(러너 순서 무관), `MoveTick(bool)` → `RunnerMotor.Step(in input, bool)` 가 상태를 바꾼다. `RacerState` 에 `draftChargeTicks`·`draftBoostTicks`·`draftCooldownTicks`(스냅샷·Net 코덱 세 줄씩). 카운트다운은 `Slipstream.CountDown`. `RaceField.DraftEnabled` 는 시험·측정용. 혼자 런에는 `RaceField` 가 없어 드래프트가 없다.
+- **표시**: 게이지 없음. `ChainRushHud.DrawDraftWind` 가 화면 가운데에서 사방으로 뻗는 곧은 바람 선(가운데가 굵고 양 끝이 가는 직선)을 충전만큼 크고 굵고 진하게, 발동 중 최대로 그리고(`FeedbackLook.DraftWindTarget`, `ControlFeedback.DraftWind`), `ChainRushAudio` 의 바람 루프가 함께 커지고 높아진다. 발동 순간 위아래 테두리·러너 바람 선·발동음(`RaceCue.Draft`). 상대 러너의 드래프트는 보이지 않는다.
+- **설계 토론 (agy 읽기 전용 `ask` 왕복 2번, exit 0, 위반 0)**: agy 가 맞은 것 — 첫 초안의 코너 계산, `Slingshot.Cut` 공용이면 부스트존에서 초기화됨, 판정과 상태를 나누면 생기는 깜빡임, `ChainRushReplayTests` 의 대조 실행도 꺼야 함, 소리는 코드 합성이라 씬 수정이 필요 없음, 충전 중 `SpeedTrails` 를 쓰면 발동 첫 터짐이 사라짐. Claude 가 반박한 것 — 높이차 5 m, "더 급하게 꺾인다"(반경은 같고 회전율만 오른다). 사용자 결정으로 바뀐 것 — 직선 콘 → 트랙 좌표, 감쇠 −1 → 즉시 0, 스윙 중 보류 → 바로 발동. 트랙 좌표 판정과 "상한 없음" 은 agy 가 보지 않았다.
+- **검증 (에디터 6000.3.19f1, 커밋 전, `test-runs.ps1 -Record`)**:
+  - EditMode `!Enemy` `testcasecount="466" result="Passed" passed="466" failed="0"` (16:58:24Z, 2026-11-25 UTC — 바람 선 다듬기 전).
+  - PlayMode 영향 범위 `testcasecount="246" result="Failed(Child)" passed="243" failed="1" skipped="2"` (16:59:02Z) — 실패는 `ChainRushPresentationTests.Audio_GeneratedClips_HaveSignalAndNoClipping` 의 `Expected: 14 But was: 15`(효과음 개수를 못 박은 검사, 발동음 추가로 15). 기대값을 15 로 고쳤다. skipped 2 는 Explicit 측정.
+  - 고친 뒤 `ChainRushDraftTests`·`ChainRushPresentationTests` `testcasecount="19" result="Passed" passed="19"` (17:10:56Z), 바람 선을 다듬은 뒤 HUD 테스트·봇 측정 `testcasecount="3" result="Passed" passed="3"` (17:13:11Z).
+  - 서킷 지문 `0xEF92FB76BFD1D767` 그대로(16:27:04Z 와 16:59:02Z 실행). 봇전 리플레이 해시는 바뀐다.
+  - 최종(충전 2 s, 2026-11-26 UTC): EditMode `testcasecount="467" result="Passed" passed="467" failed="0"` (05:12:18Z), `ChainRushDraftTests`·`ChainRushReplayTests.Replay_` `testcasecount="11" result="Passed" passed="11"` (05:13:35Z, 서킷 지문 그대로), 봇전·레이스 필드·접촉·`RaceBotTests` + 봇 측정 `testcasecount="60" result="Passed" passed="58" failed="0" skipped="2"` (05:17:41Z, skipped 는 Explicit 측정). Lap 은 돌리지 않았다 — 혼자 달리는 판에는 `RaceField` 가 없어 드래프트가 걸리지 않고 서킷 지문이 그대로다(2026-11-22 스윙 쿨타임과 같은 판단).
+  - 12 m·2.5 s·쿨타임·직선 판(2026-11-26 UTC): EditMode `testcasecount="467" result="Passed" passed="467" failed="0"` (04:40:42Z), PlayMode 영향 범위(드래프트·접촉·리플레이·롤백·봇·레이스 필드·순위·표현·프로필·코너·조향·드리프트·경사·서킷·Net·Flow `Race_`/`BoostZone_`, `!Device !Enemy !NetEndReplay !^Lap$`) `testcasecount="247" result="Passed" passed="245" failed="0" skipped="2"` (04:42:01Z, skipped 는 Explicit 측정, 서킷 지문 그대로), HUD 캡처·봇 측정 `testcasecount="3" result="Passed"` (04:56:42Z). Lap 은 돌리지 않았다.
+- **봇 레이스 측정 (같은 ALPHA 4명, 시드 4개, `BotLapBenchTests.Race_FourSeedsTwoTracks` / `_WithoutDrafts`)** — 끈 쪽은 2026-11-16 기록과 중앙값·최악이 같다:
+
+  | 중앙값 / 최악 s | 끄기 | 8 m·2 s | 16 m·3 s | 12 m·2.5 s·쿨 5 s | **12 m·2 s·쿨 5 s (최종)** |
+  |---|---|---|---|---|---|
+  | STADIUM Hard | 60.32 / 61.08 | 65.00 / 67.22 | 65.23 / 70.14 | 57.66 / 59.92 | 60.62 / 65.54 |
+  | SUMMIT Hard | 69.00 / 69.06 | 70.83 / 76.90 | 72.60 / 73.70 | 69.71 / 72.32 | 72.04 / 76.64 |
+  | STADIUM Normal | 66.72 / 66.72 | 69.15 / 70.56 | 63.57 / 67.74 | 66.40 / 72.42 | 66.85 / 68.14 |
+  | SUMMIT Normal | 81.65 / 81.70 | 84.53 / 89.64 | 77.49 / 77.74 | 79.64 / 80.58 | 79.44 / 81.10 |
+  | 스윙 끊김 (16레이스) | 8 | 301 | 263 | 204 | 220 |
+  | 발동 (레이스당 4명 합) | 0 | 15~35 | 18~38 | 10~19 | 9~22 |
+
+  첫 두 판은 합의한 중단 기준(끊김 +50%, 최악 +5%)에 걸려 멈추고 보고했고(최종 판도 끊김 8 → 220, 최악 SUMMIT Hard +11%·STADIUM Hard +7% 로 걸린다. 사용자는 2026-11-26 플레이 뒤 "괜찮다 병합 준비"), 사용자는 값을 바꾸고 "보충 작업도 할 수 있도록 기록도 해둬" 라고 했다. 낙하·미완주는 모두 0, 선두 교체는 레이스당 2~7회.
+  - 진단(8 m·2 s, 임시 코드, 되돌림, `-Record` 없음): 접촉을 끄면 끊김 0, Normal STADIUM 63.22 s·SUMMIT 80.67 s. Hard STADIUM 은 접촉을 꺼도 64.01 s — 추돌 말고 다른 원인이 있다(빠른 코너 진입으로 추정, 확인 못 함). Hard 에 기존 `contactResponse` 를 켜면 끊김 170 → 17, STADIUM 중앙값 62.48 s, SUMMIT 최악은 79.42 s.
+- **병합 전 리뷰** (`beb1df1` 대상, 사용자 "괜찮다 병합 준비"):
+  - Codex `adversarial-review --base dev` 1회, `needs-attention` 높음 1·중간 2, 오탐 0(셋 다 코드로 재현). ① [높음] 드래프트 중 스윙을 놓으면 carry 에 드래프트분이 들어가 `RunDrive.Drive` 가 또 더함(30 m/s 스윙 → 목표 36) → **고침**: `PoleSwing.End(…, draft)` 가 carry 에서 빼고, 부스트존 carry 도 같게. 고치기 전 코드에서 새 테스트 `SlipstreamTests.End_ADraftedSwingLetGo_HeadsForTheSpeedItSwungWith(30,6)` 이 `Expected: less than or equal to 30.0009995f But was: 36.0f` 로 실패(05:32:08Z). ② [중간] SUMMIT 지름길은 S 가 땅의 약 3.2배라 11.5 m 가 S 37 m 로 `MaxRoadGap` 36 을 넘음 → **고침**: `MaxRoadGap = 4 × Range`(48), 시험 `IsBehind_OnAShortcutWhoseSRunsFaster_GoesByTheGround`. ③ [중간] 스냅샷 코덱이 드래프트가 꺼져도 12바이트 길어져 옛 빌드와 섞이면 못 읽음 → **고치지 않음**: 2026-11-22 스윙 쿨타임 때와 같은 종류이고 멀티는 M7 까지 동결, 코덱에 버전 검사가 원래 없다(M7 에서 연결 단계 버전 확인). 다음 단계 제안(롤백 때 `FindDrafts` 가 `PrepareTick` 보다 먼저 돈다)은 필드 롤백이 아직 없어 M7 로 둔다.
+  - `unity-reviewer` 1회(121,743 토큰): 막는 지적 0, 보통 1·제안 6, 실제 결함 0. 고친 것 — `RunnerMotor.TurnLimit` 주석, 쓰지 않는 `using System.Reflection`, 소리가 줄어드는 속도를 화면과 같게(`DraftWindFall`), 측정 라벨(드래프트 켠 쪽 `RaceDraft`, 끈 쪽이 예전과 같은 `Race`). 두는 것 — `FindDrafts` 의 투영 3번(`Project`·`BranchAt`·`Frame`), `SpeedTrails` 드래프트 분기와 `DrawDraftPulse` 의 단언 없음, 부스트존 55 위 드래프트(사용자 "ㅇㅇ" — 그대로). 바뀐 테스트 3곳은 정당하다고 판정.
+  - 고친 뒤(2026-11-26 UTC): EditMode `testcasecount="470" result="Passed" passed="470" failed="0"` (05:33:49Z), PlayMode 드래프트·리플레이·롤백·코너 스윙·접촉·봇전·레이스 필드·`RaceBotTests`·표현·Flow `BoostZone_` + 봇 측정 `testcasecount="120" result="Passed" passed="118" failed="0" skipped="2"` (05:34:55Z, 서킷 지문 그대로). 측정 중앙값/최악 — STADIUM Hard 61.36/63.32, SUMMIT Hard 71.75/**83.30**, STADIUM Normal 66.96/70.26, SUMMIT Normal 80.45/**90.78**, 끊김 233. SUMMIT 최악이 커졌다(지름길에서도 드래프트가 걸리게 된 뒤 — 원인 미확인).
+- **확인 못 한 것·남은 것**: HANDOFF 2절 8번 "드래프트" 에 있다.
+- **버린 대안**: 월드 직선 콘(코너에서 꺾이지 않는다), 이탈 유예·감쇠, 키로 발동(입력·리플레이 형식 변경), 부스터와 max, HUD 게이지(사용자가 바람 효과로 바꿈).
+
 ## 2026-11-25 · `guard.ps1` 이 git 을 명령 단위로 판정, `docs/RULES/` 를 하네스 파일 보호에 (`fix/guard-git-tokens`)
 
 - **결정 (사용자, 2026-11-25)**: 시범 ③(agy 읽기 전용 조사) 결과로 올린 §3-2 요청서에 "ㄱㄱ"(새 세션에서). 고친 것: `tools/hooks/guard.ps1`, `.claude/settings.json` 의 Bash 훅 필터, `tools/agy-run.ps1` 의 하네스 목록 2곳, `docs/RULES/SUBAGENTS.md` §7-6, `CLAUDE.md` §3-1.

@@ -155,8 +155,15 @@ namespace ProtoHarness.ChainRush
         public Vector3 Facing => RunDrive.FacingOf(game.Racer.Heading);
         public float ForwardSpeed => Vector3.Dot(game.Racer.Velocity, Facing);
         // The ground turn rate full steering reaches at the current speed, in degrees a second (Step's limit, before the
-        // air scale): maxTurnRate, held to speed / minTurnRadius when that is set, a wider radius under a booster.
-        public float TurnLimit => RunDrive.TurnLimit(game.Racer.Velocity, game.Racer.SlingTicks > 0, DriveSettings());
+        // air scale): maxTurnRate, held to speed / minTurnRadius when that is set, a wider radius under a booster or a draft's boost.
+        public float TurnLimit
+        {
+            get
+            {
+                RunDrive.Settings drive = DriveSettings();
+                return RunDrive.TurnLimit(game.Racer.Velocity, RunDrive.TurnRadiusScale(game.Racer, drive), drive);
+            }
+        }
         public float SideSpeed => Vector3.Dot(game.Racer.Velocity, RunDrive.RightOf(game.Racer.Heading));
         public bool IsGrounded => game.Racer.Grounded;
         public float Speed => game.Racer.Velocity.magnitude;
@@ -171,6 +178,9 @@ namespace ProtoHarness.ChainRush
         public bool IsRespawning => game.Racer.RespawnHoldTicks > 0;
         // A contact with another runner broke this runner's swing a moment ago: a swing press hooks nothing yet.
         public bool IsHookCoolingDown => game.Racer.HookCooldownTicks > 0;
+        // How near a draft's charge is to its boost, 0 to 1 (Slipstream); 0 while the runner is not right behind another.
+        public float DraftCharge => game.Racer.DraftChargeTicks / (float)Slipstream.ChargeTicks;
+        public bool IsDrafting => game.Racer.DraftBoostTicks > 0;
         // How long a runner whose swing another runner's contact broke hooks no pole (user 2026-11-21, swing cooldown
         // S1-S3): the 25th tick after the contact hooks again, 0.5 s, the wait the bots kept on their own before
         // (BotTuning.ContactRehookTicks), now the simulation's for every runner.
@@ -274,8 +284,9 @@ namespace ProtoHarness.ChainRush
 
         // One simulation tick, called only by ChainRushGame.FixedUpdate. The stages run in the order below, each on what
         // the ones before it left in the racer's state; the order is part of the replay fingerprint. The rules live in
-        // Motion/; the motor reads the input, moves the controller and keeps the order.
-        public void Step(in TickInput input)
+        // Motion/; the motor reads the input, moves the controller and keeps the order. behind: the runner is right behind
+        // another (RaceField works that out before anyone moves), which charges a draft.
+        public void Step(in TickInput input, bool behind = false)
         {
             if (!game.IsRunning) return;
             NormalizeController();
@@ -303,11 +314,12 @@ namespace ProtoHarness.ChainRush
             // A swing lasts while the swing key is held. A press counts as held for its own tick, so a tap that comes and
             // goes between two ticks still swings for one tick.
             bool swingHeld = input.SwingHeld || input.SwingPressed;
-            if (racer.SwingTicks > 0 && (!swingHeld || grapple.IsAttached)) PoleSwing.End(racer, racer.Velocity, racer.Heading);
+            if (racer.SwingTicks > 0 && (!swingHeld || grapple.IsAttached)) PoleSwing.End(racer, racer.Velocity, racer.Heading, Slipstream.SpeedBonus(racer, RunSpeed));
             bool coasting = input.Coasting;
             // Backing up is coasting with the down arrow, so it cuts a booster too.
             bool reversing = coasting && input.Reversing;
             if (coasting) Slingshot.Cut(racer);
+            if (Slipstream.Advance(racer, behind, coasting)) game.PlayCue(RaceCue.Draft);
             bool swinging = racer.SwingTicks > 0;
             bool pulling = Slingshot.IsPulling(racer.SlingTicks, sling);
             bool carrying = racer.SlingTicks > 0 && !pulling;
@@ -323,6 +335,7 @@ namespace ProtoHarness.ChainRush
                 Pulling = pulling,
                 Carrying = carrying,
                 GrappleAttached = grapple.IsAttached,
+                Drafting = racer.DraftBoostTicks > 0,
             };
             Vector3 arrived = racer.Velocity;
             RunDrive.Push push = RunDrive.Drive(racer, frame.Grade, now, turnLimit, dt, drive, sling);
@@ -424,7 +437,8 @@ namespace ProtoHarness.ChainRush
                 float forwardSpeed = Vector3.Dot(velocity, facing);
                 float boosted = Mathf.Max(forwardSpeed, BoostZoneSpeed);
                 velocity += facing * (boosted - forwardSpeed);
-                racer.BoostZoneCarrySpeed = boosted;
+                // A draft's boost goes on top of the carry (RunDrive.Drive), so the carry is the pad's speed without it.
+                racer.BoostZoneCarrySpeed = Mathf.Max(forwardSpeed - Slipstream.SpeedBonus(racer, RunSpeed), BoostZoneSpeed);
                 game.PlayCue(RaceCue.BoostZone);
             }
             if (grounded && !racer.Grounded && velocity.y <= 0f && !grapple.IsAttached) SnapToGround();
@@ -434,11 +448,12 @@ namespace ProtoHarness.ChainRush
                 grapple.Release(true);
         }
 
-        // Counts the slingshot down and the swing up, then checks for a fall. Falling is measured from the track surface,
+        // Counts the slingshot and a draft's boost down and the swing up, then checks for a fall. Falling is measured from the track surface,
         // so a long downhill is not a fall. A circuit race puts the runner back on the track; the other courses end the run.
         private void CountDownAndCheckFall(RacerState racer)
         {
             if (racer.SlingTicks > 0) racer.SlingTicks--;
+            Slipstream.CountDown(racer);
             if (racer.SwingTicks > 0) racer.SwingTicks++;
             TrackCoord here = game.Track.Project(transform.position);
             if (here.H < -FallDepth)
@@ -537,6 +552,9 @@ namespace ProtoHarness.ChainRush
             racer.TurnRate = 0f;
             racer.RespawnHoldTicks = Ticks.FromSeconds(respawnHoldTime);
             racer.HookCooldownTicks = 0;
+            racer.DraftChargeTicks = 0;
+            racer.DraftBoostTicks = 0;
+            racer.DraftCooldownTicks = 0;
             game.PlayCue(RaceCue.Respawn);
         }
 

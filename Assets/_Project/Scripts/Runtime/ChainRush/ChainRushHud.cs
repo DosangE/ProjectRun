@@ -225,6 +225,8 @@ namespace ProtoHarness.ChainRush
         // 1 at a boost pad, then as strong as the pad's speed still is above running speed, 0 once it is gone.
         public float PadWind => game.IsRunning ? Mathf.Max(FeedbackLook.Fade(feedback.SincePad(Time.time), FeedbackLook.PadBurstTime),
             FeedbackLook.PadShare(game.Racer.BoostZoneCarrySpeed, player.RunSpeed, player.BoostZoneSpeed)) : 0f;
+        // How open the air parting for a draft is, 0 without one and 1 under its boost.
+        public float DraftWind => game.IsRunning ? feedback.DraftWind : 0f;
         // 1 the moment a grapple misses, 0 once the shake is over.
         public float MissShake => game.IsRunning ? FeedbackLook.Fade(feedback.SinceMiss(Time.time), FeedbackLook.MissShakeTime) : 0f;
 
@@ -455,6 +457,8 @@ namespace ProtoHarness.ChainRush
 
         private void DrawPlay(float width, float height, float scale)
         {
+            // Under the rest, so the place, the gauge and the speed stay readable.
+            DrawDraftWind(width, height);
             if (IsBotRace && cachedPlace > 0)
             {
                 // Bottom left (user 2026-11-13): gold, silver and bronze shine, each less than the one above; 4th on is plain white.
@@ -483,6 +487,7 @@ namespace ProtoHarness.ChainRush
             if (Tutorial != null) DrawTutorial(Tutorial, width, height, scale);
             DrawPadWind(width, height);
             DrawBoostFlash(width, height);
+            DrawDraftPulse(width, height);
             if (game.DamageFlash)
             {
                 Color flash = Coral;
@@ -808,6 +813,57 @@ namespace ProtoHarness.ChainRush
                 player.Gauge, FeedbackLook.Fade(feedback.SinceBoost(now), FeedbackLook.GaugeBurstTime), feedback.SpentBoostSlot,
                 FeedbackLook.Fade(feedback.SinceSlotGained(now), FeedbackLook.SlotGainTime), feedback.GainedSlot,
                 SlotBreath(now), small);
+        }
+
+        // Air parting over the screen while a draft charges and its boost runs (user 2026-11-26, in place of a gauge): straight
+        // streaks run out from the middle, and they reach farther, thicken and brighten with DraftWind.
+        private void DrawDraftWind(float width, float height)
+        {
+            float wind = DraftWind;
+            if (wind <= 0f) return;
+            var middle = new Vector2(width * 0.5f, height * 0.5f);
+            float reach = Mathf.Lerp(FeedbackLook.DraftWindReachMin, FeedbackLook.DraftWindReachMax, wind);
+            float thick = Mathf.Lerp(FeedbackLook.DraftWindThickMin, FeedbackLook.DraftWindThickMax, wind);
+            float span = 0.1f + 0.22f * wind;
+            Matrix4x4 previous = GUI.matrix;
+            for (int i = 0; i < FeedbackLook.DraftWindStreaks; i++)
+            {
+                float around = (i + 0.4f * Mathf.Sin(i * 12.9898f)) * (Mathf.PI * 2f / FeedbackLook.DraftWindStreaks);
+                float phase = Mathf.Repeat(Time.time / FeedbackLook.DraftWindCycle + i * 0.618f, 1f);
+                Color color = Color.Lerp(FeedbackLook.DraftBlue, Color.white, 0.45f + 0.5f * Mathf.Repeat(i * 0.37f, 1f));
+                color.a = Mathf.Lerp(FeedbackLook.DraftWindAlphaMin, FeedbackLook.DraftWindAlphaMax, wind) * Mathf.Min(1f, wind * 8f) * Mathf.Sin(phase * Mathf.PI);
+                // One straight line out from the middle, drawn in pieces that are fullest in the middle, pointed at both ends.
+                var out01 = new Vector2(Mathf.Cos(around) * middle.x, Mathf.Sin(around) * middle.y);
+                float start = Mathf.Lerp(FeedbackLook.DraftWindInner, reach, phase);
+                float length = (Mathf.Lerp(FeedbackLook.DraftWindInner, reach, phase + span) - start) * out01.magnitude;
+                Vector2 from = middle + out01 * start;
+                float angle = Mathf.Atan2(out01.y, out01.x) * Mathf.Rad2Deg;
+                GUI.matrix = previous * Matrix4x4.TRS(new Vector3(from.x, from.y, 0f), Quaternion.Euler(0f, 0f, angle), Vector3.one);
+                float piece = length / FeedbackLook.DraftWindSegments;
+                for (int part = 0; part < FeedbackLook.DraftWindSegments; part++)
+                {
+                    float body = Mathf.Max(1f, thick * Mathf.Sin((part + 0.5f) / FeedbackLook.DraftWindSegments * Mathf.PI));
+                    NightUi.Block(new Rect(part * piece, -body * 0.5f, piece, body), color);
+                }
+            }
+            GUI.matrix = previous;
+        }
+
+        // As a draft's boost starts, thin strips along the top and bottom edges, falling off toward the view.
+        private void DrawDraftPulse(float width, float height)
+        {
+            float fade = game.IsRunning ? FeedbackLook.Fade(feedback.SinceDraft(Time.time), FeedbackLook.DraftPulseTime) : 0f;
+            if (fade <= 0f) return;
+            const int Layers = FeedbackLook.DraftPulseLayers;
+            const float LayerHeight = FeedbackLook.DraftPulseLayerHeight;
+            for (int layer = 0; layer < Layers; layer++)
+            {
+                Color color = FeedbackLook.DraftBlue;
+                color.a = fade * FeedbackLook.DraftPulseAlpha * (1f - layer / (float)Layers);
+                float y = layer * LayerHeight;
+                NightUi.Block(new Rect(0f, y, width, LayerHeight), color);
+                NightUi.Block(new Rect(0f, height - y - LayerHeight, width, LayerHeight), color);
+            }
         }
 
         // A ready slot's mark, two triangles pointing right like a fast-forward. Drawn from column blocks as DrawArrow is:

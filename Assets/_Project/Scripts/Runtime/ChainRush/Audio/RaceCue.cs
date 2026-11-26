@@ -33,5 +33,7 @@ namespace ProtoHarness.ChainRush.Audio
         BoostZone,
         // A fall put the runner back on the track.
         Respawn,
+        // Drafting behind another runner paid off: its boost started.
+        Draft,
     }
 }

@@ -58,6 +58,8 @@ namespace ProtoHarness.ChainRush.Motion
             public bool Pulling;
             public bool Carrying;
             public bool GrappleAttached;
+            // A draft's boost is running (Slipstream).
+            public bool Drafting;
         }
 
         // What the running force reached for this tick: the forward speed it headed for and how fast. A guard turns the
@@ -88,13 +90,18 @@ namespace ProtoHarness.ChainRush.Motion
 
         // The ground turn rate full steering reaches at this velocity, in degrees a second: MaxTurnRate, held to
         // speed / MinTurnRadius when that is set. A booster's speed must not buy a tighter turn (user 2026-11-04 "오히려
-        // 덜꺽여야"), so its radius is wider by BoostTurnRadiusScale.
-        public static float TurnLimit(Vector3 velocity, bool boosting, in Settings settings)
+        // 덜꺽여야"), so its radius is wider by BoostTurnRadiusScale; a draft's boost widens it
+        // the same way (TurnRadiusScale).
+        public static float TurnLimit(Vector3 velocity, float radiusScale, in Settings settings)
         {
             if (settings.MinTurnRadius <= 0f) return settings.MaxTurnRate;
-            float radius = settings.MinTurnRadius * (boosting ? settings.BoostTurnRadiusScale : 1f);
+            float radius = settings.MinTurnRadius * radiusScale;
             return Mathf.Min(settings.MaxTurnRate, new Vector2(velocity.x, velocity.z).magnitude / radius * Mathf.Rad2Deg);
         }
+
+        // How much wider than MinTurnRadius the runner turns: a booster's scale, a draft's, or both.
+        public static float TurnRadiusScale(RacerState racer, in Settings settings) =>
+            (racer.SlingTicks > 0 ? settings.BoostTurnRadiusScale : 1f) * (racer.DraftBoostTicks > 0 ? Slipstream.TurnRadiusScale : 1f);
 
         // Backing up, the facing turns the other way, so the key still says which way the runner goes. Only while the down
         // arrow is held: a runner turned round against its velocity some other way steers as it always did.
@@ -111,7 +118,7 @@ namespace ProtoHarness.ChainRush.Motion
             // A swing ignores steering for the facing (steering works the rope there): the rope sets the facing
             // (PoleSwing.Step), and turning the facing first would split the velocity across it and let the side grip eat
             // the swing's speed.
-            float turnLimit = TurnLimit(racer.Velocity, racer.SlingTicks > 0, settings);
+            float turnLimit = TurnLimit(racer.Velocity, TurnRadiusScale(racer, settings), settings);
             float steerSign = SteerSign(racer.Velocity, heading, reversing);
             turnRate = swinging ? 0f : Mathf.MoveTowards(turnRate, steerSign * racer.Steer * turnLimit * turnScale, settings.TurnAcceleration * dt);
             heading = Mathf.Repeat(heading + turnRate * dt + 180f, 360f) - 180f;
@@ -133,6 +140,10 @@ namespace ProtoHarness.ChainRush.Motion
                 CarryTarget(ref racer.BoostZoneCarrySpeed, baseTarget, settings.BoostZoneFalloff, dt));
             float turnCost = TurnCost(racer, now, turnLimit, settings);
             float runTarget = Slingshot.RaiseTarget(carried, now.Pulling, now.Carrying, turnCost, sling);
+            // A draft's boost goes on top of whatever the runner heads for (user 2026-11-26 "속도 상한에 안걸리도록"), less what
+            // turning costs. The carried speeds above still wear off toward the undrafted target, so it does not cut them short.
+            float draft = now.Drafting ? Slipstream.SpeedBonus(racer, settings.RunSpeed) : 0f;
+            if (now.Drafting) runTarget += draft * turnCost;
             float currentForward = Vector3.Dot(velocity, facing);
             float acceleration = ForwardAcceleration(currentForward, runTarget, now, settings, sling);
             // Speed that only the turn took the target away from wears off gently (user 2026-11-04): the limit stays, it just
@@ -147,8 +158,11 @@ namespace ProtoHarness.ChainRush.Motion
             if (falloff > 0f && now.Grounded && !now.Swinging && !now.GrappleAttached && currentForward > runTarget)
                 acceleration = Mathf.Max(acceleration, falloff * (currentForward - baseTarget));
             // A grapple reels at GrappleReelSpeed, or at running speed when that is faster.
-            float forwardSpeed = Mathf.MoveTowards(currentForward, now.GrappleAttached ? Mathf.Max(settings.GrappleReelSpeed, settings.RunSpeed) : runTarget,
-                acceleration * dt);
+            float goal = now.GrappleAttached ? Mathf.Max(settings.GrappleReelSpeed, settings.RunSpeed) + draft : runTarget;
+            // The swing sets its own speed (PoleSwing.SpeedUp), a draft's too.
+            if (now.Drafting && !now.Swinging && currentForward < goal)
+                acceleration = Mathf.Max(acceleration, settings.RunAcceleration * Slipstream.AccelerationScale);
+            float forwardSpeed = Mathf.MoveTowards(currentForward, goal, acceleration * dt);
             velocity = facing * forwardSpeed + right * sideSpeed + Vector3.up * velocity.y;
             velocity.y = Mathf.Max(velocity.y - settings.Gravity * dt, -MaxFallSpeed);
             return new Push(runTarget, acceleration);

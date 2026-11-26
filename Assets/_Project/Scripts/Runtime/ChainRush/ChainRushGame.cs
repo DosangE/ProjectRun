@@ -238,11 +238,12 @@ namespace ProtoHarness.ChainRush
             return true;
         }
 
-        public void MoveTick()
+        // behind: the runner is right behind another this tick (RaceField); alone it never is.
+        public void MoveTick(bool behind = false)
         {
             RequireTickStage(TickStage.Movement);
             tickStage = TickStage.Judgment;
-            player.Step(pendingInput);
+            player.Step(pendingInput, behind);
         }
 
         public void JudgeTick()
@@ -388,7 +389,7 @@ namespace ProtoHarness.ChainRush
         // sounds like Finish, as every move did before they had their own sounds (2026-11-05).
         public void PlayCue(RaceCue cue)
         {
-            if (cue < RaceCue.Jump || cue > RaceCue.Respawn) throw new System.ArgumentOutOfRangeException(nameof(cue), cue, "ChainRushGame: no such cue.");
+            if (cue < RaceCue.Jump || cue > RaceCue.Draft) throw new System.ArgumentOutOfRangeException(nameof(cue), cue, "ChainRushGame: no such cue.");
             CuePlayed?.Invoke(cue);
             if (enhancedPresentation) { presentationAudio.PlayCue(cue); return; }
             audioSource.PlayOneShot(cues[(int)cue < cues.Length ? (int)cue : (int)RaceCue.Finish]);

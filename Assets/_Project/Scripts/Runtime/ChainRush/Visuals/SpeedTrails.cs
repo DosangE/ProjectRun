@@ -40,6 +40,7 @@ namespace ProtoHarness.ChainRush.Visuals
         private readonly TrailRenderer leftTail;
         private readonly TrailRenderer rightTail;
         private bool wasWindy;
+        private bool wasDrafting;
         private readonly LineRenderer[] lines = new LineRenderer[LineAround.Length];
         private readonly float[] lineBornAt = new float[LineAround.Length];
         // The shape each line took when it started: direction round and fan back in radians, reach in metres.
@@ -142,7 +143,8 @@ namespace ProtoHarness.ChainRush.Visuals
 
         // Each frame of a run. padShare is how much of a boost pad's speed its carry still holds (FeedbackLook.PadShare);
         // forward is where the runner faces, since its root does not turn.
-        public void Present(Style style, float padShare, Vector3 forward, float now)
+        // drafting: a draft's boost is running, which shoots the wind lines on its own, with no tail.
+        public void Present(Style style, float padShare, Vector3 forward, float now, bool drafting = false)
         {
             Current = style;
             bool zone = style == Style.BoostZone;
@@ -178,12 +180,17 @@ namespace ProtoHarness.ChainRush.Visuals
                 side.a = Mathf.Min(1f, tailColor.a + 0.2f);
                 SetTint(leftTail, side, FeedbackLook.TailGlow);
                 SetTint(rightTail, side, FeedbackLook.TailGlow);
-                lineStrength = strength;
-                // As a booster starts every line shoots out at once, then one at a time at uneven gaps.
-                if (!wasWindy && strength > WeakestLine) StartAll(now);
-                else if (strength > WeakestLine && now >= nextLineAt) StartNext(now);
+            }
+            if (windy || drafting)
+            {
+                float blow = drafting ? 1f : strength;
+                lineStrength = blow;
+                // As a booster or a draft's boost starts every line shoots out at once, then one at a time at uneven gaps.
+                if (((windy && !wasWindy) || (drafting && !wasDrafting)) && blow > WeakestLine) StartAll(now);
+                else if (blow > WeakestLine && now >= nextLineAt) StartNext(now);
             }
             wasWindy = windy;
+            wasDrafting = drafting;
             UpdateLines(forward, right, now);
         }
 
@@ -273,7 +280,7 @@ namespace ProtoHarness.ChainRush.Visuals
         {
             Current = Style.None;
             nextLineAt = 0f;
-            wasWindy = false;
+            wasWindy = wasDrafting = false;
             for (int i = 0; i < lines.Length; i++)
                 if (lines[i] != null) lines[i].enabled = false;
             HideTail(boostTail);

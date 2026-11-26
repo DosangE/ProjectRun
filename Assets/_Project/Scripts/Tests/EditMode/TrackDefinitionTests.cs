@@ -810,6 +810,8 @@ namespace ProtoHarness.Tests.EditMode
             Assert.That(middle.S, Is.EqualTo(96d + along / length * (InfieldShortcutTo - 96d)).Within(0.01d));
             Assert.That(middle.D, Is.EqualTo(0f).Within(0.01f));
             Assert.That(Vector3.Distance(line.Frame(new Vector3(52f, 0f, 111f)).Forward, Vector3.right), Is.LessThan(1e-4f), "East along the straight.");
+            Assert.That(line.BranchAt(new Vector3(52f, 0f, 111f)), Is.EqualTo(0));
+            Assert.That(line.BranchAt(new Vector3(5f, 0f, 104f)), Is.EqualTo(-1));
             TrackCoord beside = line.Project(new Vector3(5f, 0f, 104f));
             Assert.That(beside.S, Is.EqualTo(104d).Within(0.01d), "On the main road beside the junction: the loop's S.");
             Assert.That(beside.D, Is.EqualTo(5f).Within(0.01f));

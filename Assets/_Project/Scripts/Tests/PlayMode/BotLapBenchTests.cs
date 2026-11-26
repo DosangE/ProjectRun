@@ -93,6 +93,14 @@ namespace ProtoHarness.Tests.PlayMode
 
         [UnityTest, Explicit, Timeout(3600000)]
         public IEnumerator Race_FourSeedsTwoTracks([Values(BotDifficulty.Easy, BotDifficulty.Normal, BotDifficulty.Hard)] BotDifficulty difficulty)
+            => RaceFourSeedsTwoTracks(difficulty, true);
+
+        // The same races with drafting off (RaceField.DraftEnabled), the baseline drafting is compared with.
+        [UnityTest, Explicit, Timeout(3600000)]
+        public IEnumerator Race_FourSeedsTwoTracks_WithoutDrafts([Values(BotDifficulty.Easy, BotDifficulty.Normal, BotDifficulty.Hard)] BotDifficulty difficulty)
+            => RaceFourSeedsTwoTracks(difficulty, false);
+
+        private IEnumerator RaceFourSeedsTwoTracks(BotDifficulty difficulty, bool drafts)
         {
             var suiteClock = Stopwatch.StartNew();
             int earlyRehooks = 0;
@@ -107,6 +115,10 @@ namespace ProtoHarness.Tests.PlayMode
                     RaceField field = null;
                     yield return RaceBotTests.LoadRace(track, difficulty, true, seed, (w, f) => { player = w; field = f; });
                     Assert.That(field.ContactEnabled, Is.True);
+                    field.DraftEnabled = drafts;
+                    int draftsStarted = 0, leadChanges = 0, leader = -1, longestCharge = 0, chargesLost = 0;
+                    var charged = new int[4];
+                    Action<RaceCue> draftCue = value => { if (value == RaceCue.Draft) draftsStarted++; };
                     var worlds = new[] { player, field.Opponents[0], field.Opponents[1], field.Opponents[2] };
                     int falls = 0;
                     Action<RaceCue> cue = value => { if (value == RaceCue.Respawn) falls++; };
@@ -116,6 +128,7 @@ namespace ProtoHarness.Tests.PlayMode
                         worlds[i].Game.SetInputSource(source);
                         if (source is RaceBot bot) bot.Observe(field, i);
                         worlds[i].Game.CuePlayed += cue;
+                        worlds[i].Game.CuePlayed += draftCue;
                     }
                     player.Game.StartRun();
                     // A contact-broken bot waits before hooking again (user 2026-11-16, "다시 스윙을 거는 속도는 0.5초로"):
@@ -130,6 +143,12 @@ namespace ProtoHarness.Tests.PlayMode
                         Assert.That(player.Game.Tick, Is.EqualTo(tick + 1), "The field stopped before this benchmark tick.");
                         for (int i = 0; i < 4; i++)
                         {
+                            int charge = worlds[i].Game.Racer.DraftChargeTicks;
+                            longestCharge = Math.Max(longestCharge, charge);
+                            // Half a second or more behind, then out of it without a boost.
+                            if (charge == 0 && charged[i] >= 25 && !worlds[i].Player.IsDrafting) chargesLost++;
+                            charged[i] = charge;
+                            if (field.Place(i) == 1 && leader != i && (leader < 0 || field.Place(leader) > 1)) { if (leader >= 0) leadChanges++; leader = i; }
                             int now = field.ContactSwingBreaks(i);
                             if (now > seenBreaks[i]) { seenBreaks[i] = now; lastBreak[i] = tick + 1; }
                             bool swinging = worlds[i].Game.Racer.SwingTicks > 0;
@@ -151,14 +170,18 @@ namespace ProtoHarness.Tests.PlayMode
                     {
                         breaks += field.ContactSwingBreaks(i);
                         worlds[i].Game.CuePlayed -= cue;
+                        worlds[i].Game.CuePlayed -= draftCue;
                     }
+                    double front = double.MinValue, back = double.MaxValue;
+                    for (int i = 0; i < 4; i++) { front = Math.Max(front, field.Progress(i)); back = Math.Min(back, field.Progress(i)); }
+                    Debug.Log($"BotBench Draft {track} {difficulty} seed={seed} on={drafts}: drafts={draftsStarted}, leadChanges={leadChanges}, longestCharge={longestCharge}, lost={chargesLost}, spread={Number(front - back)} m.");
                     // MP2's real race ends on the player's finish (D7 a), so the other three are still out by rule and
                     // are not counted. Unfinished is the measured runner (the player's slot) not finishing by TickLimit.
                     int unfinished = player.Game.HasFinished ? 0 : 1;
                     double seconds = player.Game.HasFinished ? player.Game.Tick * (double)Ticks.Seconds : double.NaN;
                     times[seed - 1] = seconds;
                     allBreaks += breaks; allFalls += falls; allUnfinished += unfinished;
-                    Append("Race", track, difficulty, seed, seconds, breaks, falls, unfinished);
+                    Append(drafts ? "RaceDraft" : "Race", track, difficulty, seed, seconds, breaks, falls, unfinished);
                     Debug.Log($"BotBench Race {track} {difficulty} seed={seed}: ticks={player.Game.Tick}, seconds={Number(seconds)}, breaks={breaks}, falls={falls}, unfinished={unfinished}, wallMinutes={clock.Elapsed.TotalMinutes:F6}.");
                 }
                 // A missing player finish makes the aggregate explicitly NA, rather than dropping the slow run.
