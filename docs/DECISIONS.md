@@ -10,6 +10,50 @@
 
 ---
 
+## 2026-11-27 · 견인: 선두와의 진행 거리 차로 달리기 속도의 0~25% 를 목표 속도에 더한다 — 8 m 에서 0, 드래프트 범위 12 m 에서 5%, 288 m(× 속도 등급)에서 25%, 스윙은 제 속도 + 견인, 플레이어·봇 공통 (`feature/race-catchup`, 2026-11-27 `dev` 병합)
+
+- **결정 (사용자 2026-11-27)**: 요청서(대화)에 "일단 구현해보고 견인 정도를 수정하면 되지 않을까", "멀어졌을때 많이 받지만 가까워질수록 그 견인 수준은 떨어져야", 그리고 "ㄱㄱ 대신 견인이라는 것은 어느정도는 따라잡을 수 있도록 설계하는 것이다. 2등과 1등에 대해 둘이 동등한 실력이면 아예 추월하기가 불가능하니 드래프트와 견인으로 추월기회를 주는것". 방향은 2026-11-26 결정 5개(아래 항목 Q2·Q4·Q5)와 같다.
+- **곡선을 요청서에서 바꾼 이유**: 요청서 안(30 m 에서 0 → 150 m 에서 15%, 직선)은 같은 실력 두 러너면 뒤 러너가 30 m 에서 멈춰 드래프트 범위(12 m)에 들어가지 못한다. 평지 평균 어림(Fast 20 m/s, scratchpad `catchup_sim.py`, 검증 안 됨)으로 곡선 4개를 비교했다 — 같은 실력 60 m → 12 m: 30 m 직선 도달 못 함, 10 m 직선 150 s, **8 m 0 → 12 m 5% → 150 m 15%** 36 s, 제곱근 45 s. 셋째를 골랐고, 사용자 답 전에 고른 값이라 플레이로 다시 본다. 8·12 m 는 드래프트 범위에 묶고(`Slipstream.Range`) 먼 끝만 속도 등급으로 늘린다.
+- **한도 (사용자 2026-11-27, 첫 플레이 뒤)**: "견인에 대해서 최대 거리차이와 최대 속도에 대해 한도를 늘리자. 현재 있는 비율에 대해선 괜찮은듯 하다" → 1 m 당 오름(12 m 뒤 (15−5)%/138 m)은 그대로 두고 한도만, 질문(20%·219 m / 25%·288 m / 30%·357 m)에 "25% · 288 m". 빠름 ALPHA 로 72 → 최대 90 km/h(드래프트 +21.6 km/h 보다 낮다).
+- **스윙 (사용자 2026-11-27)**: "달릴때 속도는 견인에따라 잘 되는데 스윙속도에대해서 추가가 잘 안되었다". 진단(`BotLapBenchTests.Trace_CatchupOnSwings`, Normal 시드 1): 스윙 중 견인 비율은 스윙 직전과 같았다(STADIUM 0.049 → 0.051, SUMMIT 0.124 → 0.126 — 코너 안쪽에서 S 가 빨라 거리 차가 준다는 가설은 아님). 스윙은 평균 23~24틱(0.47 s)이고, 견인분이 달리기 가속(8 m/s²)으로만 붙어 높아진 목표에 닿은 틱이 9~13% 였다. → ~~견인이 있으면 스윙의 가속은 드래프트와 같은 `RunAcceleration × Slipstream.AccelerationScale`(2배)로(`PoleSwing.SpeedUp`).~~ (병합 전 리뷰에서 뒤집음 — 아래 "스윙 규칙 다시") 고치기 전에 실패: `CatchupTests.SpeedUp_PulledAlongOnAShortSwing_IsThereWithinIt` (20 m/s 로 건 스윙, 견인 +5, 30틱) `Expected: 29.0f +/- 0.00999999978f But was: 24.7999954f` (05:34:03Z). 드래프트와 같이 2배 힘은 스로틀 스윙 속도까지의 오름에도 걸린다. 달리기 쪽은 사용자가 "잘 된다" 고 해 그대로.
+- **규칙** (`Motion/Catchup.cs` `Share`, `Race/RaceField.cs` `FindCatchups`): 틱 시작에 `FindDrafts` 바로 뒤, 앞 틱 끝의 진행 거리(`RaceField.progress`, 완주자 포함) 최댓값과 자기 거리의 차로 비율을 정해 `MoveTick(behind, share)` → `RunnerMotor.Step` 이 × 달리기 속도로 넘긴다. 0틱은 모두 0. `RacerState`·스냅샷 코덱·`Net/` 은 바꾸지 않았다. 혼자 런에는 `RaceField` 가 없어 0 이고, 봇전은 기록을 남기지 않는다(`RaceAssembler.cs:156`).
+- **속도** (`RunDrive.Drive`): 달리기·놓은 스윙의 carry·부스터 목표 위에 회전 비용을 곱해 더하고, 부스트존 carry 와는 큰 쪽(`Max`)을 쓴다 — 부스트존 속도는 올리지 않고, 견인받는 달리기가 그보다 느려지지도 않는다. 견인이 0 이면 `Max` 순서만 바뀐 같은 값이다(서킷 지문 그대로). 스로틀을 놓으면(후진 포함) 0. 스윙은 제 규칙대로 오르내리는 속도(`SwingHookSpeed`) 위에 견인 속도를 그대로 더해 돈다(아래 "스윙 규칙 다시"). 놓을 때(`PoleSwing.End`) 드래프트와 함께 빼 `Drive` 가 다시 더한다. 그래플 감기 목표에도 더한다. 회전 반경은 그대로.
+- **대조군** (Q2): `ChainRushRaceFieldTests` 의 비트 동일 대조, `ChainRushReplayTests` 의 "월드가 아무것도 나누지 않는" 대조, `ChainRushDraftTests` 의 드래프트 속도 측정(앞 러너가 36 m 달아나 견인이 섞인다)에 `CatchupEnabled = false` 한 줄씩, 기대값 그대로. 벤치는 `_WithoutDrafts` 가 둘 다 끄고, `_WithoutCatchup` 을 새로 둔다(라벨 `RaceDraft` = 드래프트만, 켠 쪽은 `RaceCatchup`).
+- **검증 (에디터 6000.3.19f1, 커밋 전, `test-runs.ps1 -Record`)**: 컴파일 `*** Tundra build success (15.81 seconds), 31 items updated`, `error CS` 0, 그 뒤 `Refresh` 에 새 빌드 없음.
+  - EditMode `!Enemy` `testcasecount="498" result="Passed" passed="498" failed="0"` (04:50:47Z) — 새 `CatchupTests` 28건 포함.
+  - PlayMode 영향 범위(드래프트·레이스 필드·리플레이·롤백·접촉·봇전·`RaceBotTests`·코너 스윙·Flow `BoostZone_`/`Race_`·`NetReconcileTests`·`NetRemoteTests`, `!Device !Enemy !NetEndReplay !^Lap$`) `testcasecount="163" result="Passed" passed="161" failed="0" skipped="2"` (04:52:53Z, skipped 는 Explicit 측정). 서킷 지문 `0xEF92FB76BFD1D767` 그대로(Editor.log "ChainRush replay circuit: 1700 ticks identical"). 새 `ChainRushDraftTests.Catchup_FarBehindTheLeader_…` 통과.
+  - Lap 은 돌리지 않았다 — 혼자 런은 견인이 0 이고 지문이 같다(드래프트 때와 같은 판단).
+  - 벤치 4개 `testcasecount="4" result="Passed" passed="4"` (05:02:38Z).
+  - 한도 25%·288 m 뒤: EditMode `testcasecount="499" result="Failed(Child)" passed="498" failed="1"` (05:23:49Z) — 새 테스트 `Share_ABadSpeedClassScale_Throws(0.05f)` 가 `Expected: <System.ArgumentOutOfRangeException> But was: null`. 그 칸은 "먼 끝이 드래프트 범위 안이면 던진다" 를 보려던 것인데 288 m 에서는 0.05 배가 14.4 m 라 범위 밖이 됐다 — 칸을 빼고 상수에서 배율을 구하는 `Share_AClassWhoseFullPullIsInsideTheDraftsRange_Throws` 로 바꿨다. 다시 `testcasecount="499" result="Passed" passed="499"` (05:26:56Z).
+  - 스윙 수정 뒤: EditMode `testcasecount="500" result="Passed" passed="500" failed="0"` (05:35:23Z). PlayMode 드래프트·레이스 필드·리플레이·접촉·봇전·`RaceBotTests` `testcasecount="75" result="Passed" passed="73" failed="0" skipped="2"` (05:36:21Z, 서킷 지문 그대로 — 바뀐 두 파일은 견인이 0 보다 클 때만, 즉 필드 안에서만 동작이 다르다). 벤치(견인 켬 Normal·Hard)·스윙 진단 2개 `testcasecount="4" result="Passed" passed="4"` (05:43:47Z). 견인 끈 벤치는 다시 돌리지 않았다(견인 0 의 경로가 같다 — 위 05:02 의 "끈 쪽 = 병합 판" 확인).
+- **봇 레이스 측정** (`BotLapBenchTests`, ALPHA 4명, 시드 4개, 드래프트 켬). 견인 끈 쪽은 2026-11-26 봇 추월 병합 판과 중앙값·최악·끊김이 모두 같다:
+
+  | | 견인 끔 | 견인 켬 (15%·150 m, 스윙 1배) | **견인 켬 (25%·288 m, 스윙 2배)** |
+  |---|---|---|---|
+  | STADIUM Hard 중앙값 / 최악 s | 58.97 / 59.86 | 57.40 / 58.34 | 58.30 / 58.32 |
+  | SUMMIT Hard | 68.71 / 73.74 | 74.36 / 75.06 | 66.27 / 66.36 |
+  | STADIUM Normal | 64.90 / 66.00 | 62.26 / 63.92 | 63.13 / 63.90 |
+  | SUMMIT Normal | 79.12 / 90.38 | 81.52 / 85.76 | 77.90 / 79.88 |
+  | 결승 때 선두–꼴찌 거리 중앙값 m (STADIUM H·SUMMIT H·STADIUM N·SUMMIT N) | 28.3 · 65.9 · 46.9 · 26.9 | 2.2 · 6.4 · 6.9 · 5.7 | 11.5 · 38.0 · 4.7 · 6.1 |
+  | 드래프트 발동 (16레이스 합) | 288 | 363 | 343 |
+  | 선두 교체 (16레이스 합) | 145 | 157 | 159 |
+  | 스윙 끊김 (16레이스) | 98 | 110 (SUMMIT H 75) | 114 (SUMMIT H 66) |
+
+  낙하·미완주 0. 시간은 측정 슬롯(러너 0)의 결승이라 순위가 섞인다. 15% 판의 SUMMIT Hard 중앙값 +5.6 s 는 25%·스윙 2배 판에서 사라졌다(66.27 s, 네 판 66.12~66.36). 25% 판은 두 변경이 함께 들어가 각각의 몫을 가르지 않았다. 선두–꼴찌 거리는 15% 판보다 커진 곳이 있다(SUMMIT H 시드 2 163.9 m, 시드 4 48.2 m) — 시드 4개에서 레이스마다 흩어짐이 커 한도와의 인과는 확인 못 함. 스윙 진단 재실행: 높아진 목표에 닿은 틱 STADIUM 9% → 16%, SUMMIT 13% → 9%(그 판의 견인 비율이 0.12 → 0.06 으로 달라 같은 비교가 아니다) — 레이스가 달라지면 진단 값이 같이 바뀌어 스윙 수정의 증거는 위 단위 테스트다.
+- **사용자 플레이 (2026-11-27, 25%·스윙 2배 판)**: "세기는 되는데 견인 상태에서 스윙속도가 안늘어난다. 부스터쓴 속도보다 부스터+스윙 속도가 더 높아야하잖아". 원인은 견인이 아니라 기존 규칙이다 — 스윙 중 부스터 목표가 부스터 속도 그대로(서킷 32 m/s, 달리기 부스터도 32)라 견인을 양쪽에 같이 더하면 37 = 37. 질문에 "×1.2 → 38.4 m/s"·"견인 병합 뒤 새 브랜치" → HANDOFF 2절 8번 "부스터 스윙은 부스터 달리기의 1.2배". 새 스윙 규칙 판에서 사용자 "최대속도 133일때 스윙해도 133 유지 그대로다" → 2026-10-30 "스윙: 줄은 회전 반경만"(A) 뒤로 부스터 스윙 = 부스터 속도라는 경위를 설명했고 사용자 "원래 규칙 확인했다. 내가 헷갈렸다. 이대로 병합 푸시 까지".
+- **병합 전 리뷰** (`a16c9f7` 대상, §7-5 "그 밖" — 새 파일): `unity-reviewer` 1회(98,311 토큰) 치명·중대·보통 0, 실제 결함 후보 1·정리 제안 5. Codex `adversarial-review --base dev` 1회 `needs-attention` 중간 2, 오탐 0(둘 다 코드로 확인), 대조군 `CatchupEnabled = false` 는 둘 다 §0 위반 아님으로 판정.
+  - Codex ① 부스트존에 들어갈 때 carry 에 견인분이 남는다(`RunnerMotor.cs` 패드 진입이 드래프트분만 뺐다) — 들어가는 속도가 패드 속도(55)를 넘을 때만이라 지금 값에서는 일어나지 않는다. → **고침**: 견인분도 뺀다. 사용자 "1 ㄱㄱ".
+  - Codex ② `Configure` 가 받는 아주 작은 속도 등급(약 0.042 미만)이면 레이스 첫 틱에 `Catchup.Share` 가 던져 필드가 멈춘다 — 로비 등급(0.8·1·1.2)은 걸리지 않는다. → **고침**: `Catchup.Supports`, `RaceField.Initialize` 가 러너와 배율을 적어 바로 거부. 사용자 "수정해야하는거면 ㄱㄱ".
+  - `unity-reviewer` 결함 후보: 견인이 0 을 조금만 넘어도 스윙 가속 전체가 2배로 뛴다(8 m ↔ 8.01 m) → 사용자 "견인+스윙이 가속에 대해서 비율이나 플러스정도를 수정하자" → 질문에 "기존 스윙의 속도 증가분에서 견인만큼의 속도만 증가하게.(비율X +되는 정도만)" → 아래 "스윙 규칙 다시".
+  - 정리 제안 중 고친 것: 음수 거리 차는 0 대신 예외(§5, 선두가 최댓값이라 호출 쪽 실수), 배율 경계 테스트(경계 바로 아래·위, float 에서 12/288 이 올림이라 등호 칸은 두지 않음), `PoleSwing.End` 매개변수 `draft` → `bonus`. 두는 것: 진단의 1.2 상수(`BotLapBenchTests`, Explicit), 네트워크 롤백이 견인 경로를 지나지 않는 것(Codex — `Net/` 동결, M7).
+  - 비교(§7-5 시험 중): `unity-reviewer` 실제 결함 1(동작 끊김)·정리 5, Codex 실제 결함 2(지금 값에서는 안 일어남)·제안 2. Codex `/status` 사용량은 읽지 않았다.
+- **스윙 규칙 다시 (사용자 2026-11-27, 위 리뷰 뒤)**: "견인과 드래프트는 기존 규칙에 +a이다", "기존 스윙의 속도 증가분에서 견인만큼의 속도만 증가하게 (비율X +되는 정도만)". 스윙의 제 속도(`SwingHookSpeed`)는 견인 없이 기존 규칙(스로틀 24·부스터 32 를 향해 달리기 가속·부스터 힘으로 오르고 `CarryDecay` 로 준다)대로 두고, 도는 속도는 그 위에 견인 속도를 그대로 더한다(`PoleSwing.Step`). 걸 때(`PoleSwing.Hook`) 제 속도는 들어온 속도에서 견인을 빼서, 거는 순간 속도가 끊기지 않는다. 스윙의 견인은 ↑ 를 떼도 남는다 — 기존 스윙이 스로틀 없이도 속도를 지키므로, 빼면 그 순간 최대 5 m/s 떨어진다(달리기는 그대로 ↑ 없으면 0). 2배 힘과 `SpeedUp` 의 견인 매개변수는 뺐다. 드래프트는 그대로(목표에 더하고 2배 힘). 견인 0 이면 모든 식이 예전과 같다(서킷 지문 그대로).
+  - 테스트(새 규칙으로 바꿈): `Step_PulledAlong_SwingsThePullFasterThanItsOwnSpeed`(24+5→29, 32+5→37), `Hook_PulledAlong_StartsAtTheSpeedItCameInWith`(25 로 들어와 제 속도 20, 도는 속도 25), `SpeedUp_PulledOrNot_RisesTheSame`. 앞 판의 `SpeedUp_PulledAlong…` 3개는 규칙이 바뀌어 지웠다.
+  - 검증: 컴파일 `*** Tundra build success (20.62 seconds), 29 items updated`, `error CS` 0. EditMode `testcasecount="501" result="Passed" passed="501" failed="0"` (06:16:02Z). PlayMode 드래프트·레이스 필드·리플레이·접촉·봇전·`RaceBotTests`·코너 스윙·Flow `BoostZone_` `testcasecount="101" result="Passed" passed="99" failed="0" skipped="2"` (06:17:05Z, 서킷 지문 `0xEF92FB76BFD1D767` 그대로, skipped 는 Explicit 측정). 벤치·스윙 진단 `testcasecount="4" result="Passed" passed="4"` (06:24:53Z).
+  - 벤치(견인 켬, 이 판): 중앙값 / 최악 s — STADIUM Hard 58.16 / 58.36, SUMMIT Hard 66.88 / 73.54, STADIUM Normal 62.74 / 63.86, SUMMIT Normal 77.79 / 78.46. 선두–꼴찌 거리 중앙값 20.0 · 28.2 · 15.3 · 12.5 m(STADIUM H·SUMMIT H·STADIUM N·SUMMIT N), 드래프트 발동 338, 선두 교체 157, 끊김 86(끈 쪽 98). 낙하·미완주 0, 시간은 네 칸 모두 끈 쪽보다 빠르다. SUMMIT Hard 시드 3 의 선두–꼴찌 233.1 m(낙하 0) — 원인 미확인.
+- **확인 못 한 것·남은 것**: HANDOFF 2절 8번 "견인".
+- **버린 대안**: 30 m 부터 직선(위), 10 m 부터 직선(드래프트 범위 근처에서 너무 약하다), 제곱근(가까운 곳이 더 약하고 도달이 늦다), 회전 반경 넓히기(Q4), 견인을 `RacerState` 에 두기(Q5 — 틱 시작 계산이라 필요 없다).
+
 ## 2026-11-26 · 봇 드래프트 추월: 부스트 중 앞 8 m 안에 줄 선 러너를 2.5 m 비켜 지나고 그동안 코너 훅을 미룬다 · 견인(러버밴딩) 계획의 결정 5개 (`feature/bot-draft-pass`)
 
 - **결정 (사용자 2026-11-26)**: 견인·드래프트 추돌 방향을 담은 요청서 초안을 붙여 넣은 뒤, Claude 가 짚은 미결 5개에 "agy와 소통해서 결정해라". agy 읽기 전용 `ask` 1회(`tools/agy-run.ps1`, RunId `catchup-ask1`, `gemini-4-neon-high`, exit 0, 바꾼 파일 0)와 Claude 의 코드 확인으로 정했고, 그 결과로 올린 ① 요청서에 사용자 "ㄱㄱ".
@@ -1084,7 +1128,7 @@
   - **기존 트랙** — "그대로 유지": 카트라이더 배치를 옮긴 SKYWAY·FINGER LANES·PALM COAST 는 재설계하지 않는다. 새로 만드는 트랙은 기존 게임 트랙을 옮기지 않고 원본으로 설계한다(Claude 가 밝힌 작업 방침).
   - **D2a 몸싸움 방식** — "직접 밀어내기 (Recommended)": 제안서 D2a 에 권고 표시가 없어 따로 물었다. 러너끼리는 Unity 물리에서 서로 빼고 우리 코드가 몸 겹침을 풀어 밀어낸다(무게 반영).
   - **MP1 구조** — "대안 스파이크 먼저 (Recommended)": 아래 "MP1 구조 대안".
-- **D1~D11 채택 내용** (제안서 "답:" 칸에 같은 내용): D1 구조 8인·첫 판정 봇 3명 / D2a 직접 밀어내기 / D2b 무게를 쓴다, 감속 여부는 MP2 플레이로 / D2c 봉·앵커 동시 사용 / D2d 땅·벽·시야는 트랙만 / D3a 러버밴딩 없이 시작 / D3b 기록 대조로 고른다 — 확인된 값은 SUMMIT DROP 빠름 사용자 67.16 s 대 시험 봇 90.0 s(제안서 `:132`)라 시험 봇 수준으로는 겨루기가 안 된다는 것이 Claude 의 판단이고, MP2 요청서에서 확정한다 / D4 봇전은 고스트·기록 없음 / D5 순위는 주행 중·결과 둘 다 / D6 규칙은 다섯 트랙 공통, 첫 판정 STADIUM / D7 러너별 달림·결승 상태, 끝 규칙은 MP2 플레이로 / D8 출발은 격자, 복귀 겹침은 플레이 뒤 / D11 틱 순서는 아래. **D9(봇 러너 구성)·D10(로비 진입)은 제안서에 권고가 없어 비어 있다** — MP1 구조에 영향이 없고(제안서 `:20`) MP2 요청서에서 묻는다.
+- **D1~D11 채택 내용** (제안서 "답:" 칸에 같은 내용): D1 구조 8인·첫 판정 봇 3명 / D2a 직접 밀어내기 / D2b 무게를 쓴다, 감속 여부는 MP2 플레이로 / D2c 봉·앵커 동시 사용 / D2d 땅·벽·시야는 트랙만 / ~~D3a 러버밴딩 없이 시작~~ (2026-11-27 뒤집음: 플레이어·봇 공통 견인 — 2026-11-27 "견인" 항목) / D3b 기록 대조로 고른다 — 확인된 값은 SUMMIT DROP 빠름 사용자 67.16 s 대 시험 봇 90.0 s(제안서 `:132`)라 시험 봇 수준으로는 겨루기가 안 된다는 것이 Claude 의 판단이고, MP2 요청서에서 확정한다 / D4 봇전은 고스트·기록 없음 / D5 순위는 주행 중·결과 둘 다 / D6 규칙은 다섯 트랙 공통, 첫 판정 STADIUM / D7 러너별 달림·결승 상태, 끝 규칙은 MP2 플레이로 / D8 출발은 격자, 복귀 겹침은 플레이 뒤 / D11 틱 순서는 아래. **D9(봇 러너 구성)·D10(로비 진입)은 제안서에 권고가 없어 비어 있다** — MP1 구조에 영향이 없고(제안서 `:20`) MP2 요청서에서 묻는다.
 - **MP1 구조 대안 (2026-10-30 "멀티 개발 순서" 의 공유 월드를 다시 본다 — 아직 뒤집지 않았다)**: 그 항목의 이유는 "러너끼리 물리가 닿으려면 공유 월드가 필요하다" 였다. D2a 직접 밀어내기 + D2d 트랙만 보는 질의면 Unity 물리가 러너끼리의 접촉을 중재하지 않으므로, 러너마다 씬 복사본(격리 월드, 2026-10-10 "P3 C1a")을 유지하고 조정자가 N개 게임을 같은 틱으로 돌리며 접촉만 계산하는 구조가 가능하다.
   - 격리 월드 쪽 근거: 번갈아 돌린 복사본이 혼자 런과 비트 일치(2026-10-10 항목), 같은 물리 씬에서는 757틱에 갈라짐(같은 항목의 음성 대조), 서버가 이미 복사본 N개를 로드하고 카메라·리스너를 끈다(`RaceServer.cs:100-106,152-153`), 게임마다 단계가 따로라 러너별 결승 상태(D7)가 이미 있다.
   - 공유 월드 쪽 부담(코드 읽기): `ChainRushGame` 이 러너·`RacerState`·입력을 하나씩 든다(`:15,28,31`), `RunnerMotor` 의 `game.Racer` 30곳·`game.Track` 11곳·`game.PlayCue` 7곳, `CircuitRace` 의 랩 카운터·`lastS`·`SetFocus` 가 한 사람 몫(`:37,41,132`), `RaceWorld.FromScene` 은 러너가 둘이면 예외(`:53-57`), 러너끼리 무시하려면 레이어(ProjectSettings) 또는 `IgnoreCollision` — 매 틱 컨트롤러를 껐다 켜는 구조(`RunnerMotor.cs:596-600`)에서 유지되는지 확인 못 함.

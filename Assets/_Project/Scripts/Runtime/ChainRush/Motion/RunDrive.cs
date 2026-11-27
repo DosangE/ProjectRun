@@ -60,6 +60,8 @@ namespace ProtoHarness.ChainRush.Motion
             public bool GrappleAttached;
             // A draft's boost is running (Slipstream).
             public bool Drafting;
+            // The speed a race's catch-up adds to the target this tick, in m/s (Catchup, from RaceField); 0 racing alone.
+            public float Catchup;
         }
 
         // What the running force reached for this tick: the forward speed it headed for and how fast. A guard turns the
@@ -136,10 +138,15 @@ namespace ProtoHarness.ChainRush.Motion
             float grip = now.Grounded ? settings.SideGrip : settings.AirSideGrip;
             float sideSpeed = Mathf.MoveTowards(Vector3.Dot(velocity, right), 0f, grip * dt);
             float baseTarget = RunTarget(racer, grade, now, turnLimit, dt, settings);
-            float carried = Mathf.Max(CarryTarget(ref racer.SwingCarrySpeed, baseTarget, settings.SwingCarryFalloff, dt),
-                CarryTarget(ref racer.BoostZoneCarrySpeed, baseTarget, settings.BoostZoneFalloff, dt));
+            float swingCarried = CarryTarget(ref racer.SwingCarrySpeed, baseTarget, settings.SwingCarryFalloff, dt);
+            float padCarried = CarryTarget(ref racer.BoostZoneCarrySpeed, baseTarget, settings.BoostZoneFalloff, dt);
             float turnCost = TurnCost(racer, now, turnLimit, settings);
-            float runTarget = Slingshot.RaiseTarget(carried, now.Pulling, now.Carrying, turnCost, sling);
+            // A race's catch-up goes on top of the run, a swing let go and a booster, less what turning costs, and never
+            // without the throttle (it would keep a coasting or backing runner going). A pad's carry is not raised: the
+            // larger of the two holds, so a pulled runner is never slower than its run on a pad's carry. With no catch-up
+            // this is the larger of the two carries, raised by a booster, as before (Max is exact either way round).
+            float pull = now.Coasting ? 0f : now.Catchup;
+            float runTarget = Mathf.Max(Slingshot.RaiseTarget(swingCarried, now.Pulling, now.Carrying, turnCost, sling) + pull * turnCost, padCarried);
             // A draft's boost goes on top of whatever the runner heads for (user 2026-11-26 "속도 상한에 안걸리도록"), less what
             // turning costs. The carried speeds above still wear off toward the undrafted target, so it does not cut them short.
             float draft = now.Drafting ? Slipstream.SpeedBonus(racer, settings.RunSpeed) : 0f;
@@ -158,7 +165,7 @@ namespace ProtoHarness.ChainRush.Motion
             if (falloff > 0f && now.Grounded && !now.Swinging && !now.GrappleAttached && currentForward > runTarget)
                 acceleration = Mathf.Max(acceleration, falloff * (currentForward - baseTarget));
             // A grapple reels at GrappleReelSpeed, or at running speed when that is faster.
-            float goal = now.GrappleAttached ? Mathf.Max(settings.GrappleReelSpeed, settings.RunSpeed) + draft : runTarget;
+            float goal = now.GrappleAttached ? Mathf.Max(settings.GrappleReelSpeed, settings.RunSpeed) + draft + pull : runTarget;
             // The swing sets its own speed (PoleSwing.SpeedUp), a draft's too.
             if (now.Drafting && !now.Swinging && currentForward < goal)
                 acceleration = Mathf.Max(acceleration, settings.RunAcceleration * Slipstream.AccelerationScale);

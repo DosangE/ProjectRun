@@ -12,8 +12,9 @@ using UnityEngine.TestTools;
 
 namespace ProtoHarness.Tests.PlayMode
 {
-    // Drafting in a real field (Motion.Slipstream, RaceField.FindDrafts): STADIUM's opening straight, four ALPHA runners on
-    // the Fast class holding the throttle, stepped by the field's own tick.
+    // Drafting in a real field (Motion.Slipstream, RaceField.FindDrafts), and the catch-up that brings a runner into the
+    // draft's range (Motion.Catchup, RaceField.FindCatchups): STADIUM's opening straight, four ALPHA runners on the Fast
+    // class holding the throttle, stepped by the field's own tick.
     public sealed class ChainRushDraftTests
     {
         private RaceWorld[] worlds;
@@ -46,6 +47,8 @@ namespace ProtoHarness.Tests.PlayMode
         public IEnumerator Draft_AFullChargeBehind_BoostsPastTheRunSpeedForOneAndAHalfSeconds_ThenCoolsDown()
         {
             yield return Load();
+            // Only the draft's own speed is measured below, while the runner ahead runs away: nothing pulls this one along.
+            field.CatchupEnabled = false;
             RacerState racer = worlds[1].Game.Racer;
             int cues = 0;
             worlds[1].Game.CuePlayed += cue => { if (cue == RaceCue.Draft) cues++; };
@@ -165,6 +168,45 @@ namespace ProtoHarness.Tests.PlayMode
             racer.DraftCooldownTicks = 0;
             yield return new WaitForSecondsRealtime(0.5f);
             Assert.That(hud.DraftWind, Is.Zero);
+        }
+
+        // Catching up (Motion.Catchup) in the same field: a runner left far behind the leader is pulled along by its share of
+        // the running speed, the leader by nothing, and switched off nobody is.
+        [UnityTest, Timeout(120000)]
+        public IEnumerator Catchup_FarBehindTheLeader_RunsFasterByItsShare_AndTheLeaderIsNotPulled()
+        {
+            yield return Load();
+            // The leader runs off on its bot while the others are held at the start.
+            IInputSource source = RaceBotTests.InputFor(worlds[0], BotDifficulty.Normal);
+            worlds[0].Game.SetInputSource(source);
+            ((RaceBot)source).Observe(field, 0);
+            int ticks = 0;
+            while (field.Progress(0) - field.Progress(1) < 100d && ticks < 1500)
+            {
+                for (int i = 1; i < worlds.Length; i++) Place(worlds[i], new Vector3((i - 2) * 3f, 1.05f, 2f), Vector3.zero);
+                Step();
+                Assert.That(field.CatchupShare(0), Is.Zero, "The leader is pulled by nothing, tick " + ticks);
+                ticks++;
+                if (ticks % 200 == 0) yield return null;
+            }
+            Assert.That(field.Progress(0) - field.Progress(1), Is.GreaterThanOrEqualTo(100d), "precondition: the leader got away.");
+            Assert.That(field.CatchupShare(1), Is.EqualTo(Catchup.Share(field.Progress(0) - field.Progress(1), worlds[1].Player.SpeedClassScale)).Within(0.002f));
+            // Let go on the flat at running speed, alone at the back: only the pull's own speed is measured.
+            Place(worlds[1], new Vector3(-3f, 1.05f, 2f), Vector3.forward * worlds[1].Player.RunSpeed);
+            float top = 0f;
+            for (int t = 0; t < 60; t++)
+            {
+                for (int i = 2; i < worlds.Length; i++) Place(worlds[i], new Vector3((i - 2) * 3f, 1.05f, 2f), Vector3.zero);
+                Step();
+                top = Mathf.Max(top, worlds[1].Player.ForwardSpeed);
+            }
+            float share = field.CatchupShare(1);
+            Assert.That(share, Is.GreaterThan(0.1f), "Over 100 m behind.");
+            Assert.That(worlds[1].Player.IsDrafting, Is.False);
+            Assert.That(top, Is.EqualTo(worlds[1].Player.RunSpeed * (1f + share)).Within(0.3f));
+            field.CatchupEnabled = false;
+            Step();
+            Assert.That(field.CatchupShare(1), Is.Zero, "Switched off.");
         }
 
         private static void Capture(string name) => ScreenCapture.CaptureScreenshot(Path.Combine(Path.GetTempPath(), "ChainRush-draft-" + name + ".png"));
