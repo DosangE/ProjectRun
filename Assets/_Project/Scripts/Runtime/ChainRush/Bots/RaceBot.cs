@@ -85,6 +85,8 @@ namespace ProtoHarness.ChainRush.Bots
             }
             bool crowded = false;
             if (Tuning.ContactResponse && field != null) target = AvoidNearby(position, frame, target, out crowded);
+            bool passing = false;
+            if (Tuning.DraftPass && field != null) target = PassAhead(position, frame, target, out passing);
             float trackYaw = Mathf.Atan2(frame.Forward.x, frame.Forward.z) * Mathf.Rad2Deg;
             float wanted = trackYaw - Mathf.Clamp((offset - target) * Tuning.OffsetGain, -Tuning.HeadingClamp, Tuning.HeadingClamp);
             float turnLimit = runner.TurnLimit;
@@ -144,7 +146,7 @@ namespace ProtoHarness.ChainRush.Bots
                     if (!held) { swingLeft = 0; cooldown = Tuning.SwingCooldownTicks; }
                 }
                 else if (cooldown > 0) cooldown--;
-                else if (!crowded && !primary && !waitingRetry && runner.IsGrounded && !grapple.IsAttached &&
+                else if (!crowded && !passing && !primary && !waitingRetry && runner.IsGrounded && !grapple.IsAttached &&
                     (!Tuning.InsideLine || frame.Curvature != 0f) && runner.TryFindPole(out _))
                 {
                     press = held = true;
@@ -188,6 +190,61 @@ namespace ProtoHarness.ChainRush.Bots
             float half = circuit.Definition.HalfWidthAt(game.Track.Project(position).S);
             float limit = Mathf.Max(0f, half - runner.ContactRadius - Tuning.EdgeMargin);
             return Mathf.Clamp(target + shift, -limit, limit);
+        }
+
+        // Passing while drafting (DECISIONS 2026-11-26 "봇 드래프트 추월"): a draft's boost closes on the runner ahead at up to
+        // +30 % and, in line, ran into its back and broke its swing (16 bot races: 8 broken swings without drafting, 233 with).
+        // So a boosting bot steps out to whichever side of the nearest runner in line ahead has more road, and hooks no corner
+        // pole meanwhile, so it does not join that runner's circle round it. A shortcut's hook still goes first: its window is
+        // HookWindow (0.6 m) wide and held back it would be missed (review 2026-11-26, Codex). A charging bot keeps in line,
+        // since one tick out of Slipstream.HalfWidth loses the charge, unless it is closing on a runner right in front of it.
+        // In line is judged as a draft is (Slipstream.IsBehind): on the same road, ahead by S, across and up by the road's D
+        // and H, so it bends with a corner; the reach is the ground distance. The other runner's spot is projected on this
+        // world's track, which only reads it.
+        private float PassAhead(Vector3 position, TrackFrame frame, float target, out bool passing)
+        {
+            passing = false;
+            RacerState racer = game.Racer;
+            bool boosting = racer.DraftBoostTicks > 0;
+            if (!boosting && racer.DraftChargeTicks == 0) return target;
+            float reach = boosting ? Tuning.PassLookAhead : Tuning.PassCloseDistance;
+            Centerline track = game.Track;
+            TrackCoord own = track.Project(position);
+            int road = track.BranchAt(position);
+            double lap = track.IsLoop ? circuit.Definition.LapLength : 0d;
+            int nearest = -1;
+            float nearestDistance = float.MaxValue, nearestD = 0f;
+            for (int i = 0; i < field.ObservedRacerCount; i++)
+            {
+                if (i == racerIndex) continue;
+                Vector3 other = field.ObservedPosition(i);
+                float x = other.x - position.x, z = other.z - position.z;
+                float distance = Mathf.Sqrt(x * x + z * z);
+                // An exact tie keeps the lower field index, never the input visitation order.
+                if (distance > reach || distance >= nearestDistance) continue;
+                if (track.BranchAt(other) != road) continue;
+                TrackCoord at = track.Project(other);
+                double gap = at.S - own.S;
+                if (lap > 0d) gap -= Math.Floor(gap / lap + 0.5d) * lap;
+                if (gap < Slipstream.MinRoadGap || gap > Slipstream.MaxRoadGap) continue;
+                if (Mathf.Abs(at.D - own.D) >= Slipstream.HalfWidth || Mathf.Abs(at.H - own.H) > Slipstream.HeightGap) continue;
+                // Closing along the road, not by a fall or a jump.
+                if (!boosting && Vector3.Dot(field.ObservedVelocity(i) - runner.Velocity, frame.Forward) >= 0f) continue;
+                nearest = i;
+                nearestDistance = distance;
+                nearestD = at.D;
+            }
+            if (nearest < 0) return target;
+            passing = true;
+            // On a shortcut D is the shortcut's own and its road is narrower than the main one (Centerline.AddBranch in
+            // shortcut order).
+            float half = road >= 0 ? circuit.Definition.Shortcuts[road].HalfWidth : circuit.Definition.HalfWidthAt(own.S);
+            float limit = Mathf.Max(0f, half - runner.ContactRadius - Tuning.EdgeMargin);
+            float aheadD = nearestD;
+            float toRight = limit - aheadD, toLeft = limit + aheadD;
+            // A runner right on the centreline is passed by stable field order, never the input visitation order.
+            float sign = toRight == toLeft ? (nearest < racerIndex ? 1f : -1f) : (toRight > toLeft ? 1f : -1f);
+            return Mathf.Clamp(aheadD + sign * Tuning.PassOffset, -limit, limit);
         }
 
         private bool ClearStraight(double s, double ahead)

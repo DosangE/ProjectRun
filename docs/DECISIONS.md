@@ -10,6 +10,39 @@
 
 ---
 
+## 2026-11-26 · 봇 드래프트 추월: 부스트 중 앞 8 m 안에 줄 선 러너를 2.5 m 비켜 지나고 그동안 코너 훅을 미룬다 · 견인(러버밴딩) 계획의 결정 5개 (`feature/bot-draft-pass`)
+
+- **결정 (사용자 2026-11-26)**: 견인·드래프트 추돌 방향을 담은 요청서 초안을 붙여 넣은 뒤, Claude 가 짚은 미결 5개에 "agy와 소통해서 결정해라". agy 읽기 전용 `ask` 1회(`tools/agy-run.ps1`, RunId `catchup-ask1`, `gemini-4-neon-high`, exit 0, 바꾼 파일 0)와 Claude 의 코드 확인으로 정했고, 그 결과로 올린 ① 요청서에 사용자 "ㄱㄱ".
+  - Q1 **두 브랜치 직렬**: ① 봇 추월(이 항목) → ② 견인. 한 브랜치면 끊김·SUMMIT 최악의 변화를 어느 쪽 때문인지 가를 수 없다.
+  - Q2 ② 의 `RaceField.CatchupEnabled` 는 기본 true, 월드가 아무것도 나누지 않는다는 전제의 대조군(`ChainRushRaceFieldTests.cs:285`, `ChainRushReplayTests.cs:189`)과 드래프트 속도만 재는 `ChainRushDraftTests.cs:66-77`, 벤치 `_WithoutDrafts` 에 `= false` 한 줄씩 — 기대값은 그대로(드래프트 때 `DraftEnabled = false` 와 같은 판단).
+  - Q3 봇 추월은 아래 규칙. 봇의 `rehookLeft`·`BotTuning.ContactRehookTicks` 정리는 하지 않는다 — `ChainRushContactTests.cs:206` 이 그 값을 직접 읽고 공개 인자를 지우는 일이라 범위 밖(시뮬과 같은 25틱이라 동작 차이는 없다, HANDOFF 2절 "몸싸움 전략" ②).
+  - Q4 ② 견인에는 회전 반경을 넓히지 않는다 — 최대 +15% 는 반경을 고정한 속도 등급 차(VeryFast 1.2배) 안이고, 견인은 `RacerState` 밖 인자라 반경까지 바꾸면 봇이 읽는 `RunnerMotor.TurnLimit` 이 실제 회전과 어긋난다.
+  - Q5 ② 에서 D3a("러버밴딩 없이 시작", 2026-11-12)를 취소선으로 바꾼다. 플레이어·봇이 같은 규칙이라 "같은 시뮬" 원칙과 맞고, 진행 거리는 앞 틱 판정 결과라 틱 시작 계산이 결정적이다. 멀티(`Net/`)에는 걸리지 않는다(M7).
+- **규칙** (`Bots/RaceBot.cs` `PassAhead`, 값은 `BotTuning` 의 `draftPass`·`passLookAhead` 8 m·`passOffset` 2.5 m·`passCloseDistance` 3 m, Normal·Hard 만 켬, `CircuitEquivalent` 는 끔): 관측 스냅샷의 다른 러너를 이 월드의 트랙에 투영해 드래프트와 같은 기준(`Slipstream.IsBehind`: 같은 길, S 로 0.5~48 m 앞, |ΔD| < 1.5 m, |ΔH| ≤ 3 m)으로 "줄 선 앞 러너" 를 고르고, 수평 거리로 가장 가까운 하나를 — 부스트 중이면 8 m 안에서, 충전 중이면 3 m 안에서 트랙 앞 방향으로 다가가고 있을 때만 — 그 러너의 D ± 2.5 m 중 도로 여유가 큰 쪽으로 비켜 지난다. 도로 끝은 지금 달리는 길(지름길이면 그 반폭)에서 러너 반경과 `EdgeMargin` 을 뺀 만큼. 비키는 동안 코너 훅만 미루고 지름길 훅은 미루지 않는다(창이 0.6 m 라 놓친다). 충전 중에 넓게 비키지 않는 것은 1.5 m 판정을 한 틱 벗어나면 충전이 0 이 되기 때문이다(`Slipstream.cs:81-83`, agy 지적). `Centerline.Project`·`BranchAt` 은 읽기만 해 결정성에 영향이 없다(`Centerline.cs:290-320,669-692`). 분기는 `trackYaw` 계산 앞에서 끝나 `CircuitBot` 과의 비트 동등이 그대로다.
+- **봇 레이스 측정** (`BotLapBenchTests.Race_FourSeedsTwoTracks`, 드래프트 켬, ALPHA 4명, 시드 4개):
+
+  | 중앙값 / 최악 s | 드래프트 끄기 | dev (드래프트 켬, 추월 없음) | 추월 첫 판 (`c25a6c8`) | **추월 (리뷰 대응 뒤, 병합)** |
+  |---|---|---|---|---|
+  | STADIUM Hard | 60.32 / 61.08 | 61.36 / 63.32 | 58.92 / 61.22 | 58.97 / 59.86 |
+  | SUMMIT Hard | 69.00 / 69.06 | 71.75 / 83.30 | 69.79 / 74.28 | 68.71 / 73.74 |
+  | STADIUM Normal | 66.72 / 66.72 | 66.96 / 70.26 | 65.22 / 67.54 | 64.90 / 66.00 |
+  | SUMMIT Normal | 81.65 / 81.70 | 80.45 / 90.78 | 79.26 / 79.58 | 79.12 / **90.38** |
+  | 스윙 끊김 (16레이스) | 8 | 233 | 112 | **98** (SUMMIT N 14·STADIUM N 12·SUMMIT H 55·STADIUM H 17) |
+
+  낙하·미완주 0, 접촉 직후 25틱 안에 다시 건 봇 0(벤치 단언). 발동은 레이스당 8~30회. 값(8·2.5·3 m)은 첫 판 그대로 두었다. 리뷰 대응 뒤 SUMMIT Normal 최악 90.38 s 는 시드 4 한 판이다(나머지 77.48~79.86 s, 그 판 끊김 5) — 원인 미확인, dev 최악 90.78 s 와 같은 크기. 사용자 2026-11-27 "(가) 커밋 병합" 으로 진단 없이 병합하고 HANDOFF 에 남긴다. 남은 끊김 98 의 원인(충전 중 추돌·나란히 달리다 스윙 원 궤도·드래프트와 무관한 접촉)은 가르지 않았다.
+- **검증 (에디터 6000.3.19f1, `test-runs.ps1 -Record`)**: 컴파일 `Tundra build success`, `error CS` 없음.
+  - 첫 판(`c25a6c8` 코드): EditMode `!Enemy` `testcasecount="470" result="Passed" passed="470" failed="0"` (06:33:25Z). PlayMode `RaceBotTests`·`ChainRushBotRaceTests`·`ChainRushContactTests`·`ChainRushDraftTests`·`ChainRushRaceFieldTests`·`ChainRushReplayTests.Replay_BotRace` (`!Device !Enemy !NetEndReplay !^Lap$`) `testcasecount="70" result="Passed" passed="68" failed="0" skipped="2"` (06:34:29Z, skipped 는 Explicit 측정). 벤치 `testcasecount="2" result="Passed"` (06:41:16Z).
+  - 고치기 전에 실패: 새 `DraftPass_` 테스트를 `c25a6c8` 의 `RaceBot.cs` 로 — `testcasecount="5" result="Failed(Child)" passed="3" failed="2"` (07:00:03Z): 낙하 `Expected: 0.0f But was: -0.400000006f`, 코너는 조향 포화로 무효(아래). 코너 테스트를 고친 뒤 `testcasecount="1" result="Failed(Child)" failed="1"` (07:12:33Z): `pass 0.08886535, plain 0.08886535 … Expected: -1.0f +/- 0.9 But was: 0.0f`.
+  - 고친 코드: 영향 범위 같은 선택 `testcasecount="72" result="Failed(Child)" passed="69" failed="1" skipped="2"` (07:02:39Z) — 실패는 새 코너 테스트 자체로, 반경 22 m 코너에서 피드포워드만으로 두 봇의 조향이 1 로 포화(`pass 1, plain 1`, 판정 값은 S +7.00·D +0.50 으로 맞았다) → 봇을 코너 쪽으로 25° 더 돌려 놓고 "포화 안 함" 전제를 단언에 넣었다. 그 메서드만 다시 `testcasecount="1" result="Passed"` (07:10:57Z), 그 메서드 + 벤치 `testcasecount="3" result="Passed" passed="3" failed="0"` (07:14:13Z). 07:02 실행 뒤 바뀐 것은 그 테스트 메서드뿐이다.
+  - EditMode 는 06:33 이후 다시 돌리지 않았다 — 리뷰 대응은 `RaceBot.cs`·`RaceBotTests.cs` 만이고 EditMode 에는 `RaceBot` 을 쓰는 테스트가 없다(`BotTuningTests.cs:41` 은 주석). Lap 은 돌리지 않았다(시뮬을 바꾸지 않음). 서킷 지문은 `select-tests -Range dev...HEAD` 의 하한이라 커밋(`8463e92`) 뒤에 돌렸다: `testcasecount="1" result="Passed"` (2026-11-27 04:29:07Z), `0xEF92FB76BFD1D767` 그대로.
+- **병합 전 리뷰** (`c25a6c8` 대상, §7-5 "그 밖" — 새 파일은 없지만 추가+삭제 합이 30줄 초과):
+  - `unity-reviewer` 1회(70,604 토큰): 치명·중대·보통 0, 제안 3. ① 훅 보류를 덮는 단위 테스트가 없다 → 두는 것(남은 것). ② 봇이 중앙선에 있어 "여유 큰 쪽" 과 "반대쪽" 이 갈리지 않는다 → **고침**: `DraftPass_BoostingOffTheCentreline_PassesOnTheSideWithMoreRoad`. ③ 테스트 헬퍼 `Place` 가 세 번째 사본 → 두는 것(합치려면 다른 테스트 파일 2개, 범위 밖).
+  - Codex `adversarial-review --base dev` 1회, `needs-attention` 중간 3, 오탐 0(셋 다 코드로 확인). ① 비키는 동안 지름길 첫 훅(창 0.6 m)도 미뤄 진입을 놓친다 → **고침**: 코너 훅만 미룸. ② 봇 접선으로 옆 거리를 재 코너에서 같은 줄 러너를 놓치고(반경 22 m, 7 m 앞 0.5 m 안쪽 → 옆 1.6 m), 다른 길·높이를 보지 않는다 → **고침**: 트랙 좌표 판정, 시험 `DraftPass_BoostingRoundACorner_…`. ③ 지름길 위에서 본선 반폭으로 클램프 → **고침**: 그 지름길의 반폭(테스트는 없다). 다음 단계 제안 중 "3차원 내적이 낙하를 다가감으로 센다" → **고침**: 트랙 앞 방향 상대 속도, 시험 추가. "필드에서 실제 추월이 일어나는 두 레이스의 봇 입력 비교" → 하지 않음(벤치 16레이스와 `Draft_ABotRaceTwice_IsTheSameRace` 가 Hard 프리셋으로 같은 레이스 두 번을 본다).
+  - 리뷰 대응 수정은 다시 리뷰하지 않았다.
+  - 비용 비교(§7-5 시험 중): `unity-reviewer` 70,604 토큰, 지적 중 실제 결함 0·테스트 공백 1(고침)·정리 2. Codex 실제 결함 3(모두 고침)·제안 2, `/status` 사용량은 읽지 않았다(사용자에게 묻지 않음).
+- **확인 못 한 것·남은 것**: HANDOFF 2절 "드래프트" 의 "봇 추돌".
+- **버린 대안**: 충전 중에도 8 m 비키기(스스로 충전을 끊는다), 자기 목표 오프셋 기준으로 비키기(앞 러너 쪽으로 꺾일 수 있다), 기존 `ContactResponse` 켜기(같은 날 진단에서 SUMMIT 최악이 남았다), 발동 중 뒤에서 받아도 앞 러너 스윙을 끊지 않기(몸싸움 규칙 변경 — 측정 뒤 다시 본다).
+
 ## 2026-11-26 · 드래프트: 앞 러너 바로 뒤 12 m 에 2 s 있으면 1.5 s 동안 +6 m/s, 끝난 뒤 5 s 쿨타임 — 트랙을 따라 꺾인 판정, 봇전 시뮬 규칙 (`feature/race-draft`, 작업 중)
 
 - **결정 (사용자 2026-11-26)**: "카트라이더의 드래프트 처럼 … 앞선 캐릭터의 뒤에서 2초 있으면 1.5초동안 추월할 수 있을 정도의 가속", "발동은 자동", "판정 범위에서 벗어나면 바로 그 시간 스택이 날라간다", "코너라면 코너 각만큼 그 판정 공간이 꺾여있어야", "드래프트는 속도 상한에 안걸리도록". 첫 구현 뒤 "판정 거리 2배", "시간을 3초로", 게이지 대신 "화면상 점차 커지는 바람 갈라지는 이펙트와 사운드 이펙트". 그 뒤 "판정 거리 12, 충전 2.5초, 한번쓰고나면 쿨타임 5초(가속 끝나고 나서 부터 5초)", 바람 선은 "곡선 … 없애고 그냥 직선들로". 마지막으로 "충전 2초로 수정".
