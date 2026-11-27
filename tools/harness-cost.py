@@ -14,6 +14,8 @@
   · 조회: 인덱스(symbols.tsv) 조회 대 코드 검색(Grep 도구 + 셸 grep/rg) 대 .cs Read. 셸 명령 분류는 문자열 근사다.
   · 파견: 메인이 부른 Agent 의 subagent_type 별 횟수.
   · 권한 결정(훅 차단은 reject/hook), 사용자 거절 문구, 도구 오류.
+  · 세션 경계(CLAUDE.md §8): 보고 줄 `새 세션 권장:` 횟수(줄 시작 정규식 근사)와 권고 뒤 남은 요청 수 분포·종료 시각 이후 새 세션 존재 여부(종료 뒤 어느 시점이든 다른 활성 세션이 시작됐는지만 보며, 바로 다음 작업인지까지는 판별하지 않는다).
+  · 작업 종류별(art / code / docs / dev-only): 메인 요청 시점 gitBranch 최빈값(dev·main 제외)으로 분류한 요청·컨텍스트 중앙값.
 안 나오는 것: 달러 비용(토큰 종류별 단가를 반영하지 않는다), Codex 사용량(리뷰는 사용량을 남기지 않는다).
 """
 import argparse, collections, glob, json, os, re, statistics, sys
@@ -27,6 +29,39 @@ BANDS = [(1e5, '<100k'), (2e5, '100-200k'), (4e5, '200-400k'), (7e5, '400-700k')
 SEGMENT = re.compile(r'(&&|\|\||;|\n|\|)')
 SEARCH_HEAD = re.compile(r'^\s*(?:cd\s+\S+\s*)?(grep|rg|git\s+grep|select-string)\b', re.I)
 INDEX_SHELL = re.compile(r'(grep|rg|select-string|head|tail|cat|sed|awk|get-content)[^|;&\n]*symbols\.tsv', re.I)
+# CLAUDE.md §8 세션 경계 보고 줄 ("새 세션 권장: <이유>"). 규칙 설명·부정 문장("새 세션 권장은 아닙니다")을 피하려고 줄 시작 + 콜론만 센다.
+BOUNDARY_LINE = re.compile(r'^\s*(?:[-*>\s]*)(?:\*\*|`)?새 세션 권장(?:\*\*|`)?\s*:', re.M)
+ART_BRANCH = re.compile(
+    r'(?:^|/)(?:art-|k\d+-|.*(?:decor|roadside|track-light|skyline|cabin|townhouse|citytower|viaduct-flats|runner-old-assets))',
+    re.I,
+)
+KIND_ORDER = ('code', 'art', 'docs', 'dev-only', 'other')
+
+
+def classify_branch(branch):
+    if not branch:
+        return 'other'
+    if branch in ('dev', 'main'):
+        return 'dev-only'
+    if ART_BRANCH.search(branch):
+        return 'art'
+    if branch.startswith('docs/'):
+        return 'docs'
+    if branch.startswith(('feature/', 'fix/', 'spike/')):
+        return 'code'
+    return 'other'
+
+
+def session_kind(branch_counts):
+    """세션의 작업 종류. dev/main 외 브랜치 중 가장 많은 메인 요청을 차지한 브랜치로 분류한다."""
+    non_base = [(cnt, br) for br, cnt in branch_counts.items() if br and br not in ('dev', 'main')]
+    if non_base:
+        non_base.sort(key=lambda x: (-x[0], x[1]))
+        return classify_branch(non_base[0][1]), non_base[0][1]
+    if branch_counts:
+        top = branch_counts.most_common(1)[0][0]
+        return classify_branch(top), top
+    return 'other', ''
 
 
 def file_searches(cmd):
@@ -95,15 +130,21 @@ def first_timestamp(path):
     """세션의 첫 timestamp(UTC). 없으면 None (빈 세션)."""
     with open(path, encoding='utf-8') as f:
         for line in f:
-            m = re.search(r'"timestamp":"([^"]+)"', line)
+            m = re.search(r'"timestamp"\s*:\s*"([^"]+)"', line)
             if m:
                 return datetime.fromisoformat(m.group(1).replace('Z', '+00:00'))
     return None
 
 
-def scan(path, st, seen):
-    """한 jsonl 을 읽어 st 에 더한다."""
+def scan(path, st, seen, track_session=False):
+    """한 jsonl 을 읽어 st 에 더한다. track_session=True 이면 메인 세션별 브랜치·세션 경계 정보도 모은다."""
     id2tool = {}
+    mid_to_idx = {}
+    notice_mids = set()
+    notice_indices = []
+    branch_counts = collections.Counter()
+    req_count = 0
+    last_ts = None
     with open(path, encoding='utf-8') as f:
         for line in f:
             try:
@@ -111,21 +152,46 @@ def scan(path, st, seen):
             except json.JSONDecodeError:
                 st.bad_lines += 1
                 continue
+            if track_session:
+                ts_raw = d.get('timestamp')
+                if isinstance(ts_raw, str) and ts_raw:
+                    try:
+                        ts_val = datetime.fromisoformat(ts_raw.replace('Z', '+00:00'))
+                        if last_ts is None or ts_val > last_ts:
+                            last_ts = ts_val
+                    except ValueError:
+                        pass
             t = d.get('type')
             m = d.get('message') or {}
             if t == 'assistant':
                 mid = m.get('id') or d.get('requestId')
                 if mid and mid not in seen and m.get('model') != '<synthetic>':
                     seen.add(mid)
-                    u = m.get('usage') or {}
                     st.requests += 1
+                    mid_to_idx[mid] = req_count
+                    req_count += 1
+                    if track_session:
+                        br = d.get('gitBranch') or ''
+                        if br:
+                            branch_counts[br] += 1
+                    u = m.get('usage') or {}
                     for k in ('input_tokens', 'cache_creation_input_tokens', 'cache_read_input_tokens', 'output_tokens'):
                         st.tok[k] += u.get(k) or 0
                     ctx = sum(u.get(k) or 0 for k in ('input_tokens', 'cache_creation_input_tokens', 'cache_read_input_tokens'))
                     if ctx:
                         st.ctx.append(ctx)
                 for b in m.get('content') or []:
-                    if not (isinstance(b, dict) and b.get('type') == 'tool_use'):
+                    if not isinstance(b, dict):
+                        continue
+                    bt = b.get('type')
+                    if bt == 'text':
+                        if track_session and mid and mid in mid_to_idx and mid not in notice_mids:
+                            txt = b.get('text') or ''
+                            if BOUNDARY_LINE.search(txt):
+                                notice_mids.add(mid)
+                                notice_indices.append(mid_to_idx[mid])
+                        continue
+                    if bt != 'tool_use':
                         continue
                     name = b.get('name') or '?'
                     inp = b.get('input') or {}
@@ -158,6 +224,9 @@ def scan(path, st, seen):
                                 st.rejected += 1
                             elif b.get('is_error'):
                                 st.tool_err[id2tool.get(b.get('tool_use_id'), '?')] += 1
+    if track_session:
+        return dict(req_count=req_count, branch_counts=branch_counts, notice_indices=notice_indices, last_ts=last_ts)
+    return None
 
 
 def main():
@@ -183,9 +252,10 @@ def main():
             skipped += 1
             continue
         n0 = len(main_st.ctx)
-        scan(f, main_st, set())
-        if len(main_st.ctx) > n0:
-            first_ctx.append(main_st.ctx[n0])
+        sinfo = scan(f, main_st, set(), track_session=True)
+        sess_ctx = main_st.ctx[n0:]
+        if sess_ctx:
+            first_ctx.append(sess_ctx[0])
         subs = sorted(glob.glob(os.path.join(root, sid, 'subagents', '*.jsonl')))
         sub_in = 0
         for sf in subs:
@@ -201,31 +271,53 @@ def main():
             if len(sub_st.ctx) > n1:
                 sub_first_ctx.append(sub_st.ctx[n1])
             sub_in += sum(sub_st.tok[k] for k in ('input_tokens', 'cache_creation_input_tokens', 'cache_read_input_tokens')) - before_in
-        per_session.append(dict(session=sid, start=start.isoformat(), requests=len(main_st.ctx) - n0,
-                                subagents=len(subs), subagent_input=sub_in))
+        req_n = sinfo['req_count']
+        rems = [(req_n - 1) - idx for idx in sinfo['notice_indices']]
+        skind, primary_branch = session_kind(sinfo['branch_counts'])
+        end_ts = sinfo['last_ts'] or start
+        per_session.append(dict(
+            session=sid,
+            start=start.isoformat(),
+            end=end_ts.isoformat(),
+            requests=req_n,
+            ctx_requests=len(sess_ctx),
+            median_ctx=int(statistics.median(sess_ctx)) if sess_ctx else 0,
+            kind=skind,
+            primary_branch=primary_branch,
+            boundary_notices=len(rems),
+            remaining_after_notice=rems,
+            last_notice_remaining=rems[-1] if rems else None,
+            subagents=len(subs),
+            subagent_input=sub_in,
+        ))
 
     if not per_session:
         raise SystemExit(f'harness-cost: 조건에 맞는 세션이 없다 (root={root}, since={a.since})')
+    per_session.sort(key=lambda s: (s['start'], s['session']))
 
     def tin(st):
         return sum(st.tok[k] for k in ('input_tokens', 'cache_creation_input_tokens', 'cache_read_input_tokens'))
 
     allc = main_st.ctx
     total_in = tin(main_st) + tin(sub_st)
-    print(f'세션 {len(per_session)}개 (건너뜀 {skipped}), 서브에이전트 기록 {sum(sub_kind.values())}개, 기간 시작 {a.since or "전체"}')
+    active = [s for s in per_session if s['requests'] > 0]
+    print(f'세션 {len(per_session)}개 (요청 있는 것 {len(active)}, 건너뜀 {skipped}), 서브에이전트 기록 {sum(sub_kind.values())}개, 기간 시작 {a.since or "전체"}')
     print(f'읽지 못한 줄: 메인 {main_st.bad_lines}, 서브 {sub_st.bad_lines}')
     print('\n[토큰]')
     print(f'  메인 요청 {main_st.requests}  입력 {tin(main_st):,} (캐시 읽기 {main_st.tok["cache_read_input_tokens"] * 100 / max(tin(main_st), 1):.1f}%)  출력 {main_st.tok["output_tokens"]:,}')
     print(f'  서브 요청 {sub_st.requests}  입력 {tin(sub_st):,} (전체 입력의 {tin(sub_st) * 100 / max(total_in, 1):.1f}%)  출력 {sub_st.tok["output_tokens"]:,}')
     print('\n[요청당 컨텍스트 — 메인]')
-    print(f'  중앙값 {int(statistics.median(allc)):,}  평균 {int(statistics.mean(allc)):,}  최대 {max(allc):,}')
-    print(f'  세션 첫 요청 중앙값 {int(statistics.median(first_ctx)):,} (서브 {int(statistics.median(sub_first_ctx)) if sub_first_ctx else 0:,})')
-    bn, bt = collections.Counter(), collections.Counter()
-    for c in allc:
-        bn[band(c)] += 1
-        bt[band(c)] += c
-    for _, name in BANDS:
-        print(f'  {name:9} 요청 {bn[name]:5} ({bn[name] * 100 / len(allc):4.1f}%)  입력 몫 {bt[name] * 100 / sum(allc):4.1f}%')
+    if allc:
+        print(f'  중앙값 {int(statistics.median(allc)):,}  평균 {int(statistics.mean(allc)):,}  최대 {max(allc):,}')
+        print(f'  세션 첫 요청 중앙값 {int(statistics.median(first_ctx)):,} (서브 {int(statistics.median(sub_first_ctx)) if sub_first_ctx else 0:,})')
+        bn, bt = collections.Counter(), collections.Counter()
+        for c in allc:
+            bn[band(c)] += 1
+            bt[band(c)] += c
+        for _, name in BANDS:
+            print(f'  {name:9} 요청 {bn[name]:5} ({bn[name] * 100 / len(allc):4.1f}%)  입력 몫 {bt[name] * 100 / sum(allc):4.1f}%')
+    else:
+        print('  컨텍스트 기록 없음')
     print('\n[조회 — 메인 + 서브]')
     lk = main_st.lookup + sub_st.lookup
     rd = main_st.reads + sub_st.reads
@@ -241,6 +333,40 @@ def main():
     errs = main_st.tool_err + sub_st.tool_err
     print(f'  도구 오류 {dict(errs.most_common(8))}')
     print(f'  Unity_RunCommand 호출 {(main_st.tools + sub_st.tools)["mcp:Unity_RunCommand"]}, 오류 {errs["mcp:Unity_RunCommand"]}')
+
+    print('\n[세션 경계 — 메인 (새 세션 권장:)]')
+    all_rems = [r for s in active for r in s['remaining_after_notice']]
+    noticed = [s for s in active if s['boundary_notices'] > 0]
+    if all_rems:
+        ok = sum(1 for r in all_rems if r <= 3)
+        mid = sum(1 for r in all_rems if 4 <= r <= 19)
+        long_ext = sum(1 for r in all_rems if r >= 20)
+        sess_ok = [s for s in noticed if s['last_notice_remaining'] <= 3]
+        # 종료 시각(end) 이후에 시작한 다른 활성 세션이 실제로 존재하는지 시각으로 비교한다.
+        active_starts = [(datetime.fromisoformat(s['start']), s['session']) for s in active]
+        followed = sum(
+            1 for s in sess_ok
+            if any(st > datetime.fromisoformat(s['end']) and sid2 != s['session'] for st, sid2 in active_starts)
+        )
+        print(f'  권고 세션 {len(noticed)}/{len(active)}개  총 권고 {len(all_rems)}회  남은 요청 중앙값 {int(statistics.median(all_rems))}  최대 {max(all_rems)}')
+        print(f'  전체 권고 기준: 0-3요청 내 종료 {ok} ({ok * 100 / len(all_rems):.1f}%)  4-19요청 {mid} ({mid * 100 / len(all_rems):.1f}%)  20+요청 연장 {long_ext} ({long_ext * 100 / len(all_rems):.1f}%)')
+        print(f'  세션 마지막 권고 기준: 0-3요청 내 종료 {len(sess_ok)}/{len(noticed)} ({len(sess_ok) * 100 / len(noticed):.1f}%)  종료 시각 이후 새 세션 시작 {followed}/{len(sess_ok)}개')
+    else:
+        print(f'  권고 세션 0/{len(active)}개  총 권고 0회')
+
+    print('\n[작업 종류별 — 메인 (요청 있는 세션)]')
+    by_kind = collections.defaultdict(list)
+    for s in active:
+        by_kind[s['kind']].append(s)
+    for k in KIND_ORDER:
+        items = by_kind.get(k)
+        if not items:
+            continue
+        reqs = [s['requests'] for s in items]
+        ctxs = [s['median_ctx'] for s in items if s['median_ctx'] > 0]
+        med_req = statistics.median(reqs)
+        med_ctx = int(statistics.median(ctxs)) if ctxs else 0
+        print(f'  {k:9} 세션 {len(items):3}개  요청 중앙값 {med_req:5.1f}  컨텍스트 중앙값 {med_ctx:,}')
 
     if a.json:
         with open(a.json, 'w', encoding='utf-8') as out:
