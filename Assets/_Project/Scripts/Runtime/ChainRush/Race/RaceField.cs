@@ -107,6 +107,9 @@ namespace ProtoHarness.ChainRush.Race
             if (playerGame.Circuit == null) throw new ArgumentException("The player's world needs a circuit.", nameof(playerGame));
             // Contact weighs every runner by its profile (RunnerProfile.Weight), on every tick.
             if (playerGame.Player.Profile == null) throw new ArgumentException("The player's runner needs a profile (RunnerMotor.Configure).", nameof(playerGame));
+            // The catch-up runs on every tick of the race; a speed class it has no line for would stop the race on its first.
+            if (!Catchup.Supports(playerGame.Player.SpeedClassScale))
+                throw new ArgumentException($"The player's speed class scale {playerGame.Player.SpeedClassScale} has no catch-up (Catchup.Supports).", nameof(playerGame));
             if (opponents != null) throw new InvalidOperationException("RaceField: the field is already set up.");
             PhysicsScene playerPhysics = playerGame.gameObject.scene.GetPhysicsScene();
             var worlds = new RaceWorld[opponentWorlds.Count];
@@ -119,6 +122,8 @@ namespace ProtoHarness.ChainRush.Race
                 if (world.Game == playerGame) throw new ArgumentException($"Opponent world {i} is the player's own world.", nameof(opponentWorlds));
                 if (world.Game.Circuit == null) throw new ArgumentException($"Opponent world {i} needs a circuit.", nameof(opponentWorlds));
                 if (world.Player.Profile == null) throw new ArgumentException($"Opponent world {i}'s runner needs a profile (RunnerMotor.Configure).", nameof(opponentWorlds));
+                if (!Catchup.Supports(world.Player.SpeedClassScale))
+                    throw new ArgumentException($"Opponent world {i}'s speed class scale {world.Player.SpeedClassScale} has no catch-up (Catchup.Supports).", nameof(opponentWorlds));
                 if (world.PhysicsWorld == playerPhysics)
                     throw new ArgumentException($"Opponent world {i} shares the player's physics scene; load it with RaceWorld.IsolatedLoad.", nameof(opponentWorlds));
                 for (int k = 0; k < i; k++)

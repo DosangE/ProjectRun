@@ -313,15 +313,18 @@ namespace ProtoHarness.ChainRush
             ApplyJump(racer, grounded, dt);
             TrackFrame frame = game.Track.Frame(transform.position);
             if (input.ChainActionPressed) ChainAction(input.Coasting);
-            if (input.SwingPressed) TryHookPole();
+            // What a race's catch-up adds this tick, in m/s (Catchup). A swing goes this much faster than its own speed
+            // whatever the throttle, as it keeps its own speed without it (PoleSwing.Step); the run is pulled only with the
+            // throttle (catchup below, RunDrive.Drive), so a coasting or backing runner still slows down.
+            float swingPull = catchupShare * RunSpeed;
+            if (input.SwingPressed) TryHookPole(swingPull);
             // A swing lasts while the swing key is held. A press counts as held for its own tick, so a tap that comes and
             // goes between two ticks still swings for one tick.
             bool swingHeld = input.SwingHeld || input.SwingPressed;
             bool coasting = input.Coasting;
-            // Without the throttle nothing pulls the runner along (RunDrive.Drive, PoleSwing.SpeedUp).
-            float catchup = coasting ? 0f : catchupShare * RunSpeed;
+            float catchup = coasting ? 0f : swingPull;
             if (racer.SwingTicks > 0 && (!swingHeld || grapple.IsAttached))
-                PoleSwing.End(racer, racer.Velocity, racer.Heading, Slipstream.SpeedBonus(racer, RunSpeed) + catchup);
+                PoleSwing.End(racer, racer.Velocity, racer.Heading, Slipstream.SpeedBonus(racer, RunSpeed) + swingPull);
             // Backing up is coasting with the down arrow, so it cuts a booster too.
             bool reversing = coasting && input.Reversing;
             if (coasting) Slingshot.Cut(racer);
@@ -330,7 +333,7 @@ namespace ProtoHarness.ChainRush
             bool pulling = Slingshot.IsPulling(racer.SlingTicks, sling);
             bool carrying = racer.SlingTicks > 0 && !pulling;
             float turnLimit = RunDrive.Turn(racer, grounded, swinging, reversing, dt, drive);
-            PoleSwing.SpeedUp(racer, swinging, coasting, pulling, carrying, dt, SwingSettings(), sling, catchup);
+            PoleSwing.SpeedUp(racer, swinging, coasting, pulling, carrying, dt, SwingSettings(), sling);
             if (pulling && !swinging) slingTarget = Slingshot.HookPoint(racer.Heading, transform.position, sling);
             var now = new RunDrive.Conditions
             {
@@ -354,7 +357,7 @@ namespace ProtoHarness.ChainRush
                 float steer = RunDrive.SteerSign(arrived, racer.Heading, reversing) * racer.Steer;
                 GuardContact.TurnOut(ref racer.Heading, steer, turnLimit, guardTurnRate, dt);
             }
-            MoveAndCollide(racer, frame, grounded, swinging, push.Target, dt);
+            MoveAndCollide(racer, frame, grounded, swinging, push.Target, dt, swingPull, catchup);
             CountDownAndCheckFall(racer);
         }
 
@@ -407,14 +410,16 @@ namespace ProtoHarness.ChainRush
 
         // Moves the capsule by this tick's velocity, held by the grapple's rope and the swing, then settles the contacts:
         // the ceiling, a guard, a kicker's crest, the ground and the grapple.
-        private void MoveAndCollide(RacerState racer, TrackFrame frame, bool grounded, bool swinging, float push, float dt)
+        // swingPull and runPull: what a race's catch-up adds to the swing's speed and to the run's this tick (Step).
+        private void MoveAndCollide(RacerState racer, TrackFrame frame, bool grounded, bool swinging, float push, float dt,
+            float swingPull, float runPull)
         {
             ref Vector3 velocity = ref racer.Velocity;
             ref float heading = ref racer.Heading;
             Vector3 before = transform.position;
             Vector3 displacement = velocity * dt;
             grapple.ConstrainMotion(transform.position, ref displacement, ref velocity, dt);
-            if (swinging) PoleSwing.Step(racer, transform.position, ref velocity, ref heading, ref displacement, dt, SwingSettings(), out swingAnchor);
+            if (swinging) PoleSwing.Step(racer, transform.position, ref velocity, ref heading, ref displacement, dt, SwingSettings(), out swingAnchor, swingPull);
             hitGuard = false;
             CollisionFlags flags = controller.Move(displacement);
             SyncGrounded();
@@ -444,8 +449,10 @@ namespace ProtoHarness.ChainRush
                 float forwardSpeed = Vector3.Dot(velocity, facing);
                 float boosted = Mathf.Max(forwardSpeed, BoostZoneSpeed);
                 velocity += facing * (boosted - forwardSpeed);
-                // A draft's boost goes on top of the carry (RunDrive.Drive), so the carry is the pad's speed without it.
-                racer.BoostZoneCarrySpeed = Mathf.Max(forwardSpeed - Slipstream.SpeedBonus(racer, RunSpeed), BoostZoneSpeed);
+                // A draft's boost goes on top of the carry (RunDrive.Drive), so the carry is the pad's speed without it. The
+                // catch-up does not raise a pad's carry, so the speed it gave is left out too (review 2026-11-27, Codex: a
+                // runner coming in faster than the pad kept the pull in the carry after the pull was gone).
+                racer.BoostZoneCarrySpeed = Mathf.Max(forwardSpeed - Slipstream.SpeedBonus(racer, RunSpeed) - runPull, BoostZoneSpeed);
                 game.PlayCue(RaceCue.BoostZone);
             }
             if (grounded && !racer.Grounded && velocity.y <= 0f && !grapple.IsAttached) SnapToGround();
@@ -587,11 +594,11 @@ namespace ProtoHarness.ChainRush
         // It costs nothing. In the air (a jump, or past the coyote time off a ledge), while grappling or already swinging,
         // a press does nothing, and so it does for ContactRehookTicks after a contact broke a swing. Step calls it after
         // the jump, which clears the coyote time, so a press on the takeoff tick does not hook either.
-        private void TryHookPole()
+        private void TryHookPole(float pull)
         {
             RacerState racer = game.Racer;
             if (racer.CoyoteTime <= 0f || grapple.IsAttached || racer.SwingTicks > 0 || racer.HookCooldownTicks > 0 || !TryFindPole(out Vector3 pole)) return;
-            PoleSwing.Hook(racer, transform.position, pole);
+            PoleSwing.Hook(racer, transform.position, pole, pull);
             game.PlayCue(RaceCue.PoleHook);
         }
 

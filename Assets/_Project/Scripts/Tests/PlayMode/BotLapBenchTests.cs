@@ -251,9 +251,10 @@ namespace ProtoHarness.Tests.PlayMode
                         float pull = share * motor.RunSpeed;
                         if (pull > 0.5f)
                         {
-                            risePulled += racer.SwingHookSpeed - throttle;
+                            float swung = racer.SwingHookSpeed + pull; // the swing goes its own speed plus the pull (PoleSwing.Step)
+                            risePulled += swung - throttle;
                             wantedPulled += pull;
-                            if (racer.SwingHookSpeed >= throttle + pull - 0.1f) reached++;
+                            if (swung >= throttle + pull - 0.1f) reached++;
                         }
                     }
                     else

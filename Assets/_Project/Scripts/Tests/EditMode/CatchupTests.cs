@@ -26,7 +26,6 @@ namespace ProtoHarness.Tests.EditMode
 
         // ---- Share -----------------------------------------------------------------------------------
 
-        [TestCase(-20d, 0f)]
         [TestCase(0d, 0f)]
         [TestCase(8d, 0f)]
         [TestCase(10d, 0.025f)]
@@ -46,7 +45,7 @@ namespace ProtoHarness.Tests.EditMode
         public void Share_AsTheGapCloses_NeverGrows(float speedClassScale)
         {
             float last = Catchup.Share(400d, speedClassScale);
-            for (double gap = 399.5d; gap >= -10d; gap -= 0.5d)
+            for (double gap = 399.5d; gap >= 0d; gap -= 0.5d)
             {
                 float share = Catchup.Share(gap, speedClassScale);
                 Assert.That(share, Is.LessThanOrEqualTo(last), "gap " + gap);
@@ -79,17 +78,23 @@ namespace ProtoHarness.Tests.EditMode
             Assert.Throws<ArgumentOutOfRangeException>(() => Catchup.Share(100d, speedClassScale));
         }
 
-        // A class so slow that the full pull would come inside the draft's range has no line to rise along.
+        // A class so slow that the full pull would come inside the draft's range has no line to rise along; just above that
+        // it has (the boundary itself is not exact in float: 12 / 288 rounds up).
         [Test]
-        public void Share_AClassWhoseFullPullIsInsideTheDraftsRange_Throws()
+        public void Supports_AClassWhoseFullPullIsInsideTheDraftsRange_IsRefused()
         {
-            float scale = Slipstream.Range / Catchup.FullGap * 0.99f;
-            Assert.Throws<ArgumentOutOfRangeException>(() => Catchup.Share(100d, scale));
+            float edge = Slipstream.Range / Catchup.FullGap;
+            Assert.That(Catchup.Supports(edge * 0.999f), Is.False);
+            Assert.That(Catchup.Supports(edge * 1.001f), Is.True);
+            Assert.That(Catchup.Supports(0.8f) && Catchup.Supports(1f) && Catchup.Supports(1.2f), Is.True, "Every lobby speed class.");
+            Assert.Throws<ArgumentOutOfRangeException>(() => Catchup.Share(0d, edge * 0.999f), "Refused at any gap, right behind too.");
         }
 
+        // The leader is the furthest, so a runner is never ahead of it: a gap below zero is the caller's mistake (§5).
         [TestCase(double.NaN)]
         [TestCase(double.NegativeInfinity)]
-        public void Share_AGapThatIsNotANumber_Throws(double gap)
+        [TestCase(-0.001d)]
+        public void Share_AGapThatIsNotANumberOrBelowZero_Throws(double gap)
         {
             Assert.Throws<ArgumentOutOfRangeException>(() => Catchup.Share(gap, 1f));
         }
@@ -144,40 +149,50 @@ namespace ProtoHarness.Tests.EditMode
             Assert.That(racer.Velocity.z, Is.EqualTo(expected).Within(0.05f));
         }
 
-        [TestCase(false, 24f, 27f)]
-        [TestCase(true, 32f, 35f)]
-        public void SpeedUp_PulledAlongOnASwing_AddsToTheSwingsSpeed(bool pulling, float without, float with)
+        // "기존 스윙의 속도 증가분에서 견인만큼의 속도만 증가하게 (비율X +되는 정도만)" (user 2026-11-27): the swing keeps its own
+        // speed by its own rules and goes the pull faster.
+        [TestCase(24f, 0f, 24f)]
+        [TestCase(24f, 5f, 29f)]
+        [TestCase(32f, 5f, 37f)]
+        public void Step_PulledAlong_SwingsThePullFasterThanItsOwnSpeed(float own, float pull, float expected)
         {
-            Assert.That(Swing(pulling, false, 0f), Is.EqualTo(without).Within(0.6f));
-            Assert.That(Swing(pulling, false, 3f), Is.EqualTo(with).Within(0.6f));
+            Assert.That(SwingStep(own, pull), Is.EqualTo(expected).Within(1e-4f));
         }
 
-        // User 2026-11-27, "스윙속도에대해서 추가가 잘 안되었다": a swing lasts about half a second (Trace_CatchupOnSwings:
-        // 23-24 ticks), and by the run's push the pull was there on about one swing tick in ten. It comes by the draft's push.
+        // Hooked, the swing starts at the speed the runner came in with: its own speed leaves the pull out.
         [Test]
-        public void SpeedUp_PulledAlongOnAShortSwing_IsThereWithinIt()
+        public void Hook_PulledAlong_StartsAtTheSpeedItCameInWith()
         {
-            racer.Reset();
+            racer.Velocity = Vector3.forward * 25f;
+            PoleSwing.Hook(racer, new Vector3(10f, 0f, 0f), Vector3.zero, 5f);
+            Assert.That(racer.SwingHookSpeed, Is.EqualTo(20f).Within(1e-5f));
+            Assert.That(SwingStep(racer.SwingHookSpeed, 5f), Is.EqualTo(25f).Within(1e-4f));
+        }
+
+        // The swing's own speed rises by its own push, the same pulled or not (no ratio, no push of its own).
+        [Test]
+        public void SpeedUp_PulledOrNot_RisesTheSame()
+        {
+            var swing = new PoleSwing.Settings { RunSpeed = 20f, RunAcceleration = 8f, ThrottleSpeedScale = 1.2f, CarryDecay = 0.8f };
             racer.SwingHookSpeed = 20f;
-            var swing = new PoleSwing.Settings { RunSpeed = 20f, RunAcceleration = 8f, ThrottleSpeedScale = 1.2f, CarryDecay = 0.8f };
-            for (int i = 0; i < 30; i++) PoleSwing.SpeedUp(racer, true, false, false, false, Dt, swing, Sling(), 5f);
-            Assert.That(racer.SwingHookSpeed, Is.EqualTo(29f).Within(0.01f));
+            for (int i = 0; i < 25; i++) PoleSwing.SpeedUp(racer, true, false, false, false, Dt, swing, Sling());
+            Assert.That(racer.SwingHookSpeed, Is.EqualTo(24f).Within(1e-4f), "Half a second at 8 m/s^2.");
+            Assert.That(SwingStep(racer.SwingHookSpeed, 5f), Is.EqualTo(29f).Within(1e-4f));
         }
 
-        [Test]
-        public void SpeedUp_PulledAlongWithoutTheThrottle_AddsNothing()
+        // The swing's speed after one step round a pole 10 m off, with its own speed own and the pull on top.
+        private float SwingStep(float own, float pull)
         {
-            Assert.That(Swing(false, true, 3f), Is.EqualTo(Swing(false, true, 0f)));
-        }
-
-        private float Swing(bool pulling, bool coasting, float catchup)
-        {
-            racer.Reset();
-            racer.SwingHookSpeed = 30f;
-            if (!coasting) racer.SwingHookSpeed = 20f;
-            var swing = new PoleSwing.Settings { RunSpeed = 20f, RunAcceleration = 8f, ThrottleSpeedScale = 1.2f, CarryDecay = 0.8f };
-            for (int i = 0; i < 400; i++) PoleSwing.SpeedUp(racer, true, coasting, pulling, false, Dt, swing, Sling(), catchup);
-            return racer.SwingHookSpeed;
+            racer.SwingCenter = Vector3.zero;
+            racer.SwingRadius = 10f;
+            racer.SwingHookSpeed = own;
+            racer.Steer = 0f;
+            Vector3 velocity = Vector3.forward * own;
+            float heading = 0f;
+            Vector3 displacement = Vector3.zero;
+            var swing = new PoleSwing.Settings { RopeRate = 6f, MinRopeLength = 2f, MetersPerSlot = 1000f, RunSpeed = 20f, RunAcceleration = 8f, ThrottleSpeedScale = 1.2f, CarryDecay = 0.8f };
+            PoleSwing.Step(racer, new Vector3(10f, 0f, 0f), ref velocity, ref heading, ref displacement, Dt, swing, out Vector3 _, pull);
+            return new Vector2(velocity.x, velocity.z).magnitude;
         }
 
         // A pulled swing let go heads for the speed it swung with: the carry leaves the pull out and the run adds it again,

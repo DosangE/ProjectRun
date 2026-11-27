@@ -22,17 +22,23 @@ namespace ProtoHarness.ChainRush.Motion
         public const float FullGap = 288f;
         public const float MaxShare = 0.25f;
 
+        // Whether the pull has a line to rise along on this speed class: its far end must come beyond the draft's range.
+        // RaceField checks every runner's class with this as the field is set up, so an unsupported one stops the race
+        // before it starts, naming the runner (review 2026-11-27, Codex), rather than on its first tick.
+        public static bool Supports(float speedClassScale) =>
+            speedClassScale > 0f && !float.IsInfinity(speedClassScale) && (double)FullGap * speedClassScale > Slipstream.Range;
+
         // The share of its running speed a runner gap metres behind the leader is pulled along by: 0 within NoneWithin,
         // rising to ShareAtDraftRange at the draft's range, then in a straight line to MaxShare at FullGap x speedClassScale.
-        // It never grows as the gap closes.
+        // It never grows as the gap closes. The leader is the furthest, so a gap below zero is the caller's mistake.
         public static float Share(double gap, float speedClassScale)
         {
-            if (double.IsNaN(gap) || double.IsInfinity(gap)) throw new ArgumentOutOfRangeException(nameof(gap), gap, "Catchup: the gap must be finite.");
-            if (!(speedClassScale > 0f) || float.IsInfinity(speedClassScale))
-                throw new ArgumentOutOfRangeException(nameof(speedClassScale), speedClassScale, "Catchup: the speed class scale must be above zero and finite.");
+            if (double.IsNaN(gap) || double.IsInfinity(gap) || gap < 0d)
+                throw new ArgumentOutOfRangeException(nameof(gap), gap, "Catchup: the gap behind the leader must be finite and not below zero.");
+            if (!Supports(speedClassScale))
+                throw new ArgumentOutOfRangeException(nameof(speedClassScale), speedClassScale,
+                    $"Catchup: the speed class scale must be above zero, finite, and put the full pull ({FullGap} m x scale) beyond the draft's range ({Slipstream.Range} m).");
             double full = (double)FullGap * speedClassScale;
-            if (full <= Slipstream.Range)
-                throw new ArgumentOutOfRangeException(nameof(speedClassScale), speedClassScale, $"Catchup: the full pull ({full} m) must come beyond the draft's range ({Slipstream.Range} m).");
             if (gap <= NoneWithin) return 0f;
             if (gap <= Slipstream.Range) return (float)(ShareAtDraftRange * (gap - NoneWithin) / (Slipstream.Range - NoneWithin));
             if (gap >= full) return MaxShare;
