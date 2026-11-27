@@ -238,12 +238,13 @@ namespace ProtoHarness.ChainRush
             return true;
         }
 
-        // behind: the runner is right behind another this tick (RaceField); alone it never is.
-        public void MoveTick(bool behind = false)
+        // behind: the runner is right behind another this tick; catchupShare: how far it is pulled along (Motion.Catchup).
+        // Both come from RaceField; alone the runner is never behind nor pulled.
+        public void MoveTick(bool behind = false, float catchupShare = 0f)
         {
             RequireTickStage(TickStage.Movement);
             tickStage = TickStage.Judgment;
-            player.Step(pendingInput, behind);
+            player.Step(pendingInput, behind, catchupShare);
         }
 
         public void JudgeTick()

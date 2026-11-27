@@ -93,15 +93,23 @@ namespace ProtoHarness.Tests.PlayMode
 
         [UnityTest, Explicit, Timeout(3600000)]
         public IEnumerator Race_FourSeedsTwoTracks([Values(BotDifficulty.Easy, BotDifficulty.Normal, BotDifficulty.Hard)] BotDifficulty difficulty)
-            => RaceFourSeedsTwoTracks(difficulty, true);
+            => RaceFourSeedsTwoTracks(difficulty, true, true);
 
-        // The same races with drafting off (RaceField.DraftEnabled), the baseline drafting is compared with.
+        // The same races with drafting and catch-up off (RaceField.DraftEnabled, CatchupEnabled), the baseline drafting is
+        // compared with.
         [UnityTest, Explicit, Timeout(3600000)]
         public IEnumerator Race_FourSeedsTwoTracks_WithoutDrafts([Values(BotDifficulty.Easy, BotDifficulty.Normal, BotDifficulty.Hard)] BotDifficulty difficulty)
-            => RaceFourSeedsTwoTracks(difficulty, false);
+            => RaceFourSeedsTwoTracks(difficulty, false, false);
 
-        private IEnumerator RaceFourSeedsTwoTracks(BotDifficulty difficulty, bool drafts)
+        // Drafting on and catch-up off (RaceField.CatchupEnabled), the baseline catch-up is compared with.
+        [UnityTest, Explicit, Timeout(3600000)]
+        public IEnumerator Race_FourSeedsTwoTracks_WithoutCatchup([Values(BotDifficulty.Easy, BotDifficulty.Normal, BotDifficulty.Hard)] BotDifficulty difficulty)
+            => RaceFourSeedsTwoTracks(difficulty, true, false);
+
+        private IEnumerator RaceFourSeedsTwoTracks(BotDifficulty difficulty, bool drafts, bool catchups)
         {
+            // The labels the earlier runs were logged with stay theirs: "RaceDraft" is drafting without catch-up.
+            string label = !drafts ? "Race" : catchups ? "RaceCatchup" : "RaceDraft";
             var suiteClock = Stopwatch.StartNew();
             int earlyRehooks = 0;
             foreach (string track in new[] { "SummitDrop", "Stadium" })
@@ -116,6 +124,7 @@ namespace ProtoHarness.Tests.PlayMode
                     yield return RaceBotTests.LoadRace(track, difficulty, true, seed, (w, f) => { player = w; field = f; });
                     Assert.That(field.ContactEnabled, Is.True);
                     field.DraftEnabled = drafts;
+                    field.CatchupEnabled = catchups;
                     int draftsStarted = 0, leadChanges = 0, leader = -1, longestCharge = 0, chargesLost = 0;
                     var charged = new int[4];
                     Action<RaceCue> draftCue = value => { if (value == RaceCue.Draft) draftsStarted++; };
@@ -174,14 +183,14 @@ namespace ProtoHarness.Tests.PlayMode
                     }
                     double front = double.MinValue, back = double.MaxValue;
                     for (int i = 0; i < 4; i++) { front = Math.Max(front, field.Progress(i)); back = Math.Min(back, field.Progress(i)); }
-                    Debug.Log($"BotBench Draft {track} {difficulty} seed={seed} on={drafts}: drafts={draftsStarted}, leadChanges={leadChanges}, longestCharge={longestCharge}, lost={chargesLost}, spread={Number(front - back)} m.");
+                    Debug.Log($"BotBench Draft {track} {difficulty} seed={seed} on={drafts} catchup={catchups}: drafts={draftsStarted}, leadChanges={leadChanges}, longestCharge={longestCharge}, lost={chargesLost}, spread={Number(front - back)} m.");
                     // MP2's real race ends on the player's finish (D7 a), so the other three are still out by rule and
                     // are not counted. Unfinished is the measured runner (the player's slot) not finishing by TickLimit.
                     int unfinished = player.Game.HasFinished ? 0 : 1;
                     double seconds = player.Game.HasFinished ? player.Game.Tick * (double)Ticks.Seconds : double.NaN;
                     times[seed - 1] = seconds;
                     allBreaks += breaks; allFalls += falls; allUnfinished += unfinished;
-                    Append(drafts ? "RaceDraft" : "Race", track, difficulty, seed, seconds, breaks, falls, unfinished);
+                    Append(label, track, difficulty, seed, seconds, breaks, falls, unfinished);
                     Debug.Log($"BotBench Race {track} {difficulty} seed={seed}: ticks={player.Game.Tick}, seconds={Number(seconds)}, breaks={breaks}, falls={falls}, unfinished={unfinished}, wallMinutes={clock.Elapsed.TotalMinutes:F6}.");
                 }
                 // A missing player finish makes the aggregate explicitly NA, rather than dropping the slow run.
@@ -194,6 +203,89 @@ namespace ProtoHarness.Tests.PlayMode
             }
             Debug.Log($"BotBench Race suite {difficulty}: 8 races, wallMinutes={suiteClock.Elapsed.TotalMinutes:F6}.");
             Assert.That(earlyRehooks, Is.EqualTo(0), $"A bot hooked again within {RehookTicks} ticks of a contact break.");
+        }
+
+        // Diagnosis, not a gate (user 2026-11-27: "달릴때 속도는 견인에따라 잘 되는데 스윙속도에대해서 추가가 잘 안되었다"): in
+        // a four-bot race with catch-up on, how much of the pull a swing without a booster or a draft gets. Per swing: the
+        // share on the tick before the hook and the mean share during it (the gap is by S, which runs faster than the ground
+        // round a corner's inside), and how far the hook's speed rose toward the throttle swing's speed plus the pull.
+        [UnityTest, Explicit, Timeout(1800000)]
+        public IEnumerator Trace_CatchupOnSwings([Values("Stadium", "SummitDrop")] string track)
+        {
+            const BotDifficulty difficulty = BotDifficulty.Normal;
+            RaceWorld player = null;
+            RaceField field = null;
+            yield return RaceBotTests.LoadRace(track, difficulty, true, 1, (w, f) => { player = w; field = f; });
+            var worlds = new[] { player, field.Opponents[0], field.Opponents[1], field.Opponents[2] };
+            for (int i = 0; i < 4; i++)
+            {
+                IInputSource source = RaceBotTests.InputFor(worlds[i], difficulty);
+                worlds[i].Game.SetInputSource(source);
+                if (source is RaceBot bot) bot.Observe(field, i);
+            }
+            player.Game.StartRun();
+            var runShare = new float[4];
+            var inSwing = new bool[4];
+            var swingTicks = new int[4];
+            var swingShareSum = new double[4];
+            var swingEntry = new float[4];
+            int swings = 0, pulledSwings = 0, swingTickCount = 0, reached = 0, runTicks = 0;
+            double entryShareSum = 0d, meanShareSum = 0d, lengthSum = 0d, risePulled = 0d, wantedPulled = 0d, runShareSum = 0d, runGain = 0d;
+            for (int tick = 0; tick < TickLimit && player.Game.IsRunning; tick++)
+            {
+                RaceBotTests.StepField(field);
+                for (int i = 0; i < 4; i++)
+                {
+                    RacerState racer = worlds[i].Game.Racer;
+                    RunnerMotor motor = worlds[i].Player;
+                    float share = field.CatchupShare(i);
+                    bool plain = racer.SlingTicks == 0 && racer.DraftBoostTicks == 0;
+                    bool swinging = racer.SwingTicks > 0;
+                    if (swinging && plain)
+                    {
+                        if (!inSwing[i]) { inSwing[i] = true; swingTicks[i] = 0; swingShareSum[i] = 0d; swingEntry[i] = runShare[i]; }
+                        swingTicks[i]++;
+                        swingShareSum[i] += share;
+                        swingTickCount++;
+                        float throttle = motor.RunSpeed * 1.2f;
+                        float pull = share * motor.RunSpeed;
+                        if (pull > 0.5f)
+                        {
+                            risePulled += racer.SwingHookSpeed - throttle;
+                            wantedPulled += pull;
+                            if (racer.SwingHookSpeed >= throttle + pull - 0.1f) reached++;
+                        }
+                    }
+                    else
+                    {
+                        if (inSwing[i])
+                        {
+                            inSwing[i] = false;
+                            swings++;
+                            lengthSum += swingTicks[i];
+                            if (swingEntry[i] > 0.02f)
+                            {
+                                pulledSwings++;
+                                entryShareSum += swingEntry[i];
+                                meanShareSum += swingShareSum[i] / swingTicks[i];
+                            }
+                        }
+                        if (!swinging && plain && racer.Grounded && racer.SwingCarrySpeed <= 0f && racer.BoostZoneCarrySpeed <= 0f && share > 0.02f)
+                        {
+                            runTicks++;
+                            runShareSum += share;
+                            runGain += motor.ForwardSpeed - motor.RunSpeed;
+                        }
+                        runShare[i] = share;
+                    }
+                }
+                if (tick % 200 == 0) yield return null;
+            }
+            Debug.Log($"BotBench CatchupSwing {track} {difficulty}: swings={swings}, meanLength={Number(swings > 0 ? lengthSum / swings : double.NaN)} ticks, "
+                + $"pulledSwings={pulledSwings}, entryShare={Number(pulledSwings > 0 ? entryShareSum / pulledSwings : double.NaN)}, "
+                + $"duringShare={Number(pulledSwings > 0 ? meanShareSum / pulledSwings : double.NaN)}, swingTicks={swingTickCount}, "
+                + $"pulledSwingRise={Number(wantedPulled > 0d ? risePulled / wantedPulled : double.NaN)} of the pull, reachedTicks={reached}, "
+                + $"runTicks={runTicks}, runShare={Number(runTicks > 0 ? runShareSum / runTicks : double.NaN)}, runGain={Number(runTicks > 0 ? runGain / runTicks : double.NaN)} m/s.");
         }
 
         // Diagnosis, not a gate: one SummitDrop Fast solo bot run beside this PC's player ghost. Line the two up by 3D

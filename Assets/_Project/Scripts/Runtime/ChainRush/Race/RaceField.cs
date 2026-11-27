@@ -46,9 +46,13 @@ namespace ProtoHarness.ChainRush.Race
         // Who is right behind another runner on this tick (FindDrafts), from the same snapshot the bots read.
         private Slipstream.Spot[] spots;
         private bool[] behind;
+        // How far each runner is pulled along on this tick (FindCatchups), as a share of its running speed.
+        private float[] catchups;
         public bool ContactEnabled { get; set; } = true;
-        // Off, no runner drafts. With contact off too the worlds share nothing.
+        // Off, no runner drafts. With contact and catch-up off too the worlds share nothing.
         public bool DraftEnabled { get; set; } = true;
+        // Off, nobody is pulled along by the gap to the leader (Motion.Catchup).
+        public bool CatchupEnabled { get; set; } = true;
         private bool stopped;
         // Match the existing running-order hysteresis (RaceServer); finishers are ranked separately below.
         private const double OrderMarginMetres = 1d;
@@ -66,6 +70,9 @@ namespace ProtoHarness.ChainRush.Race
         // it or changed its velocity after a tick on which it did not, so a shove counts once however long the runners
         // stay pressed together. At most one a tick. Zero again on a restart. Presentation only, as ContactSwingBreaks.
         public uint ContactSequence(int racer) => contactSequences[Checked(racer)];
+        // The share of its running speed this racer was pulled along by on the latest tick (Motion.Catchup): 0 for the
+        // leader, within Catchup.NoneWithin of it, before the first tick and with CatchupEnabled off.
+        public float CatchupShare(int racer) => catchups[Checked(racer)];
 
         private int CheckedObservation(int racer)
         {
@@ -141,6 +148,7 @@ namespace ProtoHarness.ChainRush.Race
             observedVelocities = new Vector3[RacerCount];
             spots = new Slipstream.Spot[RacerCount];
             behind = new bool[RacerCount];
+            catchups = new float[RacerCount];
             contactSwingBreaks = new int[RacerCount];
             contactRacers = new int[RacerCount];
             contactSequences = new uint[RacerCount];
@@ -200,8 +208,9 @@ namespace ProtoHarness.ChainRush.Race
                 }
                 observationReady = true;
                 FindDrafts();
+                FindCatchups();
                 for (int i = 0; i < RacerCount; i++) stepping[i] = games[i].InputTick();
-                for (int i = 0; i < RacerCount; i++) if (stepping[i]) games[i].MoveTick(behind[i]);
+                for (int i = 0; i < RacerCount; i++) if (stepping[i]) games[i].MoveTick(behind[i], catchups[i]);
                 if (ContactEnabled) ResolveContact();
                 for (int i = 0; i < RacerCount; i++) if (stepping[i]) games[i].JudgeTick();
             }
@@ -258,6 +267,19 @@ namespace ProtoHarness.ChainRush.Race
 
         private bool CanDraft(int racer) => games[racer].IsRunning && !games[racer].Player.IsRespawning;
 
+        // How far each runner is pulled along as this tick begins (Motion.Catchup): by its distance behind the furthest
+        // anyone had gone after the last tick, finishers included. The standings are the field's own, the same whatever order
+        // the runners are stepped in, so the pull is too. On the first tick every distance is zero and nobody is pulled.
+        private void FindCatchups()
+        {
+            Array.Clear(catchups, 0, catchups.Length);
+            if (!CatchupEnabled) return;
+            double leader = progress[0];
+            for (int r = 1; r < RacerCount; r++) leader = Math.Max(leader, progress[r]);
+            for (int i = 0; i < RacerCount; i++)
+                if (games[i].IsRunning) catchups[i] = Catchup.Share(leader - progress[i], games[i].Player.SpeedClassScale);
+        }
+
         private void ResolveContact()
         {
             // Pack only running racers, preserving their field index order, into a prefix of the cached arrays. A runner
@@ -306,6 +328,7 @@ namespace ProtoHarness.ChainRush.Race
             Array.Clear(places, 0, places.Length);
             Array.Clear(finishTicks, 0, finishTicks.Length);
             Array.Clear(progress, 0, progress.Length);
+            Array.Clear(catchups, 0, catchups.Length);
             Array.Clear(ended, 0, ended.Length);
             Array.Clear(contactSwingBreaks, 0, contactSwingBreaks.Length);
             Array.Clear(contactSequences, 0, contactSequences.Length);

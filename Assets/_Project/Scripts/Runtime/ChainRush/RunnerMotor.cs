@@ -285,9 +285,12 @@ namespace ProtoHarness.ChainRush
         // One simulation tick, called only by ChainRushGame.FixedUpdate. The stages run in the order below, each on what
         // the ones before it left in the racer's state; the order is part of the replay fingerprint. The rules live in
         // Motion/; the motor reads the input, moves the controller and keeps the order. behind: the runner is right behind
-        // another (RaceField works that out before anyone moves), which charges a draft.
-        public void Step(in TickInput input, bool behind = false)
+        // another (RaceField works that out before anyone moves), which charges a draft. catchupShare: the share of the
+        // running speed a race's catch-up adds this tick (Catchup.Share, from RaceField's standings); 0 racing alone.
+        public void Step(in TickInput input, bool behind = false, float catchupShare = 0f)
         {
+            if (!(catchupShare >= 0f && catchupShare <= Catchup.MaxShare))
+                throw new System.ArgumentOutOfRangeException(nameof(catchupShare), catchupShare, $"RunnerMotor: a catch-up share is from 0 to {Catchup.MaxShare}.");
             if (!game.IsRunning) return;
             NormalizeController();
             RacerState racer = game.Racer;
@@ -314,8 +317,11 @@ namespace ProtoHarness.ChainRush
             // A swing lasts while the swing key is held. A press counts as held for its own tick, so a tap that comes and
             // goes between two ticks still swings for one tick.
             bool swingHeld = input.SwingHeld || input.SwingPressed;
-            if (racer.SwingTicks > 0 && (!swingHeld || grapple.IsAttached)) PoleSwing.End(racer, racer.Velocity, racer.Heading, Slipstream.SpeedBonus(racer, RunSpeed));
             bool coasting = input.Coasting;
+            // Without the throttle nothing pulls the runner along (RunDrive.Drive, PoleSwing.SpeedUp).
+            float catchup = coasting ? 0f : catchupShare * RunSpeed;
+            if (racer.SwingTicks > 0 && (!swingHeld || grapple.IsAttached))
+                PoleSwing.End(racer, racer.Velocity, racer.Heading, Slipstream.SpeedBonus(racer, RunSpeed) + catchup);
             // Backing up is coasting with the down arrow, so it cuts a booster too.
             bool reversing = coasting && input.Reversing;
             if (coasting) Slingshot.Cut(racer);
@@ -324,7 +330,7 @@ namespace ProtoHarness.ChainRush
             bool pulling = Slingshot.IsPulling(racer.SlingTicks, sling);
             bool carrying = racer.SlingTicks > 0 && !pulling;
             float turnLimit = RunDrive.Turn(racer, grounded, swinging, reversing, dt, drive);
-            PoleSwing.SpeedUp(racer, swinging, coasting, pulling, carrying, dt, SwingSettings(), sling);
+            PoleSwing.SpeedUp(racer, swinging, coasting, pulling, carrying, dt, SwingSettings(), sling, catchup);
             if (pulling && !swinging) slingTarget = Slingshot.HookPoint(racer.Heading, transform.position, sling);
             var now = new RunDrive.Conditions
             {
@@ -336,6 +342,7 @@ namespace ProtoHarness.ChainRush
                 Carrying = carrying,
                 GrappleAttached = grapple.IsAttached,
                 Drafting = racer.DraftBoostTicks > 0,
+                Catchup = catchup,
             };
             Vector3 arrived = racer.Velocity;
             RunDrive.Push push = RunDrive.Drive(racer, frame.Grade, now, turnLimit, dt, drive, sling);

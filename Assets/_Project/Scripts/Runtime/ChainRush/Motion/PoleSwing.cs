@@ -39,14 +39,18 @@ namespace ProtoHarness.ChainRush.Motion
             racer.SwingTicks = 1;
         }
 
+        // catchup: what a race's catch-up adds this tick, in m/s (Catchup); never without the throttle.
         public static void SpeedUp(RacerState racer, bool swinging, bool coasting, bool pulling, bool carrying, float dt,
-            in Settings settings, in Slingshot.Settings sling)
+            in Settings settings, in Slingshot.Settings sling, float catchup = 0f)
         {
             if (!swinging) return;
             ref float hookSpeed = ref racer.SwingHookSpeed;
             // A draft's boost adds to the speed the swing would otherwise rise to (user 2026-11-26), and comes by its own push.
-            float draft = Slipstream.SpeedBonus(racer, settings.RunSpeed);
-            float draftPush = draft > 0f ? settings.RunAcceleration * Slipstream.AccelerationScale : 0f;
+            // A race's catch-up adds to it the same way and by the same push: a swing lasts about half a second, and by the
+            // run's push alone the pull was not there in it (user 2026-11-27, "스윙속도에대해서 추가가 잘 안되었다").
+            float pull = coasting ? 0f : catchup;
+            float bonus = Slipstream.SpeedBonus(racer, settings.RunSpeed) + pull;
+            float draftPush = racer.DraftBoostTicks > 0 || pull > 0f ? settings.RunAcceleration * Slipstream.AccelerationScale : 0f;
             // A booster on a swing speeds the swing up (user 2026-10-19, "C"): the hook's speed, the swing's speed (Step),
             // rises toward the booster's speed by the same push a booster gives on the ground.
             // The rope keeps the facing, so the slingshot's pull does not turn it.
@@ -55,7 +59,7 @@ namespace ProtoHarness.ChainRush.Motion
             // 부스터+스윙 최대속도까지 감속").
             if (pulling || carrying)
             {
-                float boostSpeed = (pulling ? sling.TopSpeed : sling.CarrySpeed) + draft;
+                float boostSpeed = (pulling ? sling.TopSpeed : sling.CarrySpeed) + bonus;
                 if (hookSpeed > boostSpeed) hookSpeed -= settings.CarryDecay * (hookSpeed - boostSpeed) * dt;
                 else if (hookSpeed < boostSpeed) hookSpeed = Mathf.Min(boostSpeed, hookSpeed + Mathf.Max(Slingshot.BoostAcceleration(hookSpeed, boostSpeed, sling), draftPush) * dt);
             }
@@ -65,7 +69,7 @@ namespace ProtoHarness.ChainRush.Motion
             // the ground (user 2026-11-16: "부스트 상태가 아닌 스윙 속도까지 줄어야 한다"); let go, the speed stays.
             else
             {
-                float throttleSpeed = settings.RunSpeed * settings.ThrottleSpeedScale + draft;
+                float throttleSpeed = settings.RunSpeed * settings.ThrottleSpeedScale + bonus;
                 if (hookSpeed > throttleSpeed) hookSpeed -= settings.CarryDecay * (hookSpeed - throttleSpeed) * dt;
                 else if (!coasting) hookSpeed = Mathf.Min(throttleSpeed, hookSpeed + Mathf.Max(settings.RunAcceleration, draftPush) * dt);
             }
@@ -105,8 +109,8 @@ namespace ProtoHarness.ChainRush.Motion
 
         // Ends the swing: the runner goes straight on along its facing at the speed it swung with, and what that is above
         // running speed falls off by RunDrive.Settings.SwingCarryFalloff of itself a second. draft is what a running draft's
-        // boost adds (Slipstream.SpeedBonus): RunDrive adds it on top of the carry again, so the carry leaves it out (review
-        // 2026-11-26, Codex: a 30 m/s drafted swing let go headed for 36).
+        // boost and a race's catch-up add (Slipstream.SpeedBonus, Catchup): RunDrive adds them on top of the carry again, so
+        // the carry leaves them out (review 2026-11-26, Codex: a 30 m/s drafted swing let go headed for 36).
         public static void End(RacerState racer, Vector3 velocity, float heading, float draft = 0f)
         {
             racer.SwingTicks = 0;
