@@ -18,12 +18,12 @@
     - 산출물 폴더(%TEMP%\protoharness-agent-relay\<RunId>\)는 잠금을 잡은 뒤에 존재를 검사하고 새로 만든다. 이미 있으면 기존 내용은 손대지 않고 exit 2.
     - 한계: taskkill /PID <부모PID> /T /F 는 부모가 먼저 종료된 뒤 살아남은 손자 프로세스를 잡지 못할 수 있다.
 
-  종료 코드:
-    0  성공 (review 는 정상 PASS 와 정상 NEEDS_FIX 모두 exit 0; 판정은 verdict 로 구분)
-    2  인자·가드·잠금·대상 거부·기존 RunId 폴더 존재·미커밋 변경 충돌 (CLI 미호출)
-    12 계약 위반 (JSON 파싱/필수 필드 누락, -Role review 응답 마지막 줄에 RELAY-VERDICT: 누락, 또는 실행 중 HEAD/브랜치 변경; verdict 는 null)
-    13 CLI 실행 실패, git 오류, stdin 쓰기 실패, stdout/stderr 읽기 시간 초과, 프로세스 트리 종료/확인 실패, 또는 타임아웃 (verdict 는 null; 잠금 해제 전 원문을 stderr 와 result.json error 에 기록)
-    ※ exitCode 가 0 이 아니면 result.json 과 콘솔 요약의 verdict 는 항상 null(빈 값)이다.
+  종료 코드 (우선순위: 13 > 12 > 0, 가드 거부는 CLI 미호출로 즉시 2):
+    0  성공 (review 는 정상 PASS 와 정상 NEEDS_FIX 모두 exit 0; ask 의 verdict 는 항상 null)
+    2  인자·가드·잠금·대상 거부·기존 RunId 폴더 존재·미커밋 변경 충돌 (CLI 미호출, 산출물 폴더 미생성/무변경, stderr 출력)
+    12 계약 위반 (CLI 정상 종료 후 JSON 파싱/필수 필드 누락, -Role review 응답 마지막 줄에 RELAY-VERDICT: 누락, 또는 실행 중 HEAD/브랜치 변경; verdict 는 null, stderr 와 result.json error 에 기록)
+    13 CLI 실행 실패(비정상 종료·is_error·미설치·타임아웃·stdin/stdout/stderr 실패·프로세스 트리 종료/확인 실패) 또는 git/IO 예외 (verdict 는 null; 잠금 해제 전 원문을 stderr 와 result.json error 에 기록)
+    ※ exitCode 가 0 이 아니면 result.json 과 콘솔 요약의 verdict 는 항상 null(빈 값)이며, result.json 의 files.* 는 실제로 생성된 파일 경로만 기록한다(미생성 파일은 null).
 
   주의: 이 파일은 UTF-8 with BOM, CRLF 로 저장한다 (Windows PowerShell 5.1 한글 깨짐 방지).
 #>
@@ -64,6 +64,30 @@ function Write-Utf8File([string]$path, [string]$text) {
         New-Item -ItemType Directory -Path $dir -Force | Out-Null
     }
     [System.IO.File]::WriteAllText($path, $text, $utf8NoBom)
+}
+
+function Get-ExistingFilePath([string]$path) {
+    if (-not [string]::IsNullOrWhiteSpace($path) -and (Test-Path -LiteralPath $path -PathType Leaf)) {
+        return $path
+    }
+    return $null
+}
+
+function Join-ErrorMessages([string[]]$parts) {
+    $nonEmpty = @($parts | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+    if ($nonEmpty.Count -eq 0) { return $null }
+    return ($nonEmpty -join ' | ')
+}
+
+function Try-WriteUtf8File([string]$path, [string]$text, [System.Collections.Generic.List[string]]$writeErrors, [string]$label) {
+    try {
+        Write-Utf8File $path $text
+        return $true
+    }
+    catch {
+        $writeErrors.Add("${label} 쓰기 실패: $($_.Exception.Message)")
+        return $false
+    }
 }
 
 function Quote-Arg([string]$arg) {
@@ -459,29 +483,56 @@ function Invoke-ClaudeReadOnly(
     [string]$effortLevel,
     [int]$timeoutSeconds
 ) {
-    $sentPath = Join-Path $runDir 'sent.md'
-    $outPath  = Join-Path $runDir 'out.md'
-    $errPath  = Join-Path $runDir 'stderr.log'
-    $rawPath  = Join-Path $runDir 'raw.json'
+    $sentPath    = Join-Path $runDir 'sent.md'
+    $outPath     = Join-Path $runDir 'out.md'
+    $errPath     = Join-Path $runDir 'stderr.log'
+    $rawPath     = Join-Path $runDir 'raw.json'
+    $writeErrors = New-Object System.Collections.Generic.List[string]
 
-    Write-Utf8File $sentPath $promptText
+    $makeTurnResult = {
+        param(
+            [int]$baseExit,
+            $sessionVal,
+            $verdictVal,
+            [string]$responseVal,
+            $usageVal,
+            $costVal,
+            [double]$durationVal,
+            $baseErr
+        )
+        $effectiveExit = $baseExit
+        $writeSummary  = if ($writeErrors.Count -gt 0) { $writeErrors -join ' | ' } else { $null }
+        if ($writeErrors.Count -gt 0) {
+            $effectiveExit = 13
+        }
+        $effectiveErr = Join-ErrorMessages @([string]$baseErr, [string]$writeSummary)
+        return [pscustomobject]@{
+            ExitCode    = $effectiveExit
+            SessionId   = $sessionVal
+            Verdict     = if ($effectiveExit -eq 0) { $verdictVal } else { $null }
+            Response    = $responseVal
+            Usage       = $usageVal
+            CostUsd     = $costVal
+            DurationSec = $durationVal
+            Error       = $effectiveErr
+            SentPath    = (Get-ExistingFilePath $sentPath)
+            OutPath     = (Get-ExistingFilePath $outPath)
+            ErrPath     = (Get-ExistingFilePath $errPath)
+            RawPath     = (Get-ExistingFilePath $rawPath)
+        }
+    }
+
+    if (-not (Try-WriteUtf8File $sentPath $promptText $writeErrors 'sent.md')) {
+        $sentErrText = $writeErrors -join ' | '
+        $null = Try-WriteUtf8File $errPath $sentErrText $writeErrors 'stderr.log'
+        return (& $makeTurnResult 13 $null $null '' $null $null 0 $null)
+    }
 
     $cmd = Get-Command claude -ErrorAction SilentlyContinue
     if (-not $cmd) {
-        return [pscustomobject]@{
-            ExitCode    = 13
-            SessionId   = $null
-            Verdict     = $null
-            Response    = ''
-            Usage       = $null
-            CostUsd     = $null
-            DurationSec = 0
-            Error       = 'claude 실행 파일을 PATH 에서 찾지 못했다.'
-            SentPath    = $sentPath
-            OutPath     = $outPath
-            ErrPath     = $errPath
-            RawPath     = $rawPath
-        }
+        $notFoundErr = 'claude 실행 파일을 PATH 에서 찾지 못했다.'
+        $null = Try-WriteUtf8File $errPath $notFoundErr $writeErrors 'stderr.log'
+        return (& $makeTurnResult 13 $null $null '' $null $null 0 $notFoundErr)
     }
 
     $argsList = New-Object System.Collections.Generic.List[string]
@@ -615,28 +666,15 @@ function Invoke-ClaudeReadOnly(
 
     if ($execExit -eq 13) {
         $errLogBody = if ([string]::IsNullOrWhiteSpace($stderr)) { $execError } else { $execError + "`n" + $stderr }
-        Write-Utf8File $errPath $errLogBody
+        $null = Try-WriteUtf8File $errPath $errLogBody $writeErrors 'stderr.log'
         if (-not [string]::IsNullOrEmpty($stdout)) {
-            Write-Utf8File $rawPath $stdout
+            $null = Try-WriteUtf8File $rawPath $stdout $writeErrors 'raw.json'
         }
-        return [pscustomobject]@{
-            ExitCode    = 13
-            SessionId   = $null
-            Verdict     = $null
-            Response    = ''
-            Usage       = $null
-            CostUsd     = $null
-            DurationSec = [Math]::Round($sw.Elapsed.TotalSeconds, 2)
-            Error       = $execError
-            SentPath    = $sentPath
-            OutPath     = $outPath
-            ErrPath     = $errPath
-            RawPath     = $rawPath
-        }
+        return (& $makeTurnResult 13 $null $null '' $null $null ([Math]::Round($sw.Elapsed.TotalSeconds, 2)) $execError)
     }
 
-    Write-Utf8File $errPath $stderr
-    Write-Utf8File $rawPath $stdout
+    $errWritten = Try-WriteUtf8File $errPath $stderr $writeErrors 'stderr.log'
+    $null       = Try-WriteUtf8File $rawPath $stdout $writeErrors 'raw.json'
 
     $parsed = $null
     $parseErrors = New-Object System.Collections.Generic.List[string]
@@ -662,24 +700,13 @@ function Invoke-ClaudeReadOnly(
 
     if ($null -eq $parsed) {
         $parseNote = if ($parseErrors.Count -gt 0) { ' | ' + ($parseErrors -join '; ') } else { '' }
-        if ($parseErrors.Count -gt 0) {
-            Write-Utf8File $errPath ($stderr + "`n[agent-relay JSON parse]$parseNote")
+        if ($parseErrors.Count -gt 0 -and $errWritten) {
+            $null = Try-WriteUtf8File $errPath ($stderr + "`n[agent-relay JSON parse]$parseNote") $writeErrors 'stderr.log'
         }
-        Write-Utf8File $outPath $stdout
-        return [pscustomobject]@{
-            ExitCode    = if ($code -ne 0) { 13 } else { 12 }
-            SessionId   = $null
-            Verdict     = $null
-            Response    = $stdout
-            Usage       = $null
-            CostUsd     = $null
-            DurationSec = [Math]::Round($sw.Elapsed.TotalSeconds, 2)
-            Error       = if ($code -ne 0) { "claude 종료 코드 $code (stderr 참고: $errPath)$parseNote" } else { "claude JSON 출력을 해석하지 못했다 (원문: $rawPath)$parseNote" }
-            SentPath    = $sentPath
-            OutPath     = $outPath
-            ErrPath     = $errPath
-            RawPath     = $rawPath
-        }
+        $null = Try-WriteUtf8File $outPath $stdout $writeErrors 'out.md'
+        $parseExit = if ($code -ne 0) { 13 } else { 12 }
+        $parseErr  = if ($code -ne 0) { "claude 종료 코드 $code (stderr 참고: $errPath)$parseNote" } else { "claude JSON 출력을 해석하지 못했다 (원문: $rawPath)$parseNote" }
+        return (& $makeTurnResult $parseExit $null $null $stdout $null $null ([Math]::Round($sw.Elapsed.TotalSeconds, 2)) $parseErr)
     }
 
     # 필수 JSON 필드 검증 (session_id, result, is_error)
@@ -688,21 +715,19 @@ function Invoke-ClaudeReadOnly(
     if ($null -eq $parsed.PSObject.Properties['result']     -or $null -eq $parsed.result) { $missingFields.Add('result') }
     if ($null -eq $parsed.PSObject.Properties['is_error']   -or ($parsed.is_error -isnot [bool])) { $missingFields.Add('is_error') }
     if ($missingFields.Count -gt 0) {
-        Write-Utf8File $outPath $stdout
-        return [pscustomobject]@{
-            ExitCode    = 12
-            SessionId   = $null
-            Verdict     = $null
-            Response    = $stdout
-            Usage       = $null
-            CostUsd     = $null
-            DurationSec = [Math]::Round($sw.Elapsed.TotalSeconds, 2)
-            Error       = "claude JSON 필수 필드 누락: $($missingFields -join ', ') (원문: $rawPath)"
-            SentPath    = $sentPath
-            OutPath     = $outPath
-            ErrPath     = $errPath
-            RawPath     = $rawPath
+        $null = Try-WriteUtf8File $outPath $stdout $writeErrors 'out.md'
+        $parsedIsError = ($null -ne $parsed.PSObject.Properties['is_error'] -and ($parsed.is_error -is [bool]) -and [bool]$parsed.is_error)
+        $missingExit = if ($code -ne 0 -or $parsedIsError) { 13 } else { 12 }
+        $missingErr  = if ($code -ne 0) {
+            "claude 종료 코드 $code 및 JSON 필수 필드 누락: $($missingFields -join ', ') (원문: $rawPath, stderr 참고: $errPath)"
         }
+        elseif ($parsedIsError) {
+            "claude 오류 응답(is_error=true) 및 JSON 필수 필드 누락: $($missingFields -join ', ') (원문: $rawPath)"
+        }
+        else {
+            "claude JSON 필수 필드 누락: $($missingFields -join ', ') (원문: $rawPath)"
+        }
+        return (& $makeTurnResult $missingExit $null $null $stdout $null $null ([Math]::Round($sw.Elapsed.TotalSeconds, 2)) $missingErr)
     }
 
     $sessionId = [string]$parsed.session_id
@@ -710,35 +735,30 @@ function Invoke-ClaudeReadOnly(
     $usage     = $parsed.usage
     $costUsd   = $parsed.total_cost_usd
     $isError   = [bool]$parsed.is_error
-    $verdict   = Parse-Verdict $response
+    $verdict   = if ($turnRole -eq 'review') { Parse-Verdict $response } else { $null }
 
-    Write-Utf8File $outPath $response
+    $null = Try-WriteUtf8File $outPath $response $writeErrors 'out.md'
 
     $finalCode = 0
     $errMsg    = $null
     if ($code -ne 0 -or $isError) {
         $finalCode = 13
-        $errMsg    = if ($isError) { "claude 오류 응답: $response" } else { "claude 종료 코드 $code (stderr 참고: $errPath)" }
+        $errMsg    = if ($isError -and $code -ne 0) {
+            "claude 오류 응답(exit $code): $response"
+        }
+        elseif ($isError) {
+            "claude 오류 응답: $response"
+        }
+        else {
+            "claude 종료 코드 $code (stderr 참고: $errPath)"
+        }
     }
     elseif ($turnRole -eq 'review' -and [string]::IsNullOrWhiteSpace($verdict)) {
         $finalCode = 12
         $errMsg    = "review 응답의 마지막 줄에 'RELAY-VERDICT: PASS|NEEDS_FIX' 가 없다 ($outPath)."
     }
 
-    return [pscustomobject]@{
-        ExitCode    = $finalCode
-        SessionId   = $sessionId
-        Verdict     = if ($finalCode -eq 0) { $verdict } else { $null }
-        Response    = $response
-        Usage       = $usage
-        CostUsd     = $costUsd
-        DurationSec = [Math]::Round($sw.Elapsed.TotalSeconds, 2)
-        Error       = $errMsg
-        SentPath    = $sentPath
-        OutPath     = $outPath
-        ErrPath     = $errPath
-        RawPath     = $rawPath
-    }
+    return (& $makeTurnResult $finalCode $sessionId $verdict $response $usage $costUsd ([Math]::Round($sw.Elapsed.TotalSeconds, 2)) $errMsg)
 }
 
 # --- 1. 인자 및 안전 가드 검사 ---
@@ -859,12 +879,31 @@ try {
     }
     catch {
         $finalExit  = 13
-        $finalError = "실행 중 예외: $($_.Exception.Message)"
+        $catchMsg   = "실행 중 예외: $($_.Exception.Message)"
+        $finalError = if ([string]::IsNullOrWhiteSpace($finalError)) { $catchMsg } else { "$finalError | $catchMsg" }
     }
 
+    $artifactWriteError = $null
+    $resultWritten      = $false
     if (-not $runDirCreated) {
-        New-RunDirStrict $relayRoot $runDir
-        $runDirCreated = $true
+        try {
+            if (-not (Test-Path -LiteralPath $relayRoot)) {
+                New-Item -ItemType Directory -Path $relayRoot -ErrorAction Stop | Out-Null
+            }
+            if (Test-Path -LiteralPath $runDir) {
+                throw "이미 같은 RunId 의 산출물 폴더가 있다: $runDir"
+            }
+            New-Item -ItemType Directory -Path $runDir -ErrorAction Stop | Out-Null
+            $runDirCreated = $true
+        }
+        catch {
+            $artifactWriteError = "산출물 폴더 생성 실패: $($_.Exception.Message)"
+        }
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($artifactWriteError)) {
+        $finalExit  = 13
+        $finalError = if ([string]::IsNullOrWhiteSpace($finalError)) { $artifactWriteError } else { "$finalError | $artifactWriteError" }
     }
 
     $finalVerdict = if ($finalExit -eq 0 -and $turn) { $turn.Verdict } else { $null }
@@ -889,23 +928,44 @@ try {
         usage           = if ($turn) { $turn.Usage } else { $null }
         error           = $finalError
         files           = [ordered]@{
-            dir    = $runDir
-            sent   = if ($turn) { $turn.SentPath } else { $null }
-            out    = if ($turn) { $turn.OutPath } else { $null }
-            stderr = if ($turn) { $turn.ErrPath } else { $null }
-            raw    = if ($turn) { $turn.RawPath } else { $null }
-            diff   = if ($diffInfo) { $diffInfo.DiffPath } else { $null }
+            dir    = if ($runDirCreated) { $runDir } else { $null }
+            sent   = if ($turn) { Get-ExistingFilePath $turn.SentPath } else { $null }
+            out    = if ($turn) { Get-ExistingFilePath $turn.OutPath } else { $null }
+            stderr = if ($turn) { Get-ExistingFilePath $turn.ErrPath } else { $null }
+            raw    = if ($turn) { Get-ExistingFilePath $turn.RawPath } else { $null }
+            diff   = if ($diffInfo) { Get-ExistingFilePath $diffInfo.DiffPath } else { $null }
             result = $resultJsonPath
         }
     }
-    Write-Utf8File $resultJsonPath ($summary | ConvertTo-Json -Depth 10)
+
+    if ($runDirCreated -and [string]::IsNullOrWhiteSpace($artifactWriteError)) {
+        try {
+            Write-Utf8File $resultJsonPath ($summary | ConvertTo-Json -Depth 10)
+            $resultWritten = $true
+        }
+        catch {
+            $writeErr   = "result.json 쓰기 실패: $($_.Exception.Message)"
+            $finalExit  = 13
+            $finalError = if ([string]::IsNullOrWhiteSpace($finalError)) { $writeErr } else { "$finalError | $writeErr" }
+        }
+    }
+
+    $summaryVerdict = if ($finalExit -eq 0 -and $turn) { $turn.Verdict } else { $null }
 
     if ($finalExit -eq 13 -and -not [string]::IsNullOrWhiteSpace($finalError)) {
         [Console]::Error.WriteLine("agent-relay 오류(exit 13): $finalError")
     }
+    elseif ($finalExit -eq 12 -and -not [string]::IsNullOrWhiteSpace($finalError)) {
+        [Console]::Error.WriteLine("agent-relay 계약 위반(exit 12): $finalError")
+    }
 
-    Write-Output "agent-relay 완료: target=$Target role=$Role exit=$finalExit verdict=$($summary.verdict) session=$($summary.sessionId) duration=$($summary.durationSec)s"
-    Write-Output "결과 파일: $resultJsonPath"
+    Write-Output "agent-relay 완료: target=$Target role=$Role exit=$finalExit verdict=$summaryVerdict session=$($summary.sessionId) duration=$($summary.durationSec)s"
+    if ($resultWritten) {
+        Write-Output "결과 파일: $resultJsonPath"
+    }
+    else {
+        Write-Output "결과 파일: (기록 실패)"
+    }
     if ($finalError) { Write-Output "오류: $finalError" }
     exit $finalExit
 }
