@@ -10,6 +10,34 @@
 
 ---
 
+## 2026-11-28 · `tools/agent-relay.ps1` 실패 경로 종료 코드·산출물·stderr 계약 통일 (`fix/agent-relay-failure-contract`)
+
+- **결정 (사용자 2026-11-28 "ㄱㄱ")**: 비-Unity sparse worktree(`../ProtoHarness-wt/agent-relay-failure-contract`, `docs/RULES/BRANCHING.md` §9-4)에서 `tools/agent-relay.ps1` 의 실패 경로 계약을 통일했다 (`docs/DECISIONS.md` 2026-11-25 "Claude 비대화형 교차 검토 중계 스크립트" 후속).
+  - **`files.*` 실존 불변식 및 `Invoke-ClaudeReadOnly` 쓰기 방어**: `Get-ExistingFilePath`·`Join-ErrorMessages`·`Try-WriteUtf8File`(`:69-91`)과 `$makeTurnResult`(`:492-523`)를 추가해 `result.json` 의 `files.sent`·`out`·`stderr`·`raw`·`diff` 에 실제로 생성된 파일 경로만 기록하고 미생성 파일은 `null` 로 둔다. `sent.md` 쓰기 실패 시 `claude` 를 부르지 않고 즉시 `exit 13` 반환(`:525-529`), `claude` 미설치(`:531-536`)·실행 실패(`$execExit -eq 13`, `:667-674`)·파싱/응답 저장(`:676-761`)에서도 `stderr.log`·`raw.json`·`out.md` 쓰기 예외가 밖으로 빠져 원래 오류·실존 파일 목록·파싱된 `sessionId` 를 잃지 않도록 잡아서 `exit 13` 으로 승격·병합한다.
+  - **종료 코드 우선순위 (`13 > 12 > 0`)**: JSON 필수 필드 누락 분기(`:717-731`)에서 CLI 비정상 종료(`$code -ne 0`) 또는 `is_error=true` 이면 `exit 12` 대신 `exit 13` 을 반환한다. `-Role ask` 에서는 `Parse-Verdict` 를 호출하지 않아(`:738`) 응답 본문 끝의 `RELAY-VERDICT:` 와 무관하게 `verdict` 를 `null` 로 고정한다.
+  - **오류 보존 및 산출물 쓰기 실패 방어**: `claude` 호출 뒤 git 상태 재확인에서 예외가 나면 `catch` 가 기존 `$turn.Error` 를 덮어쓰지 않고 `|` 로 이어 붙인다(`:880-884`). 실패 경로에서 산출물 폴더 생성이나 `result.json` 쓰기가 실패해도 `Exit-Guard`(exit 2)로 덮어쓰지 않고 원래 오류와 쓰기 오류를 합쳐 stderr 로 남긴 뒤 `exit 13` 으로 종료한다(`:886-951`).
+  - **stderr 보고 통일**: `exit 2`·`exit 13` 뿐 아니라 `exit 12`(계약 위반)도 콘솔 stderr 에 사유를 출력한다(`:955-960`).
+- **이유**: 기존 코드에서는 `claude` 미설치·타임아웃 시 생성되지 않은 `out.md`·`raw.json` 경로가 `result.json` 에 남았고, CLI 비정상 종료(`$code -ne 0`)에 불완전한 오류 JSON 이 섞이면 `exit 12` 로 오분류됐으며, 산출물 쓰기 실패나 후속 git 예외 때 원래 오류·`sessionId`·실존 파일 목록이 유실되거나 `exit 12` 가 stderr 를 남기지 않는 불일치가 있었다.
+- **버린 대안**: `docs/RULES/SUBAGENTS.md` 동시 수정(하네스 보호 파일이라 이번 범위 밖 — 후속 제안으로 남김) · 가드 거부(`exit 2`)에도 `result.json` 생성(기존 `RunId` 보호·미생성 계약과 충돌).
+- **1차 Claude 교차 검토 (`relay-fc-review-261128`, `-IncludeWorktree -Effort high`, `exit=0`, `verdict=NEEDS_FIX`, `124.21s`, `$0.7892`)**:
+  - 중대 1건(`Invoke-ClaudeReadOnly` 내부 `Write-Utf8File` 예외 시 원래 오류·`files.*`·`sessionId` 유실) → `Try-WriteUtf8File`·`$makeTurnResult` 로 수정하고 T22~T24 검증 추가.
+  - 보통 1건(`docs/HANDOFF.md` 에 DECISIONS 의 미확인 항목 미반영, `CLAUDE.md` §9-2 ⓑ) → `docs/HANDOFF.md` 2절 7번에 반영.
+  - 제안 1건(`docs/RULES/SUBAGENTS.md:163` 계약 한 줄 보강) → 보호 파일이라 이번 범위에서 제외하고 `HANDOFF.md` 에 남김.
+- **2차 Claude 교차 검토 (`relay-fc-review2-261128`, `-IncludeWorktree -Effort high`, `exit=0`, `verdict=NEEDS_FIX`, `132.83s`, `$0.7811`)**:
+  - **코드 결함 0건**, 1차 지적 3건 모두 해소 확인.
+  - 보통 1건(`sent.md` 쓰기 실패 조기 종료 분기 `:525-529` 가 검증 24건에 빠짐, `CLAUDE.md` §4-1) → `tools/agent-relay.ps1` 변경 없이 T25(`sent.md` 쓰기 불가 시 `claude` 미호출·`exit 13`·`files.sent=null`·`files.stderr/diff` 실존)를 추가 실행해 통과.
+  - 제안 2건 중 `docs/HANDOFF.md:58` 에 `SUBAGENTS.md:163` 어긋남 구체 명시는 반영, 오류 메시지 안 경로 문자열 표시 제안은 `files.*` 가 `null` 이고 쓰기 실패 문구가 함께 붙어 계약 위반이 아니므로 그대로 둔다.
+- **검증 (문서·도구 검증, `CLAUDE.md` §9-2)**:
+  - 정적 검사: UTF-8 BOM(`EF BB BF`), BareLF `0`(CRLF 유지), PowerShell 5.1 `Parser::ParseFile` `ParseErrors=0`, 빈 `catch` `0`.
+  - 임시 git 저장소 + 가짜 `claude.cmd` 실행 25건 전부 통과(동일 코드에서 T01~T24 `passed=24 failed=0` + T25 `passed=1 failed=0`, API 호출 0):
+    - `exit 0` 3건: `review PASS`, `review NEEDS_FIX`, `ask`(본문 끝 `RELAY-VERDICT: PASS` 포함 시 `verdict=null`).
+    - `exit 2` 3건: `-Target agy`, 기존 `RunId` 폴더 무변경, `review` 대상 미커밋 충돌 (`runDir` 미생성·CLI 미호출·stderr).
+    - `exit 12` 5건: 판정 줄 누락, 깨진 JSON(`code=0`), 필수 필드 누락(`code=0`), 실행 중 `HEAD` 변경, 실행 중 브랜치 변경 (`verdict=null`, `files.*` 실존 일치, stderr `exit 12`).
+    - `exit 13` 14건: `claude` 미설치(`files.out/raw=null`, `files.sent/stderr` 실존), `code=3` 깨진 JSON, `code=1` 필수 필드 누락 JSON, `code=0` `is_error=true` 필수 필드 누락 JSON, `code=0` `is_error=true` 정상 필드, 없는 `-Base`, `NO_VERDICT` 뒤 `.git/HEAD` 손상 시 두 오류 모두 보존, `result.json` 쓰기 불가(`exit=13`, `verdict=` 빈 값, `결과 파일: (기록 실패)`), `runDir` 생성 불가 시 원래 git 오류 + 폴더 생성 실패 모두 stderr 출력, 30초 타임아웃(`files.out/raw=null`, `files.stderr` 실존), `code=3` 중 `stderr.log` 쓰기 불가 시 원래 오류·`sent/raw/out` 보존, 정상 `PASS` 중 `out.md` 쓰기 불가 시 `exit=13`·`verdict=null`·`sessionId` 보존, 30초 타임아웃 중 `stderr.log` 쓰기 불가 시 타임아웃·쓰기 오류 모두 보존, `sent.md` 쓰기 불가 시 `claude` 미호출·`exit=13`·`files.sent=null`·`files.stderr/diff` 실존(T25).
+  - 실제 `claude` CLI 호출: 1차·2차 교차 검토(`relay-fc-review-261128`, `relay-fc-review2-261128`, 모두 `exit=0`)로 정상 `review` 경로 실동작 확인.
+  - sparse worktree 금지 폴더(`Assets`·`Packages`·`ProjectSettings`·`art-src`) 부재 및 허용 범위 밖 변경 0건 확인.
+- **확인 못 한 것 / 남은 것**: 실제 `claude` CLI 에서의 실패 경로 재확인(이번 실패 경로 25건은 가짜 `claude.cmd` 기반), `docs/RULES/SUBAGENTS.md:163` 계약 보강 여부(보호 파일 별도 합의 — "JSON 필수 필드가 빠지면 exit 12" 문구를 `code≠0`·`is_error=true` 우선 `exit 13`·`files.*` 실존 불변식·`ask` `verdict=null` 에 맞출지).
+
 ## 2026-11-28 · 비-Unity sparse worktree: Unity 가 읽지 않는 작업만 `--no-checkout` + cone 5폴더 트리에서, 훅이 우회 명령과 다른 트리의 보호 파일을 막는다 (`docs/sparse-worktree-and-reviewer`)
 
 - **결정 (사용자 2026-11-28 "ㅇㅋ 진행해보자")**: 요청서 `docs/PROPOSAL_SPARSE_WORKTREE_AND_REVIEWER.md` v4 의 Q1~Q3 모두 (a). 규칙은 CLAUDE.md §0 Git·실행, §7 병렬 절대 금지 1번, §9-2 와 `docs/RULES/BRANCHING.md` §9-4(신설), `docs/RULES/SUBAGENTS.md` §7-6.
