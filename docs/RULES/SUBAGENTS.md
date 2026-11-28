@@ -11,7 +11,7 @@
 |---|---|---|---|---|
 | `unity-explorer` | 탐색 | ❌ | `claude-opus-5-5` | high |
 | `unity-architect` | 구조 분석 | `docs/` 만 | `claude-opus-5-5` | high |
-| `unity-reviewer` | 리뷰 (§0/§1/§5 체크리스트) | ❌ | `claude-opus-5-5` | high |
+| `unity-reviewer` | 리뷰 (§0/§1/§5/§4-4 체크리스트) | ❌ | `claude-opus-5-5` | high |
 | `unity-implementer` | 생성 | `Assets/` | `claude-opus-5-5` | high |
 | `unity-verifier` | 검증 (Unity MCP) | ❌ | `claude-opus-5-5` | high |
 | `blender-artist` | 모델링 (Blender MCP) | `art-src/` 만 | `claude-opus-5-5` | high |
@@ -22,7 +22,7 @@
 - `gameplay-designer` 를 쓰는 때: 플레이 피드백이 들어왔거나 구현 전에 선택지가 갈릴 때. 파견 여부는 §7-3(사용자가 지시할 때)을 따른다. 파견문에는 `git rev-parse HEAD` 값을 적는다 — 이 에이전트는 Bash 가 없어 인덱스 신선도를 스스로 확인하지 못한다. 역할 경계와 응답 형식은 정의(`.claude/agents/gameplay-designer.md`)가 원본이다 (`docs/DECISIONS.md` 2026-11-09 "기획 에이전트").
 
 - 읽기 전용 에이전트(`unity-explorer`·`unity-reviewer`·`gameplay-designer`)는 Bash 가 없다. git 값은 메인이 파견문에 넣는다 (`docs/DECISIONS.md` 2026-11-15 "읽기 전용 에이전트의 Bash").
-  - `unity-reviewer`: 메인이 `git diff <base>...HEAD` 를 scratchpad 파일로 저장하고, 파견문에 그 **파일 경로와 base·HEAD 해시**, 작업 트리가 HEAD 와 같은지를 적는다. 없으면 리뷰어는 리뷰하지 않고 되묻는다. 병합 전 리뷰(§7-5 "리뷰 규모")는 그 브랜치를 체크아웃하고 `Assets/` 에 커밋 안 한 변경이 없는 상태에서 파견한다 — 작업 트리가 HEAD 와 다르면 리뷰어가 `리뷰 미완료` 로 답하고, 그 결과는 병합 리뷰로 세지 않는다.
+  - `unity-reviewer`: 메인이 `git diff <base>...HEAD` 를 scratchpad 파일로 저장하고, 파견문에 그 **파일 경로와 base·HEAD 해시**, 작업 트리가 HEAD 와 같은지, **전체 `git diff --name-status <base>...HEAD` 출력**(그리고 `tools/select-tests.ps1` 변경이나 새 PlayMode 테스트가 있으면 `tools/select-tests.ps1 -Range <base>...HEAD` 실행 출력)을 적는다. 없으면 리뷰어는 리뷰하지 않고 되묻는다. 병합 전 리뷰(§7-5 "리뷰 규모")는 그 브랜치를 체크아웃하고 `Assets/` 에 커밋 안 한 변경이 없는 상태에서 파견한다 — 작업 트리가 HEAD 와 다르면 리뷰어가 `리뷰 미완료` 로 답하고, 그 결과는 병합 리뷰로 세지 않는다.
   - `unity-explorer`: 인덱스(`index/symbols.tsv`)를 쓰게 할 때만 `git rev-parse HEAD` 값을 적는다. 없으면 코드 `Grep` 으로 찾는다.
 
 - 모델·노력은 `.claude/agents/<이름>.md` frontmatter 의 `model`·`effort` 가 원본이고 이 표는 그 요약이다. 별칭(`opus`) 대신 전체 ID 로 고정해 별칭이 가리키는 모델이 바뀌어도 따라가지 않는다 (`docs/DECISIONS.md` 2026-10-10 "서브에이전트 모델·노력 고정").
@@ -51,7 +51,7 @@
 | 용도 | 명령 (`<cc>` = 플러그인의 `scripts/codex-companion.mjs`) | 언제 | 에이전트가 스스로 부르나 |
 |---|---|---|---|
 | 계획 반박 | `node <cc> adversarial-review --wait <초점>` | §3-2 합의 요청서를 `docs/` 파일로 둔 뒤, 승인 **전에**. 반박과 그에 대한 답을 요청서에 붙여 승인을 받는다 | 사용자가 지시할 때만 |
-| 설계·정합성 리뷰 | `node <cc> adversarial-review --wait --base dev <초점>` | `feature → dev` 병합 전. §0/§1/§5 체크리스트는 아래 "리뷰 규모" 대로 맡는다 | **브랜치당 1회는 지시 없이 부른다.** 다시 부르는 것은 지시가 있을 때만 |
+| 설계·정합성 리뷰 | `node <cc> adversarial-review --wait --base dev <초점>` | `feature → dev` 병합 전. §0/§1/§5/§4-4 체크리스트는 아래 "리뷰 규모" 대로 맡는다 | **`구현:` 에 `codex` 가 없는 브랜치는 1회 지시 없이 부른다**(시각 작업을 사용자가 `antigravity` 검수 하나로 독립 검토하게 정했으면 생략해도 된다). 다시 부르는 것은 지시가 있을 때만 |
 | 넓은 탐색 | `node <cc> task --wait "<읽기 전용 …>"` | §7-3 "파견한다" 에 해당할 때(독립 영역 3개 이상 등). 1–2 파일은 직접 읽는다 — Codex 는 호출 한 번의 고정비가 크다(2026-10-26 T1: 파일 2개에 입력 407k) | 사용자가 지시할 때만 (§7-3) |
 | 막혔을 때 진단 | `node <cc> task --wait "<읽기 전용 …>"` | §4-5 에서 3번 실패한 뒤, 보고하는 다음 후보 중 하나로 | 사용자가 지시할 때만 |
 
@@ -60,13 +60,26 @@
 - 사용자는 같은 일을 슬래시 명령(`/codex:adversarial-review`·`/codex:review`·`/codex:rescue`)으로 직접 할 수 있다.
 - Codex 결과도 §7-4 와 같이 다룬다. `경로:줄` 근거가 없는 주장은 되묻는다.
 - **Codex 가 실패하면 시끄럽게** (§5): 호출이 0 이 아닌 코드로 끝나거나, 오류를 내거나(사용량 소진 포함), 결과가 비면 그 원문을 보고에 `Codex 리뷰 못 함: <원문>` 으로 적는다. 리뷰 없이 병합할지는 사용자에게 묻는다. 조용히 건너뛰거나 Claude 리뷰만으로 대신했다고 쓰지 않는다.
-- **리뷰 규모**: §0/§1/§5 체크리스트를 누가 맡을지는 `dev...HEAD` 의 `Assets/` 변경(`.meta` 제외)으로 정한다 (`docs/DECISIONS.md` 2026-10-26 "리뷰 규모").
-  - **작은 변경** — `git diff --name-status` 가 `M` 뿐이고(새 파일·삭제·이동 없음), 공개 시그니처가 바뀌지 않았고, `git diff --numstat` 의 추가+삭제 합이 30줄 이하: `unity-reviewer` 를 파견하지 않는다. 메인이 `.claude/agents/unity-reviewer.md` 체크리스트를 바뀐 줄에 대조하고 병합 보고에 항목별 결과(`위반 없음` 또는 `경로:줄`)를 적는다. Codex 설계 리뷰 1회는 그대로 한다.
-  - **그 밖** — `unity-reviewer` 파견 + Codex 설계 리뷰.
-- **시험 중 (리뷰 분담 비교)**: `Assets/` 를 바꾼 병합 보고에 두 리뷰의 지적(실제 결함 / 규칙 위반 / 오탐)과 비용을 나란히 적는다. 비용은 `unity-reviewer` 의 `subagent_tokens`(작은 변경이면 "메인 대조, 별도 수치 없음")와 Codex 리뷰 전후 `/status` 의 5시간 `used_percent`(사용자가 읽어 준다. 움직이지 않으면 "변화 없음")다. 비교는 "그 밖" 브랜치만 센다. 두 브랜치를 비교한 뒤 분담을 다시 정하고 이 줄을 지운다.
+- **리뷰 규모**: §0/§1/§5/§4-4 체크리스트(`.claude/agents/unity-reviewer.md`)를 누가 맡을지는 `dev...HEAD` 를 아래 표에 위에서부터 대어 **처음 맞는 행 하나**로 정한다 (`docs/DECISIONS.md` 2026-10-26 "리뷰 규모", 2026-11-28 "`unity-reviewer` 위험 우선 4단"). 누가 독립 검토자(`검토:`)인지는 이 표가 아니라 §7-6 교차 검토 표가 정한다.
+  - 줄 수를 세는 대상 `CODE`: `git diff --name-status dev...HEAD -- ':(glob)Assets/**/*.cs' ':(glob)Assets/**/*.asmdef' ':(glob)Assets/**/*.asmref' ':(glob)Assets/**/*.shader' ':(glob)Assets/**/*.hlsl' ':(glob)Assets/**/*.compute' 'tools/select-tests.ps1'`. 줄 수는 그 행이 말하는 파일군 전체의 `git diff --numstat` 추가+삭제 **합계**다(파일마다 따로 세지 않는다).
+  - 표의 경로: `Runtime/Net/**`·`Runtime/ChainRush/Control/**`·`Editor/ChainRush/**`·`Tests/PlayMode/TestLogs.cs` 는 `Assets/_Project/Scripts/` 기준, 그 밖의 이름(`Ticks.cs`·`Motion/**`·`Flow/**`·`ChainRushHud.cs` 등)은 `Assets/_Project/Scripts/Runtime/ChainRush/` 기준이다.
+  - 비-코드 에셋(`.prefab`·`.unity`·`.asset`·`.mat`·`.fbx`·`.png`·`.meta`)과 `Packages/`·`ProjectSettings/` 는 줄 수에 넣지 않는다. 메인이 전체 `git diff --name-status dev...HEAD` 로 §0 금지 파일·`.meta` 짝·`Assets/TutorialInfo/` 접촉을 늘 본다.
+  - `Assets/`·`Packages/`·`ProjectSettings/` 에 닿지 않는 브랜치(`tools/select-tests.ps1` 만 바꾼 것 포함)는 이 표의 대상이 아니다. CLAUDE.md §9-2 문서 검증(도구는 실제 실행 결과)과 §7-6 독립 검토만 한다.
+
+  | 행 | 조건 (`dev...HEAD`) | 체크리스트를 맡는 쪽 |
+  |---|---|---|
+  | **Tier 1** 고위험 | 하나라도: ① `.asmdef`·`.asmref` 변경, 또는 `Assets/_Project/Scripts/` 밖의 `.cs` ② 틱·직렬화·프로토콜·입력 핵심(`Ticks.cs`, `SimSnapshot.cs`, `RacerState.cs`, `RunRules.cs`, `RunnerProfile.cs`, `Runtime/Net/**`, `Runtime/ChainRush/Control/**`) 변경 — 줄 수 무관 ③ 코어 시뮬·레이스·봇·트랙(`Motion/**`, `Bots/**`, `Track/**`, `Race/**` 중 `TrackLook.cs`·`CircuitScenery.cs` 제외, 루트 `RunnerMotor.cs`·`GrappleController.cs`·`ChainRushGame.cs`) 합산 **> 30줄**, 또는 새 파일·삭제·이동·공개 시그니처 변경 ④ 에디터 빌더(`Editor/ChainRush/**`) 새 `.cs` 또는 합산 **> 100줄** ⑤ 테스트 무결성: `Tests/PlayMode/TestLogs.cs`, `tools/select-tests.ps1`, 또는 기존 테스트의 단언·기대값 수정·삭제(새 테스트 메서드를 더하기만 한 것은 아니다) | `unity-reviewer` 파견 1회 — **사용자 지시 없이 부른다**(CLAUDE.md §7-3 의 예외). Codex·Antigravity 가 메인인 세션은 아래 relay |
+  | **Tier 2** 중위험 큰 변경 | Tier 1 밖이고 `Flow/**`·`Audio/**`·`Tutorial/**`·`Visuals/**`·`ChainRushHud.cs`·`FollowCamera.cs`·`CourseTarget.cs`·`Race/TrackLook.cs`·`Race/CircuitScenery.cs`·셰이더(`.shader`·`.hlsl`·`.compute`)에서 새 `MonoBehaviour` 또는 합산 **> 100줄** | Tier 1 과 같다 |
+  | **Tier 3** 타 계열 비소규모 | Tier 1·2 밖이고 `구현:` 에 `codex`·`antigravity` 가 있으며 `CODE` 가 "작은 변경"(`M` 뿐, 공개 시그니처 불변, 합 ≤ 30줄)을 넘는다 | 파견 또는 relay 1회 — Tier 1 과 같이 지시 없이 부른다 (`claude` 가 섞인 혼합 구현이면 §7-6 독립성을 따로 맞춘다) |
+  | **Tier 4** 그 밖 | 위 어디에도 안 맞는 `Assets/`·`Packages/`·`ProjectSettings/` 변경(작은 변경, `Flow/`·`Visuals/`·`Editor/` 31~100줄 일반 수정, 새 테스트 추가만, 비-코드 에셋·`Packages/`·`ProjectSettings/` 만) | 체크리스트 **대조**: Claude 세션이면 메인이 바뀐 줄에 대조하고 병합 보고에 항목별 결과(`위반 없음` 또는 `경로:줄`)를 적는다. Codex·Antigravity 가 메인인 세션은 실제 Claude 가 대조한다(relay 또는 Claude 세션) |
+
+  - 사용자가 `unity-reviewer` 파견을 지시하면 행과 무관하게 파견한다.
+  - Codex 리뷰가 실패한 Claude 구현의 Tier 4 큰 변경에 `unity-reviewer` 를 보조로 돌릴 수 있지만, 같은 계열이라 `검토:` 로 세지 않는다(위 "Codex 가 실패하면 시끄럽게" 를 따른다).
+  - `guard.ps1` 은 코드 수준 §0(빈 `catch`, `public` 필드, `Update` 할당, 단언 약화)을 막지 못한다. Tier 4 는 대조와 §7-6 독립 검토에만 기댄다.
+  - **relay 로 Claude 체크리스트를 받을 때**(Codex·Antigravity 가 메인인 세션): `tools/agent-relay.ps1 -Target claude -Role review -Base dev -RunId <고유ID> -PromptFile <지시서>`. 지시서에 ① `.claude/agents/unity-reviewer.md` 체크리스트를 수행하라는 지시(relay 는 에이전트 정의를 자동으로 읽지 않는다) ② 커밋만 볼 때(`-IncludeWorktree` 없음)는 같은 base·HEAD 의 `git diff --name-status <base>...<HEAD>` 와 해당하면 `tools/select-tests.ps1 -Range <base>...<HEAD>` 출력(`-Range` 없이 돌리면 미커밋을 섞는다) ③ `-IncludeWorktree` 일 때는 `git diff --name-status <base>` + `git status --porcelain=v1 -uall` 과 해당하면 `tools/select-tests.ps1` 출력을 넣는다. 판정·종료 코드는 §7-6 "자동 중계" 를 따른다.
 
 **지키는 것**
-- **Codex 호출은 서브에이전트 파견이다.** §7-3(사용자가 지시할 때만 — 위 표의 병합 전 리뷰 1회만 예외)과 §3-4(`승인:`·`브랜치:` 줄을 요청 첫머리에)를 그대로 적용한다. 플러그인 에이전트 `codex:codex-rescue` 의 설명("Proactively use")은 이 프로젝트에서 따르지 않는다.
+- **Codex 호출은 서브에이전트 파견이다.** §7-3(사용자가 지시할 때만 — 위 표의 병합 전 리뷰 1회와 "리뷰 규모" Tier 1~3 의 체크리스트 파견만 예외)과 §3-4(`승인:`·`브랜치:` 줄을 요청 첫머리에)를 그대로 적용한다. 플러그인 에이전트 `codex:codex-rescue` 의 설명("Proactively use")은 이 프로젝트에서 따르지 않는다.
 - **쓰기 작업은 맡기지 않는다.** Codex 에 쓰기를 맡기는 것은 그 자체가 §3 합의 대상이다. Codex 기본 지침은 "되돌릴 수 있는 작업과 수정은 허락을 묻지 말고 진행" 쪽이라(2026-10-26 세션 기록 `base_instructions`) §3 과 방향이 반대다.
 - **합의해서 쓰기를 맡길 때는 `tools/codex-unity.ps1 -PromptFile <파일> -Write` 로만 부른다** (Unity MCP 허락이 없어도. `docs/DECISIONS.md` 2026-11-14 "Codex 샌드박스 계약"). companion 에 `--write` 를 직접 붙이지 않는다. `--write` 샌드박스는 `.git`·`.codex`·`.agents` 가 읽기 전용이고 승인 정책이 `never` 라 권한을 올릴 수 없기 때문이다.
   - **지시서**: git 쓰기 명령이나 `.git/`·`.codex/`·`.agents/` 경로를 적지 않는다. 적으면 스크립트가 Codex 를 띄우지 않고 종료 코드 2 로 거부한다(`codex-unity.ps1:131`). 파일 이동·이름 바꾸기는 Claude 가 먼저 `git mv` 로 하고(`.meta` 포함), 지시서에는 `CLAUDE-GIT-DONE: <실행한 명령>` 줄로 알린다.
@@ -109,30 +122,31 @@ Antigravity(`agy`)는 세 번째 모델 계열(Gemini)이다 (`docs/DECISIONS.md
 | 막혔을 때 진단 (§4-5 에서 3번 실패한 뒤) | ❌ | 가설과 확인 방법을 나눠 적는다 |
 | 작은 구현 (UI·`tools/`·`fix/`) | ✅ | §3 합의와 §9 브랜치. 시뮬·씬·프리팹·에셋은 맡기지 않는다 |
 
-- 무인 실행(`/goal`·`/schedule`)과 병렬 쓰기는 하지 않는다. 예외는 아래 "Claude 가 agy 를 부를 때" 하나다. `--dangerously-skip-permissions`·Turbo·`always-proceed` 로 돌리지 않는다.
+- 무인 실행(`/goal`·`/schedule`)과 같은 작업 트리의 병렬 쓰기는 하지 않는다. 예외는 아래 "Claude 가 agy 를 부를 때" 하나다. `--dangerously-skip-permissions`·Turbo·`always-proceed` 로 돌리지 않는다.
 - 검토·검수는 **Gemini 모델로** 한다. Antigravity 안에서 Claude 모델을 고르면 다른 계열이 아니다.
 - Antigravity 가 만든 커밋에는 `Assisted-by: Antigravity (<모델 이름>)` 줄을 붙인다. git 작성자가 사용자와 같아 이 줄이 없으면 누가 썼는지 남지 않는다.
 - Unity·Blender MCP 는 사용자가 그 작업에서 허락할 때만 쓴다. 에디터와 Blender 는 한 번에 한쪽만 쓴다 (CLAUDE.md §7 병렬 절대 금지).
-- 작업 트리에 쓰는 도구는 한 번에 하나다. 다른 도구로 넘길 때는 쓰던 쪽이 커밋하거나 남은 변경을 보고한 뒤 넘긴다.
+- 작업 트리 하나에 쓰는 도구는 한 번에 하나다. 다른 도구로 넘길 때는 쓰던 쪽이 커밋하거나 남은 변경을 보고한 뒤 넘긴다. 비-Unity sparse worktree(`docs/RULES/BRANCHING.md` §9-4)는 별도 작업 트리로 본다.
 
 **교차 검토** — 구현한 모델 계열은 그 변경의 검토자가 될 수 없다. 병합 메시지에 `구현:`·`검토:` 를 적는다 (CLAUDE.md §9-2).
 
 | 구현 | 검토 |
 |---|---|
 | claude | codex. 시각 작업이면 antigravity 도 된다 |
-| antigravity | claude (`.claude/agents/unity-reviewer.md` 체크리스트). §7-5 "리뷰 규모" 의 "그 밖" 이면 codex 도 |
+| antigravity | claude (실제 Claude 검토 — 방식은 §7-5 "리뷰 규모" 표를 따르고, Tier 4·비-Unity 도 relay 또는 Claude 세션이 대조한다. Antigravity 자체 대조는 세지 않는다). Tier 1~3 의 `Assets/` 변경이면 codex 도 |
 | codex | claude |
 | 하네스 파일 | 구현하지 않은 모델 **+ 사용자 승인** |
 
 - 하네스 파일: `CLAUDE.md`, `AGENTS.md`, `.claude/settings*.json`, `.claude/agents/`, `.codex/`, `.agents/`, `tools/hooks/`, `docs/RULES/`. `tools/hooks/guard.ps1` 이 파일 편집 도구로 고치는 것을 Claude 는 ask, Codex·Antigravity 는 deny 로 잡는다. 셸로 쓰는 것은 잡지 못한다 — 셸로 돌아가지 않는다 (CLAUDE.md §3-4).
-- codex 가 구현한 브랜치에서는 §7-5 의 병합 전 Codex 리뷰가 같은 계열이라 `검토:` 로 세지 않는다. Claude 검토는 메인이 체크리스트로 직접 한다(파견은 §7-3 대로 사용자가 지시할 때).
+- codex 가 구현한 브랜치에서는 §7-5 의 병합 전 Codex 리뷰가 같은 계열이라 부르지 않고 `검토:` 로도 세지 않는다. Claude 검토는 §7-5 "리뷰 규모" 표를 따른다(사용자가 Codex 를 직접 쓰는 세션이면 relay 또는 Claude 세션 대조).
+- 혼합 구현(예: `구현: claude, codex`)의 독립 검토자는 `구현:` 에 없는 모델 계열이다. 혼합에서 `unity-reviewer`·Codex 리뷰는 체크리스트·설계 보조일 뿐 `검토:` 로 세지 않는다. 혼합 구현이 하네스 파일을 바꿨으면 사용자 한 사람이 모델 검토와 승인을 겸하지 않는다 — 구현하지 않은 모델이 없을 때(세 계열 모두 구현)만 사용자가 `검토: 없음 — <사용자 말>` 로 면제한다(CLAUDE.md §9-2).
 - 검토자는 지적만 하고 고치지 않는다. 고치는 것은 구현한 쪽이거나 사용자가 정한다.
 
 **Claude 가 agy 를 부를 때 (`tools/agy-run.ps1`)** — 사용자가 agy 에 맡기라고 지시한 작업만 (`docs/DECISIONS.md` 2026-11-25 "Claude 가 agy 를 부르는 실행"). 사용자의 agy 창이 아니라 새 대화에서 돈다.
 - 실행: `powershell -NoProfile -ExecutionPolicy Bypass -File tools/agy-run.ps1 -Role ask|fix -PromptFile <지시서> -RunId <이름> [-Allow "<고쳐도 되는 파일,…>"] [-Resume <앞 RunId>]`. 오래 걸리므로 `run_in_background` 로 띄운다.
 - 지시서: `승인:`·`브랜치:` 줄(§3-4, §9-2)과 무엇을·어디까지·판정 기준(§7-4). agy 는 이 대화를 모른다.
 - `ask` 는 읽기 전용, `fix` 는 `-Allow` 파일만 고친다. 둘 다 셸과 MCP 가 닫힌다. **시험·컴파일·git 은 Claude 가 한다.** 하네스·git·씬·프리팹·설정 파일은 `-Allow` 로 받지 않는다. 시뮬은 위 표대로 맡기지 않는다(스크립트는 판정하지 못한다).
-- 실행하는 동안 Claude 도 작업 트리에 쓰지 않는다. 앞뒤 대조가 누가 바꿨는지 구분하지 못한다.
+- 실행하는 동안 그 실행의 승인된 `-Allow` 쓰기 밖에서는 아무 세션(Claude 포함)도 **어느 워크트리에서도** 작업 트리 수정·커밋·ref 변경을 하지 않는다. 앞뒤 대조가 누가 바꿨는지 구분하지 못하고, ref(`for-each-ref`)는 모든 트리가 공유한다. linked 트리에서는 공용 git 디렉터리의 `config`·`info/exclude`·`hooks` 와 그 트리의 `config.worktree`·`.git` 파일을 대조한다(`docs/RULES/BRANCHING.md` §9-4).
 - 종료 코드: 0 끝남 / 2 거부 / 10 막힘·질문 / 12 계약 위반 / 13 실행 실패. **12 면 되돌리거나 이어 가지 않고** `result.json` 의 `error` 와 `violations` 를 사용자에게 보고한다. 10 은 승인 범위 안의 세부면 `-Resume` 으로 답하고, 범위 밖이면 사용자에게 묻는다. 13 은 원문을 보고한다.
 - 왕복은 한 작업에 최대 2번이다. `-Resume` 은 앞 실행과 저장소·브랜치·역할·`-Allow`·`승인:` 줄이 같아야 하고, 한 실행은 한 번만 잇는다. 새 `-RunId` 로 같은 작업을 다시 시작해 늘리지 않는다(§3-4 쪼개기).
 - 결과는 믿지 않고 확인한다(§7-4): diff 를 읽고 시험을 돌린다. 커밋과 병합은 사용자가 시킬 때만 하고(§0 Git), 커밋에는 `Assisted-by: Antigravity (<모델 이름>)` 를 붙인다.

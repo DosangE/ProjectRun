@@ -10,6 +10,63 @@
 
 ---
 
+## 2026-11-28 · 비-Unity sparse worktree: Unity 가 읽지 않는 작업만 `--no-checkout` + cone 5폴더 트리에서, 훅이 우회 명령과 다른 트리의 보호 파일을 막는다 (`docs/sparse-worktree-and-reviewer`)
+
+- **결정 (사용자 2026-11-28 "ㅇㅋ 진행해보자")**: 요청서 `docs/PROPOSAL_SPARSE_WORKTREE_AND_REVIEWER.md` v4 의 Q1~Q3 모두 (a). 규칙은 CLAUDE.md §0 Git·실행, §7 병렬 절대 금지 1번, §9-2 와 `docs/RULES/BRANCHING.md` §9-4(신설), `docs/RULES/SUBAGENTS.md` §7-6.
+  - Q1 (a) `--cone` 으로 `docs`·`tools`·`.claude`·`.codex`·`.agents` + 루트 파일. `docs/images/` LFS 12개는 같이 체크아웃된다.
+  - Q2 (a) 사용자가 지시하거나 병렬·격리에 합의했을 때만 만든다. 첫 `sparse-checkout init` 이 공유 `.git/config` 에 남기는 `extensions.worktreeConfig=true` 는 그대로 둔다.
+  - Q3 (a) 훅·래퍼 보강과 실제 linked worktree 1회 실측을 같은 브랜치에서 하고 그 뒤 발효.
+- **이유**: 옛 금지(CLAUDE.md §9-2 "병렬 작업을 위한 워크트리는 쓰지 않는다")의 근거 셋 — 두 번째 `Library/`, MCP 가 붙는 에디터 혼선, LFS 복사 비용(`docs/archive/DECISIONS-2026-10.md:2276`·`:1004`, 이 파일 2026-11-25 "Claude 가 agy 를 부르는 실행") — 은 Unity 를 열지 않고 `Assets/`·`art-src/` 를 꺼내지 않는 트리에서는 생기지 않는다. 문서·도구 브랜치로 바꿀 때마다 에디터 재임포트(§9-3)와 다른 세션의 체크아웃 충돌(2026-11-09 리뷰 도중 `docs/blender-art-agent` 체크아웃)이 있었다.
+- **훅·래퍼** (구현 `antigravity`: `tools/sync-agents.ps1`·`tools/agy-run.ps1`, `claude`: `tools/hooks/`):
+  - `guard.ps1` — `git worktree list --porcelain -z` 의 모든 루트(가장 긴 것부터)를 떼고 보호 파일을 판정한다. 목록을 못 읽으면 Claude 도 `deny`. git: `--no-checkout` 없는 `worktree add`(마지막 `--checkout`/`--no-checkout` 이 이김, `--no-checkout` 은 줄여 쓴 것을 세지 않음), `-f`·`--force`(줄임·묶음 포함) `worktree add`/`remove`, `checkout`/`switch` 의 `--ignore-other-worktrees`(checkout 은 `--ignore-o` 부터 — `--ignore-skip-worktree-bits` 와 겹침), `sparse-checkout disable`·`add`·모르는 하위 명령, 메인 트리(`--git-dir` = `--git-common-dir`)의 `init`·`set`·`reapply`, `init` 은 `--cone` 하나만, `set` 은 승인 5개와 집합이 정확히 같을 때만(`--cone` 1개 허용). 대상 트리를 못 정하면(변수 `-C $wt`, `rev-parse` 실패) 막는다. `Get-Branch` 는 새 `Invoke-GitQuery`(출력을 비동기로 읽어 큰 출력에서 막히지 않음)를 쓴다.
+  - `after-agents-edit.ps1` — 고친 파일 경로에서 트리 루트를 떼어 그 트리의 `.codex` 사본을 검사한다. 상대 경로도 받는다. 등록된 워크트리가 아니면(예: `~/.claude/agents`) 지나간다. (리뷰 대응 뒤 최종: 등록 여부를 먼저 보고, 검사기는 훅 옆의 `sync-agents.ps1 -Check -Root <트리>` — 아래 "병합 전 리뷰" ①·⑥·⑫·⑬.)
+  - `sync-agents.ps1 -Check` — `.codex/agents` 가 없으면 만들지 않고 어긋남(exit 1). `agy-run.ps1` — `--git-common-dir` 의 `config`·`info/exclude`·`hooks`, `--git-path config.worktree`, linked 트리의 `.git` 파일을 대조한다.
+- **검증** (2026-11-28, Git 2.49.0.windows.1, Git LFS 3.6.1, 커밋 전 작업 트리):
+  - `guard.ps1` 모의 입력 — 메인 트리 git·편집 43건, 3방향(메인→linked·linked→메인·linked→linked, 보호 파일 7종 × Claude/Codex/Antigravity) + linked 트리 git 51건, fail-closed(저장소 밖으로 복사해 `worktree list` 실패) 3건: 모두 기대대로(`--- 43 cases, 0 failed`, `--- 51 cases, 0 failed`, `--- 3 cases, 0 failed`). 같은 51건을 dev 판 `guard.ps1` 에 넣으면 31건이 통과해 버렸다(linked→메인 10·linked→linked 10·sparse 11) — 고치기 전의 틈.
+  - 실제 Claude 훅(이 세션)도 새 판으로 돌았다: `git -C $wt sparse-checkout init --cone` 을 "대상 경로에 변수가 있어 어느 워크트리인지 판정할 수 없다" 로 막았고, 글자 그대로 적은 경로로 다시 했다.
+  - `after-agents-edit.ps1` — linked 트리 정의만 어긋나게 한 뒤 메인 세션 입력: `block`(그 트리의 `unity-reviewer.toml`), 메인 정의: 무음, `~/.claude/agents/foo.md`: 무음, 도구 없는 등록 트리: `block`(도구 없음), linked 세션의 상대 경로: `block`. 시험 뒤 원본으로 되돌려 그 트리 `git status` 0줄. `sync-agents.ps1 -Check`(`.codex` 없는 복사본): exit 1, 폴더 안 만듦.
+  - **실제 리포 1회 생성→검증→정리**: §9-4 절차를 명령 하나씩 실행(`worktree add --no-checkout -b docs/sparse-wt-trial ../ProtoHarness-wt/trial dev` → `init --cone` → `set` → `list` = `.agents,.claude,.codex,docs,tools` → `checkout`, 모두 exit 0). 금지 4폴더·`.vscode`·`Library` 없음, 루트에 `.agents .claude .codex docs tools .git .gitattributes .gitignore AGENTS.md CLAUDE.md ProtoHarness.slnx README.md` 만. 메인 `core.sparseCheckout` 빈 값 그대로, `extensions.worktreeConfig=true` 가 생겼다.
+  - LFS: `HTTPS_PROXY`·`HTTP_PROXY` 를 닫힌 포트(`127.0.0.1:9`)로 두고 `checkout` exit 0, `docs/images/` 12개 sha256 = LFS OID 12/12, 합계 21,564,683 B. `GIT_TRACE` 의 git-lfs 줄은 `tq: running as batched queue` 하나뿐(내려받기 요청 없음).
+  - 3도구 훅(그 트리의 dev 판 `guard.ps1`): `claude -p`(haiku) "PreToolUse:Bash hook error: git clean 은 금지선이다", `codex exec -s read-only` "Command blocked by PreToolUse hook: git clean 은 금지선이다"(24,008 토큰, 새 경로에서 `/hooks` 를 따로 신뢰하지 않았다), `agy -p --sandbox`(gemini-4-neon-high) "tool call denied by pre-tool hook: git clean 은 금지선이다".
+  - `agy-run.ps1` 의 경로: 그 트리에서 `--git-common-dir` = 메인 `.git`, `--git-path config.worktree` = `.git/worktrees/trial/config.worktree`, `.git` 은 `gitdir:` 파일. 실제 `agy-run` 실행 대조(exit 12)는 Antigravity 가 임시 저장소의 linked 트리에서 했다(1단계 보고). 이 리포에서는 메인 트리에서 읽기 전용 `-Role ask -RunId sw-agyrun-smoke` 1회: `agy-run: exit=0 status=done role=ask round=1/2 changed=`, `result.json` `violations` `[]`(새 감시 경로로 앞뒤 대조가 돈다). linked 트리에서는 돌리지 않았다.
+  - 정리: `trial` 은 일반 `worktree remove` 로 지웠다. 시험용으로 `--no-checkout --detach` 만 하고 체크아웃하지 않은 `trial2` 는 일반 `remove` 가 `contains modified or untracked files` 로 거부했다(색인이 비어 1,690줄이 바뀐 것으로 보인다) → `-f` 대신 승인 목록으로 `init`·`set`·`checkout` 을 마친 뒤 일반 `remove`. 이것을 §9-4 3 "중간에 실패하면" 에 넣었다. `git branch -d docs/sparse-wt-trial`, 빈 `../ProtoHarness-wt` 삭제, `.git/worktrees` 없음.
+- **병합 전 리뷰** (Codex `adversarial-review --scope working-tree` — HEAD = dev 라 `--base dev` 는 빈 diff(`codex-companion` `lib/git.mjs:143-149`), 독립 검토자 `codex`): `needs-attention`, 높음 4·중간 3. 모두 코드·문서에서 맞다고 확인하고 고쳤다.
+  - 높음 ① `after-agents-edit.ps1` 이 등록 여부를 보기 전에 편집 경로의 `tools/sync-agents.ps1` 을 실행했다(저장소 안 아무 하위 폴더의 스크립트가 돈다) → 등록된 워크트리 루트일 때만 부른다. 시험: 등록 안 된 폴더에 표지 파일을 쓰는 가짜 `sync-agents.ps1` → 실행되지 않음.
+  - 높음 ② `worktree add --lock --reason --no-checkout`(값으로 먹힌 `--no-checkout`)과 `-B`(있는 브랜치 강제 이동)가 통과했다 → `-b`·`-B`·`--reason` 의 값을 건너뛰고 `-B` 를 막는다.
+  - 높음 ③ sparse 대상 판정이 `--work-tree` 를 무시해 linked 메타데이터 + 메인 작업 경로 조합을 놓쳤다 → `--git-dir`·`--work-tree`·`-c`·`GIT_*` 환경 지정(접두 대입·`$env:`·`export`)이 있으면 막고, `--show-toplevel` 이 등록된 linked 루트인지 본다.
+  - 높음 ④ `set` 인자를 쉼표로 이어 비교해 `.agents,.claude,.codex,docs,tools` 한 낱말이 통과했고, 하위 폴더에서 부르면 git 이 접두사를 붙였다 → 낱말마다 비교, `--show-prefix` 가 비어 있을 때만, cone 모드(`core.sparseCheckoutCone=true` 또는 `--cone`)일 때만.
+  - 중간 ⑤ `Invoke-GitQuery` 의 3초가 git 대기에만 걸려 `taskkill -Wait`·스트림 읽기가 무한히 기다릴 수 있었다 → 대기·읽기를 합친 3초, `taskkill` 2초 한도. **시간 초과 경로는 시험하지 못했다**(느린 git 을 흉내 내지 않았다).
+  - 중간 ⑥ 등록 조회 실패가 exit 1 만 남겼다 → 에이전트 정의 편집이면 `block` 으로 알린다. 시험: 저장소 밖에 복사한 훅 → `block`("not a git repository").
+  - 중간 ⑦ Tier 1~3 자동 파견이 CLAUDE.md §7-3 "지시할 때만" 과 부딪쳤다 → 표에 "지시 없이 부른다(§7-3 예외)", §7-3 에 예외 두 개(Tier 1~3 체크리스트, Codex 병합 전 리뷰)를 적었다.
+  - 고친 뒤 다시 돌린 것: 모의 입력 43 + 51 + 새 사례 20 + fail-closed 3 모두 기대대로(`0 failed`), `after-agents-edit` A~E·G·H. 시험 트리를 새 판 guard 로 다시 만들었다(같은 호출 안에서 `worktree add` 와 그 트리의 `sparse-checkout` 을 같이 주면, 훅이 실행 전에 아직 없는 트리를 판정해 막는다 — 명령을 따로 실행한다). 그 트리에 새 `guard.ps1` 을 잠시 넣고 3도구로 새 판에만 있는 차단(`git worktree remove --force ../does-not-exist`)을 확인했다: Claude `-p`·`codex exec`(16,496 토큰)·`agy -p` 모두 "git worktree remove --force 는 강제 실행이다" 로 막혔다. 되돌린 뒤 트리 `git status` 0줄, 두 트리와 시험 브랜치를 일반 `remove`·`branch -d` 로 지웠다.
+  - **2차 재리뷰** (사용자 "Codex 재리뷰 후 진행"): `needs-attention`, 높음 2·중간 3. 1차의 ①·⑥·⑦ 은 닫혔다고 확인. 새 지적도 모두 맞았고(①·③ 은 재현) 고쳤다.
+    - 높음 ⑧ `--reason --` 처럼 값으로 먹힌 `--` 뒤의 `--checkout`·`-B` 를 보지 않았다(첫 `--` 에서 먼저 잘랐다) → 왼쪽부터 읽어 값으로 먹히지 않은 `--` 에서만 멈춘다.
+    - 높음 ⑨ `Set-Item Env:GIT_WORK_TREE` 처럼 정규식에 안 걸리는 셸 상태 변경 → sparse 변경은 다른 명령·대입·감싸는 명령이 없는 단독 git 호출만 받는다(§9-4 3 에 적음).
+    - 중간 ⑩ `-ceq` 가 문화권 비교라 `do`+U+00AD+`cs` 를 `docs` 로 봤다(`'docs' -ceq ('do' + [char]0xAD + 'cs')` → `True`) → 서수 비교·서수 정렬.
+    - 중간 ⑪ 조회마다 3초여도 이어지면 15초를 넘길 수 있었다 → 훅 전체 마감(시작 뒤 11초)에서 종료 처리 여유를 뺀 만큼만 기다린다.
+    - 중간 ⑫ `after-agents-edit.ps1` 이 `worktree list` 를 코드페이지 949 로 받아 한글 경로 트리를 놓칠 수 있었다 → `-z`·UTF-8 로 직접 읽고, 못 읽으면 `block`.
+    - 고친 뒤 다시 돌린 것: 모의 입력 43 + 51 + 20 + 새 사례 15(`--reason --` 뒤 `--checkout`·`-B`·`--force`, `Set-Item Env:`·`cd &&`·`; echo`·`env`·`bash -c`, 단독 호출 3종 통과, U+00AD 두 곳) + fail-closed 3 모두 `0 failed`. 시험 트리는 단독 호출로 다시 만들었다. `after-agents-edit` A~E·G·H 그대로, 한글 경로 등록 트리(`../ProtoHarness-wt/시험`, 도구 없음)는 `block`. 세 트리 모두 일반 `remove`. 3도구 실제 훅은 1차 대응 판에서 확인한 뒤 다시 돌리지 않았다(훅을 부르는 방식은 바뀌지 않았다).
+  - **3차 재리뷰** (사용자 "고치고 3차 리뷰 후 진행"): `needs-attention`, 높음 2·중간 1. 2차의 ⑧·⑩·⑫ 와 HANDOFF 56줄은 닫혔다고 확인, ⑨·⑪ 은 부분 확인. 같은 영역 3회째라 CLAUDE.md §4-5 대로 멈춰 물었고 사용자 "3건 고치고 바로 진행"(4차 리뷰 없음).
+    - 높음 ⑬ `after-agents-edit.ps1` 이 등록된 다른 트리의 (미커밋일 수 있는) `tools/sync-agents.ps1` 을 실행했다 → `sync-agents.ps1` 에 `-Root` 를 더하고, 훅은 자기 옆의 검사기에 대상 트리를 넘긴다. 시험: linked 트리의 `sync-agents.ps1` 을 표지 파일을 쓰는 스크립트로 바꾼 뒤 그 트리 정의 편집 → `block`(어긋남), 표지 없음.
+    - 높음 ⑭ `git sparse-checkout --% init --cone` 처럼 하위 명령 자리가 `-` 로 시작하면 도움말로 보고 통과시켰다(Codex 는 셸 문법 한계로 분류) → `-h`·`--help` 만 통과.
+    - 중간 ⑮ `reapply` 가 저장된 패턴을 보지 않았다 → cone 모드이고 `sparse-checkout list` 가 승인 5개와 서수로 같을 때만.
+    - 고친 뒤 다시 돌린 것: 모의 입력 43 + 51 + 20 + 15 + 새 사례 6(`--%` 2·`-h`·`reapply` 승인/비-cone/목록 불일치) + fail-closed 3 모두 `0 failed`. `after-agents-edit` A(변조된 대상 스크립트 실행 안 됨)·B·C·D(정의 폴더 없는 트리 → `block`)·E·G·H 와 같은 트리가 맞을 때 무음. `sync-agents.ps1 -Check -Root`(`.codex` 없음) exit 1·폴더 안 만듦, 메인 `-Check` exit 0. 시험 트리 둘은 일반 `remove`.
+    - 3차 대응 코드는 다시 리뷰받지 않았다(사용자 결정).
+  - **남은 알려진 한계**(고치지 않음, `guard.ps1` 머리말의 셸 판정 한계): Bash 괄호 그룹 `( … )` 과 뒤에 붙은 `&` 는 단독 호출로 분류된다(3차 Codex). 셸 상태를 스크립트 파일·별칭으로 바꾼 뒤의 호출, 셸 명령으로 보호 파일을 쓰는 것도 그대로 판정하지 못한다.
+- **확인 못 한 것**: GitHub Desktop·VS Code 가 `extensions.worktreeConfig=true` 를 경고 없이 읽는지, `codex-unity.ps1` 을 sparse 트리에서 부르는 것, Codex 대화형 세션의 `/hooks` 신뢰 화면(이번은 `exec` 만), 훅 실패(비정상 종료) 때 세 도구의 동작, `Invoke-GitQuery` 시간 초과 경로.
+- **버린 대안**: Q1 (b) `--no-cone` 으로 `docs/images/` 까지 빼기(패턴이 길고 순서까지 맞춰야 한다, 20.57 MiB 는 캐시에서 오프라인으로 채워진다), 지시 없이 에이전트가 만들기(Q2 (b) — 공유 `.git/config` 를 바꾼다), 규칙만 먼저 넣고 훅은 나중(Q3 (b) — 옛 훅은 다른 트리의 보호 파일과 우회 명령을 못 막았다, 위 31건).
+
+## 2026-11-28 · `unity-reviewer` 위험 우선 4단: 고위험·중위험 큰 변경·타 계열 비소규모만 파견, 그 밖은 체크리스트 대조 + 독립 교차 검토 (`docs/sparse-worktree-and-reviewer`)
+
+- **결정 (사용자 2026-11-28 "ㅇㅋ 진행해보자")**: 요청서 v4 의 Q4 (a)·Q5 (a). 규칙은 `docs/RULES/SUBAGENTS.md` §7-5 "리뷰 규모"(Tier 1~4 표)와 §7-6(교차 검토 표·혼합 구현), 체크리스트는 `.claude/agents/unity-reviewer.md`(§0 단언 약화, §5 실행 순서·경계값, §4-4 `select-tests` 누락, 입력에 전체 `name-status`).
+  - 두 축을 나눈다: 체크리스트를 누가 맡나(§7-5 표, 처음 맞는 행 하나) / 누가 `검토:` 의 독립 검토자인가(§7-6 표). `unity-reviewer`·같은 계열 리뷰는 `검토:` 로 세지 않는다.
+  - Codex 병합 전 리뷰 1회는 `구현:` 에 `codex` 가 없을 때만 자동이다. 혼합 구현의 하네스 변경은 구현하지 않은 모델 + 사용자 승인이며, 사용자 한 사람이 둘을 겸하지 않는다.
+  - 2026-10-26 "리뷰 규모" 의 "시험 중 (리뷰 분담 비교)" 줄은 이것으로 닫고 지웠다.
+- **이유**: 2026-10-26 규칙 도입 뒤 기록된 병합 전 파견 28건(요청서 부록 A) — 합계 2,726,301 토큰, 중앙값 85,584, 11-13 이후 Agent 파견 18회 중 10회가 `unity-reviewer`(2026-11-13 "하네스 비용 기준선" 의 정식 재측정). §0 치명은 0/28 이었지만 중대·실제 결함·핵심 규칙 지적은 시뮬·레이스·봇·트랙 6/11, 아트 3/11(K4·STADIUM·FINGER 신규 빌더), UI·오디오 3/6 이었다. 결함이 나온 브랜치는 모두 Tier 1~2 에 걸리고, 결함이 없던 후속 킷 반영(프리팹 diff 위주)은 Tier 4 로 빠진다.
+- **경계 대입 (검증 ⑥)**: K4 리뷰 전 `5cb1466`(에디터 90줄 + `select-tests.ps1`) → Tier 1 ⑤, K1 1차·K3 1차(`select-tests` 추가) → Tier 1 ⑤, K1 2차(프리팹 diff) → Tier 4, #17 `m6-sound-cues`(`4929f73`/`9639fac`: 시뮬 41줄 + 테스트 기대값) → Tier 1 ③·⑤, #27 `e896b5a`(새 빌더 594줄) → Tier 1 ④, `Net/RaceWire` 1줄 → Tier 1 ②, Claude `Flow` 50줄 → Tier 4(Codex 구현이면 Tier 3), `TestLogs.cs` 1줄 → Tier 1 ⑤, 새 테스트 메서드만 → Tier 4(타 계열이 새 파일이면 Tier 3), `Packages/`·`ProjectSettings/` 만 → Tier 4, `select-tests.ps1` 만(Unity 미접촉) → 표 밖 문서 검증, Antigravity Tier 4 → 실제 Claude 대조(relay 또는 Claude 세션), Codex 메인 세션 Tier 1 → relay, `claude, codex` 혼합 → Tier 3 + `antigravity` 또는 사용자 면제, 같은 혼합의 하네스 → `antigravity` + 사용자 승인. 공백·충돌 없음. 테스트는 `Assets/_Project/Scripts/Tests/` 라 Tier 1 ① "`Scripts/` 밖 `.cs`" 에 걸리지 않는다(`git ls-files` 로 확인, 밖은 `Assets/TutorialInfo/Scripts/` 2개뿐).
+- **확인 못 한 것**: Codex 리뷰의 토큰·비용(28건 대부분 `/status` 미기록), 28건 전체의 리뷰 전 커밋별 `.cs` 줄 수(3건만 대입) — 실제로 5~10건 적용한 뒤 100줄 문턱을 다시 본다. Tier 4 의 코드 수준 §0 은 `guard.ps1` 이 막지 못해 대조와 독립 검토에만 기댄다.
+- **버린 대안**: Q4 (b) `claude` 가 구현에 있으면 파견을 다 끄기(시뮬 단독 결함 3건을 놓친다), Q5 (b) 옛 §7-6 그대로(타 계열 구현을 Tier 와 무관하게 메인 대조 — §7-5·§7-6·CLAUDE.md §9-2 가 서로 어긋났다).
+
 ## 2026-11-27 · 견인: 선두와의 진행 거리 차로 달리기 속도의 0~25% 를 목표 속도에 더한다 — 8 m 에서 0, 드래프트 범위 12 m 에서 5%, 288 m(× 속도 등급)에서 25%, 스윙은 제 속도 + 견인, 플레이어·봇 공통 (`feature/race-catchup`, 2026-11-27 `dev` 병합)
 
 - **결정 (사용자 2026-11-27)**: 요청서(대화)에 "일단 구현해보고 견인 정도를 수정하면 되지 않을까", "멀어졌을때 많이 받지만 가까워질수록 그 견인 수준은 떨어져야", 그리고 "ㄱㄱ 대신 견인이라는 것은 어느정도는 따라잡을 수 있도록 설계하는 것이다. 2등과 1등에 대해 둘이 동등한 실력이면 아예 추월하기가 불가능하니 드래프트와 견인으로 추월기회를 주는것". 방향은 2026-11-26 결정 5개(아래 항목 Q2·Q4·Q5)와 같다.

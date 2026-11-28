@@ -19,16 +19,25 @@
         .ps1 을 ANSI(cp949)로 읽어 한글이 깨진다.
 #>
 
-param([switch]$Check)
+param(
+    [switch]$Check,
+    # 검사·생성할 트리 루트. 비우면 이 스크립트가 있는 트리다. tools/hooks/after-agents-edit.ps1 이 다른 워크트리를
+    # 검사할 때 그 트리의 스크립트를 실행하지 않고 이 값만 넘긴다(docs/RULES/BRANCHING.md §9-4).
+    [string]$Root = ''
+)
 
 $ErrorActionPreference = 'Stop'
 
-$root = Split-Path -Parent $PSScriptRoot
+$root = if ([string]::IsNullOrWhiteSpace($Root)) { Split-Path -Parent $PSScriptRoot } else { [System.IO.Path]::GetFullPath($Root) }
 $src  = Join-Path $root '.claude/agents'
 $dst  = Join-Path $root '.codex/agents'
 
 if (-not (Test-Path $src)) { throw "원본 폴더가 없다: $src" }
-if (-not (Test-Path $dst)) { New-Item -ItemType Directory -Path $dst -Force | Out-Null }
+$dstExists = Test-Path -LiteralPath $dst -PathType Container
+if (-not $Check -and -not $dstExists) {
+    New-Item -ItemType Directory -Path $dst -Force | Out-Null
+    $dstExists = $true
+}
 
 $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 $written = @()
@@ -101,16 +110,19 @@ foreach ($f in Get-ChildItem -Path $src -Filter *.md -File) {
 $srcNames = @(Get-ChildItem -Path $src -Filter *.md -File | ForEach-Object {
     ((Get-Content -LiteralPath $_.FullName -Encoding UTF8 | Where-Object { $_ -match '^name:' }) -replace '^name:\s*', '').Trim()
 })
-$orphans = @(Get-ChildItem -Path $dst -Filter *.toml -File | Where-Object {
-    $srcNames -notcontains $_.BaseName
-} | ForEach-Object { $_.Name })
+$orphans = if ($dstExists) {
+    @(Get-ChildItem -Path $dst -Filter *.toml -File | Where-Object {
+        $srcNames -notcontains $_.BaseName
+    } | ForEach-Object { $_.Name })
+} else { @() }
 
 if ($Check) {
-    if ($drift.Count -eq 0 -and $orphans.Count -eq 0) {
+    if ($dstExists -and $drift.Count -eq 0 -and $orphans.Count -eq 0) {
         Write-Output '동기화 상태: 일치'
         exit 0
     }
     Write-Output '동기화 상태: 어긋남'
+    if (-not $dstExists) { Write-Output ("  생성물 폴더 없음 : " + $dst) }
     foreach ($d in $drift)   { Write-Output ("  갱신 필요 : " + $d) }
     foreach ($o in $orphans) { Write-Output ("  원본 없음 : " + $o + "  (원본이 지워졌는지 확인하고 수동으로 정리한다)") }
     exit 1
