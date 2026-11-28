@@ -13,7 +13,7 @@ Unity 6 (6000.3.25f1) / URP 3D 하네싱 연습용 프로젝트.
 | 컴파일·테스트를 돌리거나, "된다"·"통과"를 보고하기 전 | `docs/RULES/VERIFICATION.md` | §4-2 확정 사실, §4-2b Unity MCP, §4-3 컴파일, §4-4 테스트 |
 | `index/symbols.tsv` 를 쓰기 전, C모드 질문이 왔을 때 | `docs/RULES/LOOKUP.md` | §6-2 인덱스(선택 도구), §6-3 C모드 보류 |
 | 서브에이전트를 파견하거나 Codex·Antigravity 를 부르기 전, 그 둘로 작업하거나 교차 검토하기 전 | `docs/RULES/SUBAGENTS.md` | §7-1 7종, §7-2 병렬 OK·직렬 필수, §7-4 파견할 때, §7-5 Codex, §7-6 Antigravity·교차 검토 |
-| 브랜치를 만들거나 병합하기 전 | `docs/RULES/BRANCHING.md` | §9-1 이름, §9-3 알아둘 것 |
+| 브랜치를 만들거나 병합하기 전, 워크트리를 만들거나 지우기 전 | `docs/RULES/BRANCHING.md` | §9-1 이름, §9-3 알아둘 것, §9-4 비-Unity sparse worktree |
 
 - § 번호는 옮겨도 바뀌지 않는다. 옮긴 절은 본문 자리에 `→` 한 줄로 남는다.
 - 같은 규칙을 두 곳에 쓰지 않는다. 규칙을 고칠 때는 그 규칙이 있는 **한 곳만** 고친다. (`docs/DECISIONS.md` 2026-08-25 "단일 진실 원천")
@@ -40,6 +40,7 @@ Unity 6 (6000.3.25f1) / URP 3D 하네싱 연습용 프로젝트.
 - 커밋·푸시는 사용자가 시킬 때만.
 - `git reset --hard`, `git checkout -- .`, `git restore .`(작업 트리 되돌리기), `git clean`, 강제 푸시 금지.
 - `main`, `dev` 에 직접 커밋하지 않는다. 브랜치는 `dev` 에서 분기한다. → §9
+- 워크트리 우회 금지: `--no-checkout` 없는 `git worktree add`, `-f`·`--force` 를 붙인 `git worktree add`·`remove`, `git checkout`·`switch` 의 `--ignore-other-worktrees`, `git sparse-checkout disable`·`add`·`set --stdin`, 메인 작업 트리에서의 `git sparse-checkout`. 허용하는 절차는 §9-4 하나다.
 
 **코드**
 - 빈 `catch {}`, 로그 없는 `catch`, 예외를 기본값으로 갈아치우는 fallback 금지. → §5
@@ -57,6 +58,7 @@ Unity 6 (6000.3.25f1) / URP 3D 하네싱 연습용 프로젝트.
 
 **실행**
 - Unity Editor가 열려 있는 상태에서 batch mode 실행 금지. 프로젝트 락이 충돌한다. → §4
+- 비-Unity sparse worktree 경로를 Unity Hub·Editor·batch mode·IDE 솔루션(`ProtoHarness.slnx`)으로 열지 않는다. → §9-4
 
 ---
 
@@ -239,7 +241,7 @@ private void Awake()
 - §7-1 7종, §7-2 의 병렬 OK·직렬 필수, §7-4 파견할 때 지키는 것, §7-5 Codex, §7-6 Antigravity·교차 검토 → `docs/RULES/SUBAGENTS.md` (파견하거나 Codex·Antigravity 를 부르기 전에 읽는다). §7-2 의 병렬 절대 금지는 아래에 남긴다.
 
 **병렬 절대 금지**
-1. 같은 파일에 쓰는 작업 2개 — 충돌한다.
+1. 같은 작업 트리에서 같은 파일에 쓰는 작업 2개 — 충돌한다. (서로 다른 워크트리에서 `docs/HANDOFF.md`·`docs/DECISIONS.md` 를 고친 경우의 병합 절차는 `docs/RULES/BRANCHING.md` §9-4)
 2. `Unity_RunCommand` 동시 호출 — 에디터는 메인 스레드 단일 펌프다. 큐잉되더라도 서로를 모르는 두 에이전트가 에디터 상태를 바꾸면 **결과를 신뢰할 수 없다.**
 3. 씬 · 프리팹을 건드리는 작업 2개.
 
@@ -255,7 +257,7 @@ private void Awake()
 **직접 한다**
 - 1–2 파일이면 그냥 읽는다
 - 이미 이 대화에서 읽은 것
-- **사용자가 파견을 지시하지 않았을 때** ← 현재 기본값
+- **사용자가 파견을 지시하지 않았을 때** ← 현재 기본값. 예외는 병합 전 리뷰 둘뿐이다 — `docs/RULES/SUBAGENTS.md` §7-5 "리뷰 규모" Tier 1~3 의 `unity-reviewer` 1회, 같은 절 표의 Codex 설계 리뷰 1회.
 
 ---
 
@@ -284,7 +286,7 @@ main    안정 기준선. 마일스톤마다만 갱신하고 태그(v0.1 ...)를
      └ feature/<영역>-<내용>   기능별 작업. dev 에서 분기하고 dev 로 병합한다
 ```
 
-- §9-1 이름, §9-3 알아둘 것 → `docs/RULES/BRANCHING.md` (브랜치를 만들거나 병합하기 전에 읽는다)
+- §9-1 이름, §9-3 알아둘 것, §9-4 비-Unity sparse worktree → `docs/RULES/BRANCHING.md` (브랜치를 만들거나 병합하기 전, 워크트리를 만들거나 지우기 전에 읽는다)
 
 ### 9-2. 규칙
 
@@ -302,7 +304,7 @@ main    안정 기준선. 마일스톤마다만 갱신하고 태그(v0.1 ...)를
   - 한 번이라도 실패하면 실패한 테스트와 원문 메시지를 보고하고, 원인을 설명하지 못하면 병합하지 않는다. 코드를 바꾸지 않고 다시 돌려 통과한 것만으로 실패를 없던 일로 하지 않는다.
 - **마일스톤 조건** (③, `dev → main` 병합과 태그 전): ② 에 더해 **같은 코드에서 EditMode 전체(`Enemy` 제외) 1회와 PlayMode 게이트 전체(메뉴 `Run PlayMode Tests`) 2회 통과**, `Run Device Input Tests` 1회, **사용자 플레이 확인** (그 마일스톤의 완료 조건을 사용자가 직접 플레이해 확인한 말을 그대로 적는다, `docs/DESIGN.md` §5). 각 실행의 결과 XML 값을 병합 보고에 붙이고, 실패 규칙은 ② 와 같다. ② 들이 게이트 전체 없이 쌓였으므로 여기서 나온 실패는 모두 원인을 찾고, 고친 뒤 다시 돌려 통과해야 병합한다.
   - 네트워크 레이스(`NetRace`, 플레이어 빌드 뒤 이름으로 골라) 1회는 **M7(멀티 재개)부터** 다시 마일스톤 조건이다. 그 전에는 돌리지 않는다 (`docs/DECISIONS.md` 2026-10-15 "플레이 경험 순서 로드맵", 2026-10-19 "로드맵 재배치"). 결정성 테스트(리플레이·롤백·`Net` 카테고리)는 ③ 의 게이트 전체에 들어 있고, ② 에서는 시뮬을 바꿨을 때 서킷 지문과 바뀐 곳을 지나는 롤백을 돌린다.
-- **병합 조건의 적용 범위**: 위 병합 조건은 변경이 `Assets/`, `Packages/`, `ProjectSettings/` 중 하나라도 닿을 때 적용한다. 셋 다 닿지 않는 브랜치(Unity 가 읽지 않는 `docs/`, `tools/`, `.claude/`, `.codex/`, 루트 `.md` 만 바꾼 것)는 Unity 검증 대신 **문서 검증**으로 병합한다. 조용히 건너뛰지 않고 아래 증거를 병합 보고에 붙인다.
+- **병합 조건의 적용 범위**: 위 병합 조건은 변경이 `Assets/`, `Packages/`, `ProjectSettings/` 중 하나라도 닿을 때 적용한다. 셋 다 닿지 않는 브랜치(Unity 가 읽지 않는 `docs/`, `tools/`, `.claude/`, `.codex/`, `.agents/`, 루트 `.md`(`CLAUDE.md`·`AGENTS.md`·`README.md`) 만 바꾼 것)는 Unity 검증 대신 **문서 검증**으로 병합한다. `art-src/` 만 바꾼 브랜치도 문서 검증이지만 sparse worktree 에서 다루지는 않는다(§9-4 허용 범위). 조용히 건너뛰지 않고 아래 증거를 병합 보고에 붙인다.
   - 닿지 않았다는 증거: `git diff --name-only <병합 대상>...HEAD` 출력 전체.
   - 문서 검증: ① 규칙·에이전트 정의·docs 의 `§` 참조가 모두 CLAUDE.md 또는 `docs/RULES/` 의 제목으로 해석된다. ② `.claude/agents/` 를 바꿨으면 `tools/sync-agents.ps1` 로 재생성하고 `git diff -- .codex` 에 의도한 변경만 있다. ③ 내용을 옮겼으면 원본의 줄이 누락·중복 없이 한 곳에 있다(의도한 수정은 줄마다 밝힌다).
   - `tools/` 의 스크립트를 바꿨으면 그 스크립트를 실제로 실행한 결과를 붙인다.
@@ -321,4 +323,5 @@ main    안정 기준선. 마일스톤마다만 갱신하고 태그(v0.1 ...)를
 - **씬·프리팹을 건드리는 브랜치는 동시에 1개만** (§7-2). 병합 충돌 때 YAML 을 손으로 고치지 않는다.
 - `Packages/manifest.json`, `ProjectSettings/` 변경은 **그것만 담은 브랜치**로 분리한다. Unity 가 자동으로 바꾼 파일은 그렇게 기록한다.
 - **서브에이전트 파견 프롬프트에 `브랜치: <이름>` 줄을 `승인:` 줄과 함께 적는다** (§3-4). `unity-implementer` 는 `main`/`dev` 이거나 이름이 다르면 거부한다.
-- 병렬 작업을 위한 워크트리는 쓰지 않는다. 직렬로 진행한다. (Unity 프로젝트가 둘이 되면 `Library/` 를 따로 만든다.)
+- Unity·Blender 작업(`Assets/`·`Packages/`·`ProjectSettings/`·`art-src/`)과 `Assets/` 를 읽는 도구(`tools/select-tests.ps1`·`tools/reindex.ps1`·`tools/test-runs.ps1`)는 워크트리를 쓰지 않고 메인 작업 트리에서 직렬로 진행한다. (Unity 프로젝트가 둘이 되면 `Library/` 를 따로 만들고, 에디터가 둘이면 MCP 대상이 갈린다.)
+- 그 밖의 비-Unity 작업만 `docs/RULES/BRANCHING.md` §9-4 조건을 지키는 sparse worktree 를 쓸 수 있다. 금지 명령·실행 제한은 §0 을 따른다.

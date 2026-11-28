@@ -4,8 +4,13 @@
   판정만 한다. 파일·git 상태를 바꾸지 않는다.
     deny : 되돌릴 수 없는 git 명령(reset --hard, checkout . 과 -f, switch -f·--discard-changes,
            restore ., clean, 강제 푸시), main/dev 에서의 git commit        (§0 Git, §9-2)
+    deny : 워크트리 우회 (§0 Git, docs/RULES/BRANCHING.md §9-4) — --no-checkout 없는 또는 -f·-B 붙은 worktree add,
+           worktree remove -f, checkout/switch --ignore-other-worktrees, sparse-checkout disable·add·set --stdin,
+           등록된 linked 트리 루트가 아닌 곳(메인·하위 폴더·--git-dir/--work-tree/-c/GIT_* 지정)의 sparse-checkout init·set·reapply,
+           승인 목록과 낱말마다 같지 않은 sparse-checkout init·set, cone 이 아닌 트리의 set
     ask  : 승인 후에만 건드릴 수 있는 파일에 Claude Edit/Write/NotebookEdit
            (§0 파일·에셋, 설정 / 하네스 파일 §3-1, docs/RULES/SUBAGENTS.md §7-6)
+           경로는 등록된 모든 워크트리(메인·linked)의 루트를 떼고 본다. 워크트리 목록을 못 읽으면 deny.
     deny : 같은 파일에 Codex apply_patch 및 Antigravity edit_file/write_file
            (Codex 는 ask 미지원. Antigravity 의 ask·force_ask 가 확인 창을 띄우는지는 확인 못 함 —
             2026-11-24 시험은 없는 파일이 대상이라 "파일 없음" 오류가 먼저 났을 수 있다)
@@ -32,6 +37,8 @@
 $ErrorActionPreference = 'Stop'
 
 $script:IsAntigravity = $false
+$script:MustDeny = $false   # 판정에 필요한 값을 못 읽어 보호 파일로 본 경우. Claude 도 ask 가 아니라 deny 로 막는다.
+$script:GitEnvInCommand = $false
 
 function Write-Decision([string]$decision, [string]$reason) {
     if ($script:IsAntigravity) {
@@ -77,9 +84,17 @@ function Get-ProtectedReason([string]$path, [string]$root) {
         return "확장·장치·UNC 경로는 판정할 수 없어 보호 파일로 본다. 드라이브 경로로 적는다. 대상: $path (CLAUDE.md §0)"
     }
     $p = $full
-    # 저장소 루트(이 스크립트의 두 단계 위)를 먼저 뗀다. cwd 가 하위 폴더여도 ^ 로 시작하는 판정이 맞게 한다.
+    # 등록된 모든 워크트리 루트(메인·linked)와 이 스크립트의 저장소 루트를 먼저 뗀다. 가장 긴 루트부터 본다.
+    # 다른 워크트리의 절대 경로(메인 → linked, linked → 메인, linked → linked)도 ^ 로 시작하는 판정이 맞게 한다.
+    # 목록을 못 읽으면 다른 트리의 보호 파일을 놓칠 수 있으므로 막는다(fail-closed).
+    try { $roots = @(Get-WorktreeRoots) }
+    catch {
+        $script:MustDeny = $true
+        return "워크트리 목록을 읽지 못해 보호 파일로 본다 ($($_.Exception.Message)). 대상: $path (docs/RULES/BRANCHING.md §9-4)"
+    }
     $repoFull = [System.IO.Path]::GetFullPath((Split-Path -Parent (Split-Path -Parent $PSScriptRoot))).TrimEnd([char]92, [char]47)
-    foreach ($base in @($repoFull, $rootFull)) {
+    $bases = @(@($roots) + @($repoFull) | Sort-Object -Property Length -Descending) + @($rootFull)   # cwd 는 마지막(하위 폴더일 수 있다)
+    foreach ($base in $bases) {
         if ($full.StartsWith($base + [char]92, [System.StringComparison]::OrdinalIgnoreCase)) {
             $p = $full.Substring($base.Length + 1)
             break
@@ -334,29 +349,98 @@ function Test-WholeTree([string]$arg) {
     return $true
 }
 
-# git 이 보는 현재 브랜치. 못 읽으면 $script:lookupError 에 원문을 남기고 $null 을 돌려준다. 3초를 넘기면 던진다.
-$script:branches = @{}
-$script:lookupError = $null
-function Get-Branch([string[]]$gitArgs) {
+# 읽기 전용 git 을 돌려 { Code, Out, Err } 를 돌려준다. 같은 인자는 한 번만 돌린다.
+# 프로세스 대기와 두 출력 스트림 읽기를 합쳐 3초(훅 전체 마감이 더 가까우면 그만큼) 안에 끝나지 않으면 던진다(호출부가 deny 로 바꾼다).
+# 훅 제한(15초)에 걸려 판정 없이 지나가지 않도록 종료 처리에도 한도를 둔다.
+$script:gitCache = @{}
+function Invoke-GitQuery([string[]]$gitArgs) {
     $key = $gitArgs -join "`n"
-    if ($key.Contains('"')) { throw "경로에 따옴표가 있어 브랜치를 읽을 수 없다: $key" }
-    if (-not $script:branches.ContainsKey($key)) {
+    if ($key.Contains('"')) { throw "경로에 따옴표가 있어 git 을 돌릴 수 없다: $key" }
+    if (-not $script:gitCache.ContainsKey($key)) {
         $info = New-Object System.Diagnostics.ProcessStartInfo
         $info.FileName = 'git'
-        $info.Arguments = (@($gitArgs) + @('branch', '--show-current') | ForEach-Object { '"' + $_ + '"' }) -join ' '
+        $info.Arguments = (@($gitArgs) | ForEach-Object { '"' + $_ + '"' }) -join ' '
         $info.UseShellExecute = $false; $info.CreateNoWindow = $true
         $info.RedirectStandardOutput = $true; $info.RedirectStandardError = $true
         $info.StandardOutputEncoding = [System.Text.Encoding]::UTF8; $info.StandardErrorEncoding = [System.Text.Encoding]::UTF8
+        # 훅 전체 마감(시작 뒤 11초)에서 종료 처리 2초와 판정 출력 여유를 뺀 만큼만 기다린다. 조회가 여럿 이어져도 15초 제한 안에 deny 를 낸다.
+        $limit = [int][Math]::Min(3000, 11000 - 2500 - $script:clock.ElapsedMilliseconds)
+        if ($limit -lt 200) { throw "훅 시간 예산이 남지 않아 git 을 돌리지 않았다: $key" }
+        $budget = [System.Diagnostics.Stopwatch]::StartNew()
         $proc = [System.Diagnostics.Process]::Start($info)
-        if (-not $proc.WaitForExit(3000)) {
-            Start-Process -FilePath 'taskkill.exe' -ArgumentList "/PID $($proc.Id) /T /F" -WindowStyle Hidden -Wait
-            throw "브랜치를 3초 안에 읽지 못했다: $key"
+        $outTask = $proc.StandardOutput.ReadToEndAsync(); $errTask = $proc.StandardError.ReadToEndAsync()
+        $exited = $proc.WaitForExit($limit)
+        $left = [int][Math]::Max(0, $limit - $budget.ElapsedMilliseconds)
+        $read = $exited -and [System.Threading.Tasks.Task]::WaitAll([System.Threading.Tasks.Task[]]@($outTask, $errTask), $left)
+        if (-not $read) {
+            try {
+                $kill = Start-Process -FilePath 'taskkill.exe' -ArgumentList "/PID $($proc.Id) /T /F" -WindowStyle Hidden -PassThru
+                [void]$kill.WaitForExit(2000)
+            }
+            catch { [Console]::Error.WriteLine("guard.ps1: git 프로세스를 끝내지 못했다: $($_.Exception.Message)") }
+            throw "git 을 $limit ms 안에 읽지 못했다: $key"
         }
-        $script:branches[$key] = @{ Code = $proc.ExitCode; Out = $proc.StandardOutput.ReadToEnd().Trim(); Err = $proc.StandardError.ReadToEnd().Trim() }
+        $script:gitCache[$key] = @{ Code = $proc.ExitCode; Out = $outTask.Result; Err = $errTask.Result.Trim() }
     }
-    $r = $script:branches[$key]
+    return $script:gitCache[$key]
+}
+
+# git 이 보는 현재 브랜치. 못 읽으면 $script:lookupError 에 원문을 남기고 $null 을 돌려준다. 3초를 넘기면 던진다.
+$script:lookupError = $null
+function Get-Branch([string[]]$gitArgs) {
+    $r = Invoke-GitQuery (@($gitArgs) + @('branch', '--show-current'))
     if ($r.Code -ne 0) { $script:lookupError = "커밋할 곳의 브랜치를 읽지 못했다: $($r.Err)"; return $null }
-    return $r.Out
+    return $r.Out.Trim()
+}
+
+# 이 저장소에 등록된 모든 워크트리 루트(메인이 첫 항목). git worktree list 가 실패하거나 비면 던진다.
+$script:worktreeRoots = $null
+function Get-WorktreeRoots() {
+    if ($null -eq $script:worktreeRoots) {
+        $repo = (Split-Path -Parent (Split-Path -Parent $PSScriptRoot)).Replace('\', '/')
+        $r = Invoke-GitQuery @('-C', $repo, 'worktree', 'list', '--porcelain', '-z')
+        if ($r.Code -ne 0) { throw "git worktree list 실패 (exit $($r.Code)): $($r.Err)" }
+        $roots = New-Object System.Collections.Generic.List[string]
+        foreach ($field in $r.Out.Split([char]0)) {
+            if ($field.StartsWith('worktree ')) {
+                $roots.Add([System.IO.Path]::GetFullPath($field.Substring(9)).TrimEnd([char]92, [char]47))
+            }
+        }
+        if ($roots.Count -eq 0) { throw 'git worktree list 에 워크트리가 하나도 없다.' }
+        $script:worktreeRoots = $roots.ToArray()
+    }
+    return $script:worktreeRoots
+}
+
+# 비-Unity sparse worktree 의 승인 목록 (docs/RULES/BRANCHING.md §9-4, Q1 (a) --cone). 순서는 보지 않고 집합이 정확히 같아야 한다.
+$script:sparseSet = @('.agents', '.claude', '.codex', 'docs', 'tools')
+
+# sparse-checkout 이 바꿀 작업 트리가 등록된 linked 워크트리의 루트인가.
+# 메인이면 'main', 판정할 수 없거나 조건에 안 맞으면 사유 문자열, 맞으면 $null 을 돌려준다.
+#   $where 는 -C 만 담는다(--git-dir·--work-tree·-c·GIT_* 환경 지정은 호출부가 먼저 막는다 — 메타데이터와 작업 경로를 따로 줄 수 있다).
+#   하위 폴더에서 부르면 git 이 인자에 그 접두사를 붙이므로 루트에서만 받는다.
+#   set 이 cone 모드로 적용되는지 보도록 그 트리의 core.sparseCheckoutCone 을 $script:sparseCone 에 남긴다.
+$script:sparseCone = $null
+function Get-SparseTarget([string]$cwd, [string[]]$where) {
+    if (($where -join ' ') -match '[$%]') { return '대상 경로에 변수가 있어 어느 워크트리인지 판정할 수 없다' }
+    $base = @('-C', $cwd.Replace('\', '/')) + $where
+    $r = Invoke-GitQuery ($base + @('rev-parse', '--path-format=absolute', '--git-dir', '--git-common-dir', '--show-toplevel', '--show-prefix'))
+    if ($r.Code -ne 0) { return "어느 워크트리인지 읽지 못했다: $($r.Err)" }
+    $lines = @($r.Out -split "`r?`n")
+    if ($lines.Count -lt 4 -or $lines[0] -eq '' -or $lines[1] -eq '' -or $lines[2] -eq '') { return "rev-parse 출력을 읽지 못했다: $($r.Out.Trim())" }
+    $gitDirFull = [System.IO.Path]::GetFullPath($lines[0]).TrimEnd([char]92, [char]47)
+    $commonFull = [System.IO.Path]::GetFullPath($lines[1]).TrimEnd([char]92, [char]47)
+    $topFull    = [System.IO.Path]::GetFullPath($lines[2]).TrimEnd([char]92, [char]47)
+    $roots = @(Get-WorktreeRoots)
+    $ic = [System.StringComparison]::OrdinalIgnoreCase
+    if ([string]::Equals($gitDirFull, $commonFull, $ic) -or [string]::Equals($topFull, $roots[0], $ic)) { return 'main' }
+    $registered = $false
+    foreach ($root in ($roots | Select-Object -Skip 1)) { if ([string]::Equals($topFull, $root, $ic)) { $registered = $true } }
+    if (-not $registered) { return "대상 작업 트리가 등록된 linked 워크트리가 아니다: $topFull" }
+    if ($lines[3] -ne '') { return "작업 트리 루트가 아닌 하위 폴더($($lines[3]))에서 불렀다. 인자에 접두사가 붙는다 — 루트에서 -C <트리> 로 부른다" }
+    $c = Invoke-GitQuery ($base + @('config', '--get', 'core.sparseCheckoutCone'))
+    $script:sparseCone = if ($c.Code -eq 0) { $c.Out.Trim() } else { '' }
+    return $null
 }
 
 # Git Bash 경로를 Windows 경로로: /c/x → c:/x, /tmp → TEMP, ~ → 홈.
@@ -370,13 +454,16 @@ function ConvertTo-WinPath([string]$path) {
 }
 
 # git 인자가 금지선이면 사유를, 아니면 $null 을 돌려준다. $gitDir 는 GIT_DIR= 로 준 값이다.
-function Get-GitReason([string[]]$a, [string]$cwd, [string]$gitDir) {
+function Get-GitReason([string[]]$a, [string]$cwd, [string]$gitDir, [bool]$plain) {
     $where = New-Object System.Collections.Generic.List[string]   # 커밋 대상을 정하는 -C, --git-dir
     if ($gitDir) { $where.Add("--git-dir=$(ConvertTo-WinPath $gitDir)") }
     $k = 0
     $forceConfig = $false
+    # 메타데이터·작업 경로·설정을 따로 주는 전역 옵션. sparse-checkout 변경에서는 대상을 판정할 수 없어 막는다.
+    $override = [bool]$gitDir -or $script:GitEnvInCommand
     while ($k -lt $a.Count -and $a[$k].StartsWith('-')) {
         $opt = $a[$k]; $k++
+        if ($opt -cmatch '^(-c|--git-dir|--work-tree|--config-env|--bare)(=|$)' -or $opt -cmatch '^-c.') { $override = $true }
         if ($opt -cmatch '^(-C|-c|--git-dir|--work-tree|--namespace|--super-prefix|--config-env|--attr-source)$' -and $k -lt $a.Count) {
             if ($opt -ceq '-C') { if ($a[$k] -ne '') { $where.Add('-C'); $where.Add((ConvertTo-WinPath $a[$k])) } }   # 빈 -C 는 git 도 무시한다
             elseif ($opt -ceq '-c') { if ($a[$k] -match '^remote\..+\.(mirror($|=(?!(false|no|off|0+|0x0+|)$))|push=\+)') { $forceConfig = $true } }
@@ -409,6 +496,11 @@ function Get-GitReason([string[]]$a, [string]$cwd, [string]$gitDir) {
             if ($o -cmatch '^--(f(o(r(ce?)?)?)?|di.*)$' -or (Test-ShortFlag $o 'f' 'bBcC')) {
                 return "git $sub $o 는 작업 트리 변경을 버린다. 금지선이다 (CLAUDE.md §0 Git)."
             }
+            # 다른 워크트리가 쓰는 브랜치를 함께 체크아웃한다. checkout 은 --ignore-skip-worktree-bits 와 겹치지 않는 --ignore-o 부터 본다.
+            $minLen = if ($sub -eq 'checkout') { 10 } else { 3 }
+            if ($o.Length -ge $minLen -and '--ignore-other-worktrees'.StartsWith($o, [System.StringComparison]::Ordinal)) {
+                return "git $sub --ignore-other-worktrees 는 다른 워크트리가 쓰는 브랜치를 겹쳐 쓴다. 금지선이다 (CLAUDE.md §0 Git, docs/RULES/BRANCHING.md §9-4)."
+            }
         }
         if ($sub -eq 'checkout') {
             foreach ($o in $rest) {
@@ -429,6 +521,113 @@ function Get-GitReason([string[]]$a, [string]$cwd, [string]$gitDir) {
             }
         }
     }
+    elseif ($sub -eq 'worktree') {
+        $verb = if ($rest.Count -gt 0) { $rest[0].ToLowerInvariant() } else { '' }
+        $wopts = @($rest | Select-Object -Skip 1)
+        if ($verb -eq 'add' -or $verb -eq 'remove') {
+            # 왼쪽부터 읽는다. 값을 받는 옵션(-b·-B·--reason)의 다음 낱말은 값이다 — git 은 '-' 로 시작해도, '--' 여도 값으로 가져간다
+            # (--reason --no-checkout, --reason -- --checkout). 값으로 먹히지 않은 '--' 에서만 옵션 해석을 끝낸다.
+            # 마지막에 준 --checkout / --no-checkout 이 이긴다. --no-checkout 은 줄여 쓰지 않은 그대로만 센다.
+            $noCheckout = $false
+            $ord = [System.StringComparison]::Ordinal
+            for ($i = 0; $i -lt $wopts.Count; $i++) {
+                $o = $wopts[$i]
+                if ($o -eq '--') { break }
+                if (-not $o.StartsWith('-') -or $o -eq '-') { continue }   # 경로·커밋
+                if ($o.StartsWith('--')) {
+                    $name = ($o -split '=', 2)[0]
+                    if ($name.Length -ge 3 -and '--force'.StartsWith($name, $ord)) {
+                        return "git worktree $verb $o 는 강제 실행이다. 금지선이다 (CLAUDE.md §0 Git, docs/RULES/BRANCHING.md §9-4)."
+                    }
+                    if ($verb -ne 'add') { continue }
+                    if ($name -ceq '--no-checkout') { $noCheckout = $true }
+                    elseif ($name.Length -ge 3 -and '--checkout'.StartsWith($name, $ord)) { $noCheckout = $false }
+                    elseif ($name.Length -ge 5 -and '--reason'.StartsWith($name, $ord) -and -not $o.Contains('=')) { $i++ }
+                    continue
+                }
+                if (Test-ShortFlag $o 'f' 'bB') {
+                    return "git worktree $verb $o 는 강제 실행이다. 금지선이다 (CLAUDE.md §0 Git, docs/RULES/BRANCHING.md §9-4)."
+                }
+                if ($verb -ne 'add') { continue }
+                if (Test-ShortFlag $o 'B' 'b') {
+                    return "git worktree add -B 는 있는 브랜치를 강제로 옮긴다(branch --force). -b 로 새 브랜치를 만든다 (CLAUDE.md §0 Git, docs/RULES/BRANCHING.md §9-4)."
+                }
+                $chars = $o.Substring(1)
+                $at = $chars.IndexOfAny([char[]]'bB')
+                if ($at -eq $chars.Length - 1) { $i++ }   # -b 다음 낱말이 브랜치 이름
+            }
+            if ($verb -eq 'add' -and -not $noCheckout) {
+                return 'git worktree add 는 --no-checkout 으로만 만든다. 그렇지 않으면 Assets/·LFS 전체를 체크아웃한다 (CLAUDE.md §0 Git, docs/RULES/BRANCHING.md §9-4).'
+            }
+        }
+    }
+    elseif ($sub -eq 'sparse-checkout') {
+        $verb = if ($rest.Count -gt 0) { $rest[0].ToLowerInvariant() } else { '' }
+        $sargs = @($rest | Select-Object -Skip 1)
+        # 읽기·도움말만 그냥 지나간다. 그 밖의 '-' 로 시작하는 낱말(PowerShell 의 --% 등)은 하위 명령을 가릴 수 있어 막는다.
+        if ($verb -eq '' -or $verb -eq 'list' -or $verb -eq 'check-rules' -or $verb -eq '-h' -or $verb -eq '--help') { return $null }
+        if ($verb.StartsWith('-')) {
+            return "git sparse-checkout 뒤의 '$($rest[0])' 은 하위 명령 자리라 판정할 수 없어 막는다 (docs/RULES/BRANCHING.md §9-4)."
+        }
+        if ($verb -eq 'disable' -or $verb -eq 'add') {
+            return "git sparse-checkout $verb 은 승인 목록 밖을 체크아웃한다. 금지선이다 (CLAUDE.md §0 Git, docs/RULES/BRANCHING.md §9-4)."
+        }
+        if ($verb -ne 'init' -and $verb -ne 'set' -and $verb -ne 'reapply') {
+            return "git sparse-checkout $verb 은 판정할 수 없는 하위 명령이라 막는다 (docs/RULES/BRANCHING.md §9-4)."
+        }
+        if (-not $plain) {
+            return "git sparse-checkout $verb 은 다른 명령·대입·감싸는 명령 없이 git 하나만 있는 호출로만 받는다. 앞에서 바꾼 셸 상태(환경 변수·현재 폴더)를 훅이 모른다 (docs/RULES/BRANCHING.md §9-4)."
+        }
+        if ($override) {
+            return "git sparse-checkout $verb 에 --git-dir·--work-tree·-c 나 GIT_* 환경 지정이 있어 대상 작업 트리를 판정할 수 없다. 대상 트리 루트에서 -C <트리> 만 준다 (docs/RULES/BRANCHING.md §9-4)."
+        }
+        try { $target = Get-SparseTarget $cwd $where.ToArray() }
+        catch { $target = $_.Exception.Message }
+        if ($target -eq 'main') {
+            return "메인 워크트리에서 git sparse-checkout $verb 을 하면 Assets/ 가 디스크에서 사라진다. 금지선이다 (CLAUDE.md §0 Git, docs/RULES/BRANCHING.md §9-4)."
+        }
+        if ($target) { return "git sparse-checkout $verb 을 판정하지 못해 막는다: $target (docs/RULES/BRANCHING.md §9-4)." }
+        # 비교는 모두 서수(Ordinal)다. -ceq 는 문화권 비교라 보이지 않는 글자(U+00AD 등)를 무시해 'do­cs' 를 'docs' 로 본다.
+        $ord = [System.StringComparison]::Ordinal
+        if ($verb -eq 'init') {
+            if ($sargs.Count -ne 1 -or -not [string]::Equals($sargs[0], '--cone', $ord)) {
+                return "git sparse-checkout init 은 '--cone' 하나만 준다. 받은 인자: $($sargs -join ' ') (docs/RULES/BRANCHING.md §9-4)."
+            }
+        }
+        elseif ($verb -eq 'set') {
+            # 낱말 하나하나가 승인 목록의 한 항목과 같아야 한다(개수와 원소를 비교 — 한 낱말 안에 이름 다섯을 넣은 것도 막는다).
+            $paths = @($sargs | Where-Object { -not [string]::Equals($_, '--cone', $ord) })
+            $extra = $sargs.Count - $paths.Count
+            $got  = [string[]]@($paths); [Array]::Sort($got, [System.StringComparer]::Ordinal)
+            $want = [string[]]@($script:sparseSet); [Array]::Sort($want, [System.StringComparer]::Ordinal)
+            $same = ($got.Count -eq $want.Count)
+            for ($j = 0; $same -and $j -lt $want.Count; $j++) { if (-not [string]::Equals($got[$j], $want[$j], $ord)) { $same = $false } }
+            if ($extra -gt 1 -or -not $same) {
+                return "git sparse-checkout set 의 인자는 승인 목록($($script:sparseSet -join ' '))과 낱말마다 정확히 같아야 한다. 받은 인자: $($sargs -join ' ') (docs/RULES/BRANCHING.md §9-4)."
+            }
+            if ($extra -eq 0 -and -not [string]::Equals($script:sparseCone, 'true', $ord)) {
+                return "그 트리가 cone 모드(core.sparseCheckoutCone=true)가 아니다(값: '$($script:sparseCone)'). init --cone 을 먼저 하거나 set --cone 으로 준다 (docs/RULES/BRANCHING.md §9-4)."
+            }
+        }
+        else {
+            if ($sargs.Count -gt 0) {
+                return "git sparse-checkout reapply 에는 인자를 주지 않는다. 받은 인자: $($sargs -join ' ') (docs/RULES/BRANCHING.md §9-4)."
+            }
+            # reapply 는 저장된 패턴을 그대로 다시 적용한다. cone 모드이고 저장된 목록이 승인 목록과 서수로 같을 때만 받는다.
+            if (-not [string]::Equals($script:sparseCone, 'true', $ord)) {
+                return "그 트리가 cone 모드가 아니라 reapply 를 막는다. 승인 목록으로 set 을 다시 한다 (docs/RULES/BRANCHING.md §9-4)."
+            }
+            $lr = Invoke-GitQuery (@('-C', $cwd.Replace('\', '/')) + $where.ToArray() + @('sparse-checkout', 'list'))
+            if ($lr.Code -ne 0) { return "저장된 sparse 목록을 읽지 못해 reapply 를 막는다: $($lr.Err) (docs/RULES/BRANCHING.md §9-4)." }
+            $stored = [string[]]@($lr.Out -split "`r?`n" | Where-Object { $_ -ne '' }); [Array]::Sort($stored, [System.StringComparer]::Ordinal)
+            $want = [string[]]@($script:sparseSet); [Array]::Sort($want, [System.StringComparer]::Ordinal)
+            $same = ($stored.Count -eq $want.Count)
+            for ($j = 0; $same -and $j -lt $want.Count; $j++) { if (-not [string]::Equals($stored[$j], $want[$j], $ord)) { $same = $false } }
+            if (-not $same) {
+                return "저장된 sparse 목록($($stored -join ' '))이 승인 목록과 달라 reapply 를 막는다. 승인 목록으로 set 을 다시 한다 (docs/RULES/BRANCHING.md §9-4)."
+            }
+        }
+    }
     elseif ($sub -eq 'commit') {
         # -C 나 --git-dir 이 가리키는 곳의 브랜치를 본다. 변수가 들어 있으면 훅이 풀 수 없어 cwd 로 판정한다.
         if (($where -join ' ') -match '[$%]') { $where.Clear() }
@@ -445,12 +644,17 @@ function Get-ShellReason([string]$cmd, [bool]$ps, [string]$cwd, [int]$depth) {
     if ($depth -gt 8) { throw '명령을 감싼 깊이가 8을 넘었다.' }
     $cmds = New-Object System.Collections.Generic.List[object]
     [void](Read-Commands ($cmd -replace "`r`n?", "`n") 0 '' $ps $cmds)
+    # 다른 명령·대입·감싸는 명령 없이 git 하나만 있는 호출인가. sparse-checkout 변경은 이런 호출만 받는다
+    # (Set-Item Env:GIT_WORK_TREE, cd 처럼 앞에서 바꾼 셸 상태를 훅은 모른다).
+    $solo = ($depth -eq 0 -and $cmds.Count -eq 1)
     foreach ($words in $cmds) {
         Assert-Time
         $w =New-Object System.Collections.Generic.List[string]
         $w.AddRange([string[]]$words)
         $gitDir = ''
-        # 명령 앞의 예약어, A=b 대입, PowerShell 의 $x = 을 건너뛴다.
+        $plain = $solo
+        # 명령 앞의 예약어, A=b 대입, PowerShell 의 $x = 을 건너뛴다. 하나라도 있으면 단독 호출이 아니다.
+        if ($w.Count -gt 0 -and ($w[0] -match '^(if|then|else|elif|do|while|until|!|\{|time|return|coproc)$' -or $w[0] -match '^[A-Za-z_]\w*\+?=' -or $w[0] -match '^\$')) { $plain = $false }
         while ($w.Count -gt 0) {
             if ($w[0] -match '^(if|then|else|elif|do|while|until|!|\{|time|return|coproc)$') { $w.RemoveAt(0) }
             elseif ($w[0] -match '^[A-Za-z_]\w*\+?=') {
@@ -472,12 +676,13 @@ function Get-ShellReason([string]$cmd, [bool]$ps, [string]$cwd, [int]$depth) {
                 if ($inName -eq 'git' -or $inName -match $script:shells) { $at = $k }
             }
             if ($at -lt 0) { continue }
+            $plain = $false
             $w.RemoveRange(0, $at)
             $name = Get-CommandName $w[0]
         }
         $reason = $null
         if ($name -eq 'git') {
-            $reason = Get-GitReason ([string[]]@($w | Select-Object -Skip 1)) $cwd $gitDir
+            $reason = Get-GitReason ([string[]]@($w | Select-Object -Skip 1)) $cwd $gitDir $plain
         }
         else {
             # 문자열을 명령으로 실행하는 것: 예전 판정은 이 안의 "; git ..." 도 잡았다.
@@ -533,6 +738,8 @@ try {
         # Claude 의 Bash 는 bash 로, PowerShell 은 PowerShell 로 읽는다. Codex·Antigravity 는 어느 셸인지 입력에 없어
         # 둘 다로 읽고 하나라도 걸리면 막는다.
         if (($cmd -replace '["''`\\^]', '') -match 'git') {
+            # 같은 명령 안에서 git 대상·설정을 바꾸는 환경 변수(GIT_WORK_TREE=…, $env:GIT_DIR=…, export GIT_…)를 쓰는가.
+            $script:GitEnvInCommand = ($cmd -match '(?i)\$env:GIT_|\bGIT_[A-Z_]+\s*=')
             $isClaude = -not [string]::IsNullOrEmpty($env:CLAUDE_PROJECT_DIR) -and $null -eq $in.PSObject.Properties['turn_id']
             $modes = if ($tool -eq 'PowerShell') { @($true) } elseif ($tool -eq 'Bash' -and $isClaude) { @($false) } else { @($false, $true) }
             # 커밋할 곳을 못 읽은 것은 모든 읽기에서 그럴 때만 막는다. 다른 셸로 읽어서 생긴 잘못된 경로(.\Assets → .Assets)일 수 있다.
@@ -577,7 +784,8 @@ try {
 
         $reason = Get-ProtectedReason $path $root
         if ($reason) {
-            Write-Decision 'ask' "$reason."
+            $decision = if ($script:MustDeny) { 'deny' } else { 'ask' }
+            Write-Decision $decision "$reason."
         }
         exit 0
     }

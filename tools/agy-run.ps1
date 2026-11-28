@@ -200,9 +200,24 @@ function Get-Snapshot([string[]]$watchDirs) {
         $s['file ' + $path] = $rec.Substring(0, 2) + ' ' + (Get-PathHash (Join-Path $repoRoot $path))
     }
 
+    # linked worktree 에서는 .git 이 파일이므로 공용 디렉터리(--git-common-dir)와 워크트리별 설정(config.worktree)을 함께 감시한다.
+    $gitCommonDir   = [System.IO.Path]::GetFullPath((Invoke-Git @('rev-parse', '--path-format=absolute', '--git-common-dir')).Trim())
+    $worktreeConfig = [System.IO.Path]::GetFullPath((Invoke-Git @('rev-parse', '--path-format=absolute', '--git-path', 'config.worktree')).Trim())
+
     $guarded = New-Object System.Collections.Generic.List[string]
-    foreach ($rel in @('.git/config', '.git/info/exclude', 'CLAUDE.md', 'AGENTS.md', 'GEMINI.md')) { $guarded.Add((Join-Path $repoRoot $rel)) }
-    foreach ($dir in @('.git/hooks', '.claude', '.codex', '.agents', 'tools/hooks', 'docs/RULES')) {
+    foreach ($full in @(
+        (Join-Path $gitCommonDir 'config'),
+        (Join-Path $gitCommonDir 'info/exclude'),
+        $worktreeConfig
+    )) { $guarded.Add($full) }
+    $dotGit = Join-Path $repoRoot '.git'
+    if (Test-Path -LiteralPath $dotGit -PathType Leaf) { $guarded.Add($dotGit) }
+    foreach ($rel in @('CLAUDE.md', 'AGENTS.md', 'GEMINI.md')) { $guarded.Add((Join-Path $repoRoot $rel)) }
+    $hooksDir = Join-Path $gitCommonDir 'hooks'
+    if (Test-Path -LiteralPath $hooksDir -PathType Container) {
+        foreach ($f in (Get-ChildItem -LiteralPath $hooksDir -Recurse -File -Force)) { $guarded.Add($f.FullName) }
+    }
+    foreach ($dir in @('.claude', '.codex', '.agents', 'tools/hooks', 'docs/RULES')) {
         $full = Join-Path $repoRoot $dir
         if (Test-Path -LiteralPath $full) {
             foreach ($f in (Get-ChildItem -LiteralPath $full -Recurse -File -Force)) { $guarded.Add($f.FullName) }
